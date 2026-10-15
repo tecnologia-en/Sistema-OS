@@ -12,10 +12,12 @@
 - [x] Validar compilacao GitHub Actions, baixar artefato e comparar SHA-256 da ISO 0.1.2
 - [x] Corrigir locale pt_BR, teclado BR ABNT2, fuso Sao Paulo e metadata interna na 0.1.2
 - [x] Testar ISO Live 0.1.2 na VM com 2 GB, incluindo reboot, Firefox, rede e diagnostico (somente piloto)
-- [ ] Testar SIGE sob carga e uso com HD em hardware representativo
-- [ ] Ajustar inicializacao automatica do Live e verificar aviso grafico vmwgfx na VM
-- [ ] Validar sincronizacao de horario NTP em sessao Live
-- [ ] Identidade visual exclusiva Enfoque OS
+- [ ] Testar carga real e uso com HD em hardware representativo; sem login no SIGE nesta etapa
+- [x] Iniciar Live automaticamente em BIOS e UEFI na ISO 0.1.3
+- [ ] Investigar aviso vmwgfx e um kernel panic intermitente no reboot da VM
+- [x] Validar sincronizacao NTP em sessao Live na 0.1.3 (synced: yes)
+- [x] Identidade visual piloto Enfoque OS: splash, wallpaper e tema Arc-Dark na 0.1.3
+- [x] Compilar 0.1.3 pelo GitHub, verificar hashes e testar BIOS/UEFI com 2 GB
 - [ ] Instalador e recuperação
 - [ ] Agente de inventário com autenticação
 - [ ] Atualizações corporativas em grupos e rollback

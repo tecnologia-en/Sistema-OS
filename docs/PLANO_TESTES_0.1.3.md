@@ -14,18 +14,18 @@ Provar a identidade visual do Enfoque OS, inicializacao automatica do modo Live 
 
 ## Validar na VM de 2 GB
 
-- [ ] Build GitHub Actions conclui com sucesso; ISO e SHA256SUMS publicados.
-- [ ] Windows baixa a ISO, compara SHA-256 e monta exclusivamente na VM de testes.
-- [ ] BIOS: nao pressionar teclado por 5 a 10 s; confirmar inicio automatico Live.
-- [ ] XFCE entra sozinho, mostra wallpaper Enfoque OS e painel/janelas em tema escuro.
-- [ ] Icone Sobre o Enfoque OS no menu abre diagnostico; release interno confirma 0.1.3.
-- [ ] `setxkbmap -query`: `br` + `abnt2`; `locale -a`: `pt_BR.utf8`.
-- [ ] `timedatectl`: fuso America/Sao_Paulo e servico NTP identificado. Observar se `System clock synchronized` passa a yes apos tempo de rede.
-- [ ] Firefox ESR abre HTTPS publico; testar a tela de login SIGE **sem autenticacao e sem transacoes**.
-- [ ] RAM em repouso e com navegador aberto; observar fluidez da interface.
-- [ ] Reiniciar o Live, sem editar o menu, e confirmar retorno ao desktop personalizado.
-- [ ] Testar boot UEFI em ambiente isolado; nao alterar EFI de maquinas reais.
-- [ ] Se algum teste falhar, manter a 0.1.2 como ultima versao aprovada em VM.
+- [x] Build GitHub Actions concluiu com sucesso; ISO e SHA256SUMS publicados.
+- [x] Windows recebeu quatro partes e manifesto, confirmou hashes e montou ISO somente na VM de testes.
+- [x] BIOS: Live iniciou automaticamente apos 5 s, sem teclado.
+- [x] XFCE entrou sozinho com wallpaper Enfoque OS, painel e janelas Arc-Dark.
+- [ ] Conferir manualmente atalho Sobre o Enfoque OS pelo menu; comando de diagnostico e release 0.1.3 funcionaram.
+- [x] `setxkbmap -query`: `br` + `abnt2`; `locale -a`: `pt_BR.utf8`.
+- [x] `timedatectl`: America/Sao_Paulo, NTP ativo, `System clock synchronized: yes`.
+- [x] Firefox ESR abriu HTTPS publico. Login SIGE retirado do escopo conforme solicitado.
+- [x] RAM com terminal: 468 MiB usados; com Firefox: 961 MiB usados em 1973 MiB.
+- [ ] Estabilidade do reboot: houve um kernel panic em uma tentativa; uma reinicializacao posterior funcionou. Investigar antes de homologar.
+- [x] Teste UEFI na VM concluido com desktop; firmware BIOS original restaurado.
+- [x] Falha documentada; preservar a 0.1.2 como referencia do piloto anterior e manter 0.1.3 em observacao.
 
 ## Observacoes
 
