@@ -1,20 +1,34 @@
 # Testar uma ISO no Windows
 
-**Apenas VirtualBox / VM Enfoque OS - Teste. Nao instalar em PCs da loja.**
+**Apenas VirtualBox / VM Enfoque OS - Teste. Nunca instalar em PCs da loja.**
 
-Depois que o GitHub Actions terminar a compilacao e disponibilizar o artefato:
+A compilacao ocorre no GitHub Actions. O Windows guarda a pasta do projeto e os artefatos; a VM de desenvolvimento permanece desligada.
 
-1. Baixe o ZIP do build.
-2. Extraia a ISO e o arquivo `SHA256SUMS` para uma pasta de versao, por exemplo `dist/0.1.2/`. Nao misture os hashes de versoes diferentes.
-3. Desligue a VM de testes. A VM de desenvolvimento deve permanecer desligada.
-4. Abra PowerShell na raiz `OS da enfoque` e execute:
+## Preparar o ZIP baixado
+
+Depois de baixar o ZIP do build, abra PowerShell na raiz da pasta "OS da enfoque" e execute (troque o caminho pelo arquivo baixado):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\preparar-iso.ps1 -ZipPath "$env:USERPROFILE\Downloads\enfoque-os-iso-3 (1).zip"
+```
+
+O comando valida a estrutura do ZIP, identifica automaticamente a versao, extrai para `dist/<versao>/` e compara o SHA-256 com `SHA256SUMS`. Se a versao ja existir, verifica seu hash sem sobrescrever arquivos. Se a extracao falhar, remove apenas os arquivos temporarios que criou.
+
+## Montar e iniciar na VM
+
+Desligue normalmente a VM **Enfoque OS - Teste**. A VM de desenvolvimento nao precisa ser ligada. Para a versao 0.1.2:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\testar-iso.ps1 -IsoPath .\dist\0.1.2\enfoque-os-0.1.2-piloto-amd64.iso -StartVM
 ```
 
-O script nao executa codigo arbitrario da ISO: ele apenas calcula SHA-256, compara com `SHA256SUMS`, confirma que a VM esta desligada, conecta a ISO na unidade optica do VirtualBox e inicia a VM somente se `-StartVM` for informado. Nao formata, apaga ou instala discos.
+Alternativamente, use `-StartVM` no comando `preparar-iso.ps1` quando a VM ja estiver desligada: ele verifica a ISO e chama o script de montagem/inicializacao.
 
-O hash SHA-256 **do ZIP** tambem pode ser conferido contra o digest apresentado na pagina do GitHub Actions antes da extracao. Uma verificacao da ISO e feita usando `SHA256SUMS`.
+O script de montagem **recusa trocar a ISO quando a VM estiver ligada**, nao modifica o disco virtual e nao formata nem instala discos fisicos.
 
-A compilacao permanece nos servidores do GitHub; o Windows guarda os fontes e artefatos de teste.
+## Validacoes
+
+- Nunca confunda o SHA-256 do arquivo ZIP com o SHA-256 da ISO extraida; o manifesto `SHA256SUMS` se aplica a ISO.
+- Guarde os hashes ao lado da versao correspondente, sem misturar com ISOs anteriores.
+- Se um hash nao conferir, pare: nao inicie a imagem e obtenha novamente o artefato.
+- O menu de boot Live ainda requer selecionar `Live system (amd64)`. O sistema e experimental, nao possui instalador corporativo homologado.
