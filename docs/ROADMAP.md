@@ -9,10 +9,12 @@
 - [x] Validar rede, Firefox, utilitário de diagnóstico e RAM em repouso
 - [x] Vincular pasta Windows `OS da enfoque` ao GitHub
 - [x] Publicar workflow manual GitHub Actions para construir ISO
-- [ ] Validar execução real do workflow GitHub Actions e baixar artefato
-- [x] Preparar correcoes de locale, teclado, fuso e metadata interna para 0.1.2 (ainda sem validar)
-- [ ] Compilar e homologar 0.1.2 em VM com 2 GB
-- [ ] Testar navegação e SIGE sob carga; teclado ABNT2; uso de HD
+- [x] Validar compilacao GitHub Actions, baixar artefato e comparar SHA-256 da ISO 0.1.2
+- [x] Corrigir locale pt_BR, teclado BR ABNT2, fuso Sao Paulo e metadata interna na 0.1.2
+- [x] Testar ISO Live 0.1.2 na VM com 2 GB, incluindo reboot, Firefox, rede e diagnostico (somente piloto)
+- [ ] Testar SIGE sob carga e uso com HD em hardware representativo
+- [ ] Ajustar inicializacao automatica do Live e verificar aviso grafico vmwgfx na VM
+- [ ] Validar sincronizacao de horario NTP em sessao Live
 - [ ] Identidade visual exclusiva Enfoque OS
 - [ ] Instalador e recuperação
 - [ ] Agente de inventário com autenticação
