@@ -18,7 +18,7 @@ firefox-esr
 firefox-esr-l10n-pt-br
 arc-theme
 systemd-timesyncd
-python3-minimal
+python3
 sudo
 ca-certificates
 curl
