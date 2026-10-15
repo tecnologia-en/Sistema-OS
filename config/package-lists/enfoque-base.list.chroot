@@ -1,5 +1,5 @@
-# Enfoque OS 0.1.5 - Debian 13 XFCE, piloto experimental
-# Sem recomendacoes automáticas, dependencias explicitadas.
+# Enfoque OS 0.1.6 - Debian 13 XFCE
+# Chrome oficial do Google via hook HTTPS em build, sem Firefox.
 user-setup
 locales
 console-setup
@@ -16,13 +16,13 @@ thunar
 gvfs
 network-manager
 network-manager-gnome
-firefox-esr
-firefox-esr-l10n-pt-br
 arc-theme
 papirus-icon-theme
 fonts-noto-core
 systemd-timesyncd
 python3
+python3-gi
+gir1.2-gtk-3.0
 sudo
 ca-certificates
 curl
@@ -30,3 +30,16 @@ openssh-client
 unattended-upgrades
 fonts-liberation
 adwaita-icon-theme
+usbutils
+pciutils
+xdg-utils
+dbus-user-session
+cups
+cups-client
+cups-filters
+cups-browsed
+ipp-usb
+system-config-printer
+printer-driver-gutenprint
+printer-driver-escpr
+avahi-daemon

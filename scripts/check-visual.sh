@@ -51,4 +51,23 @@ grep -Fq 'https://enfoquepapelaria.meusige.com.br/' "$ROOT/config/includes.chroo
 grep -Fq 'https://intranet.enfoquepapelaria.com.br/' "$ROOT/config/includes.chroot/etc/skel/Desktop/Intranet.desktop" || fail 'atalho Intranet errado'
 grep -Eq '^xfce4-whiskermenu-plugin$' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'whiskermenu ausente'
 grep -Eq '^papirus-icon-theme$' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'papirus ausente'
-echo 'OK: boot BIOS/EFI; interface tipo Windows; atalhos SIGE e Intranet.'
+for f in \
+  config/includes.chroot/usr/share/icons/hicolor/scalable/apps/enfoque-central.svg \
+  config/includes.chroot/usr/local/lib/enfoque-hub/app.py \
+  config/includes.chroot/usr/local/lib/enfoque-hub/devices.py \
+  config/includes.chroot/usr/share/applications/enfoque-central.desktop \
+  config/includes.chroot/etc/xdg/autostart/enfoque-central.desktop \
+  config/includes.chroot/usr/local/bin/enfoque-parear-suporte \
+  config/hooks/normal/090-google-chrome.hook.chroot; do
+  need "$f"
+done
+grep -Fq 'google-chrome-stable' "$ROOT/config/includes.chroot/etc/skel/Desktop/SIGE.desktop" || fail 'SIGE nao abre no Chrome'
+grep -Fq 'google-chrome-stable' "$ROOT/config/includes.chroot/etc/skel/Desktop/Intranet.desktop" || fail 'Intranet nao abre no Chrome'
+grep -Fq 'google-chrome.desktop' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'Chrome ausente do painel'
+grep -Fq 'dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb' "$ROOT/config/hooks/normal/090-google-chrome.hook.chroot" || fail 'Instalador Chrome ausente'
+if grep -E '^(firefox-esr|firefox-esr-l10n-pt-br)$' "$ROOT/config/package-lists/enfoque-base.list.chroot"; then
+  fail 'Firefox ainda incluido na lista de pacotes'
+fi
+sh -n "$ROOT/config/includes.chroot/usr/local/bin/enfoque-parear-suporte" "$ROOT/config/hooks/normal/090-google-chrome.hook.chroot"
+python3 -m py_compile "$ROOT/config/includes.chroot/usr/local/lib/enfoque-hub/app.py" "$ROOT/config/includes.chroot/usr/local/lib/enfoque-hub/devices.py"
+echo 'OK: boot BIOS/EFI, Chrome, painel USB, CUPS, suporte e atalhos SIGE/Intranet.'

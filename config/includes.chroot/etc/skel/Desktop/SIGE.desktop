@@ -2,8 +2,8 @@
 Version=1.0
 Type=Application
 Name=SIGE
-Comment=Abrir SIGE da Enfoque no navegador
-Exec=firefox-esr --new-window https://enfoquepapelaria.meusige.com.br/
+Comment=Abrir SIGE da Enfoque no Google Chrome
+Exec=google-chrome-stable --new-window https://enfoquepapelaria.meusige.com.br/
 Icon=enfoque-sige
 Terminal=false
 StartupNotify=true

@@ -17,7 +17,7 @@ grep -Eq '^[[:space:]]*sudo[[:space:]]*$' "$ROOT/config/package-lists/enfoque-ba
   echo 'ERRO: pacote sudo ausente no modo Live.' >&2
   exit 1
 }
-for pkg in locales console-setup keyboard-configuration firefox-esr-l10n-pt-br tzdata; do
+for pkg in locales console-setup keyboard-configuration tzdata python3 python3-gi gir1.2-gtk-3.0 cups ipp-usb; do
   grep -Eq "^[[:space:]]*$pkg[[:space:]]*$" "$ROOT/config/package-lists/enfoque-base.list.chroot" || {
     echo "ERRO: dependencia obrigatoria para pt_BR: $pkg" >&2
     exit 1

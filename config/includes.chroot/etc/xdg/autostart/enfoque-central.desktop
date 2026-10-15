@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Enfoque Central - Inicio
+Comment=Exibir o painel nativo de dispositivos USB e impressoras
+Exec=/usr/local/bin/enfoque-central
+OnlyShowIn=XFCE;
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

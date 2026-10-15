@@ -1,5 +1,5 @@
-favorites=firefox-esr.desktop,thunar.desktop,enfoque-intranet.desktop,enfoque-sige.desktop,enfoque-diagnostico.desktop
-recent=firefox-esr.desktop
+favorites=google-chrome.desktop,thunar.desktop,enfoque-central.desktop,enfoque-intranet.desktop,enfoque-sige.desktop,enfoque-diagnostico.desktop
+recent=google-chrome.desktop
 button-title=Enfoque OS
 button-icon=enfoque-start
 button-single-row=true
