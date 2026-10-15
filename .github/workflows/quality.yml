@@ -1,0 +1,12 @@
+name: Validacao estatica
+on:
+  push:
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash ./scripts/check-project.sh

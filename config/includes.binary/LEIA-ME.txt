@@ -1,0 +1,6 @@
+ENFOQUE OS 0.1 - PILOTO TECNICO
+
+Imagem Live sem instalador em disco, nao homologada.
+Controle remoto, distribuicao de apps, politicas e IA ainda nao existem.
+Nunca substituir um caixa ou PDV em producao por esta imagem.
+Verificar funcionamento em outra VM antes de qualquer piloto.

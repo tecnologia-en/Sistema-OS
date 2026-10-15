@@ -1,0 +1,12 @@
+.build/
+dist/
+*.iso
+*.img
+*.qcow2
+*.vdi
+*.vmdk
+*.log
+.env
+*.key
+*.pem
+__pycache__/

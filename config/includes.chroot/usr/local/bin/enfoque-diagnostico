@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+printf '\n=== ENFOQUE OS | DIAGNOSTICO SOMENTE LEITURA ===\n\n'
+if [ -f /etc/enfoque-os-release ]; then cat /etc/enfoque-os-release; fi
+printf '\nHostname: '; hostname
+printf 'Kernel: '; uname -r
+printf 'Arquitetura: '; uname -m
+printf '\nMemoria:\n'; free -h
+printf '\nArmazenamento:\n'; df -h /
+printf '\nRede:\n'; ip -brief address 2>/dev/null || true
+echo 'Piloto sem agente de IA, restricoes ou controle remoto.'
+echo 'Nao envia diagnosticos a nenhum servidor.'
+printf '\nPressione Enter para fechar... '
+read -r resposta || true

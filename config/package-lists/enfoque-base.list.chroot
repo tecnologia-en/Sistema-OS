@@ -1,0 +1,17 @@
+# Enfoque OS 0.1 - Debian 13 XFCE, piloto sem restricoes corporativas
+xorg
+lightdm
+xfce4
+xfce4-terminal
+thunar
+gvfs
+network-manager
+network-manager-gnome
+firefox-esr
+sudo
+ca-certificates
+curl
+openssh-client
+unattended-upgrades
+fonts-liberation
+adwaita-icon-theme
