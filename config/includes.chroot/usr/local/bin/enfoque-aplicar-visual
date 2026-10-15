@@ -1,35 +1,41 @@
 #!/bin/sh
-# Identidade visual do piloto Live; executa apenas na sessao XFCE do usuario.
-# Nao altera rede, dados ou politicas de seguranca.
+# Personalizacao da sessao XFCE: visual estilo Windows sem componentes proprietarios.
 set -eu
-
 WALLPAPER=/usr/share/backgrounds/enfoque-os/wallpaper.png
-MARKER="${HOME}/.cache/enfoque-os-visual-v013"
+MARKER="${HOME}/.cache/enfoque-os-visual-v015"
 if [ ! -f "$WALLPAPER" ] || ! command -v xfconf-query >/dev/null 2>&1; then
   exit 0
 fi
-if [ -f "$MARKER" ]; then
-  exit 0
-fi
-
+[ -f "$MARKER" ] && exit 0
 set_xfconf() {
-  channel="$1"
-  key="$2"
-  type="$3"
-  value="$4"
+  channel="$1"; key="$2"; type="$3"; value="$4"
   if xfconf-query -c "$channel" -p "$key" >/dev/null 2>&1; then
     xfconf-query -c "$channel" -p "$key" -s "$value" >/dev/null 2>&1 || true
   else
     xfconf-query -c "$channel" -p "$key" -n -t "$type" -s "$value" >/dev/null 2>&1 || true
   fi
 }
-
-# Aguarda o xfdesktop registrar nomes reais dos monitores.
 sleep 2
-set_xfconf xsettings /Net/ThemeName string Arc-Dark
-set_xfconf xsettings /Net/IconThemeName string Adwaita
-set_xfconf xfwm4 /general/theme string Arc-Dark
+set_xfconf xsettings /Net/ThemeName string Arc
+set_xfconf xsettings /Net/IconThemeName string Papirus
+set_xfconf xfwm4 /general/theme string Arc
 set_xfconf xfwm4 /general/title_alignment string left
+set_xfconf xfce4-desktop /desktop-icons/style int 2
+set_xfconf xfce4-desktop /desktop-icons/icon-size int 48
+
+# Respeita a pasta de area de trabalho traduzida pelo xdg-user-dirs.
+DESKTOP="${HOME}/Desktop"
+if command -v xdg-user-dir >/dev/null 2>&1; then
+  configured="$(xdg-user-dir DESKTOP 2>/dev/null || true)"
+  [ -z "$configured" ] || DESKTOP="$configured"
+fi
+mkdir -p "$DESKTOP"
+for item in SIGE.desktop Intranet.desktop; do
+  if [ -f "/etc/skel/Desktop/$item" ]; then
+    [ -e "$DESKTOP/$item" ] || cp "/etc/skel/Desktop/$item" "$DESKTOP/$item"
+    chmod u+x "$DESKTOP/$item"
+  fi
+done
 
 props=''
 i=0
@@ -46,8 +52,7 @@ fi
 printf '%s\n' "$props" | while IFS= read -r prop; do
   [ -n "$prop" ] || continue
   set_xfconf xfce4-desktop "$prop" string "$WALLPAPER"
-  style="${prop%/last-image}/image-style"
-  set_xfconf xfce4-desktop "$style" int 5
+  set_xfconf xfce4-desktop "${prop%/last-image}/image-style" int 5
 done
 xfdesktop --reload >/dev/null 2>&1 || true
 mkdir -p "${HOME}/.cache"
