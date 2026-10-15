@@ -1,0 +1,14 @@
+#!/bin/sh
+# Instala o pacote oficial do Google Chrome na imagem Debian 13.
+# Mantem o repositório APT oficial configurado pelo pacote para atualizacoes.
+set -eu
+export DEBIAN_FRONTEND=noninteractive
+deb=/tmp/enfoque-google-chrome-stable.deb
+curl --fail --show-error --silent --location --retry 3 --connect-timeout 20 \
+  https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+  --output "$deb"
+test -s "$deb"
+dpkg-deb --field "$deb" Package | grep -Fxq google-chrome-stable
+apt-get install -y --no-install-recommends "$deb"
+dpkg-query -W -f='${Status} ${Version}\n' google-chrome-stable
+rm -f "$deb"

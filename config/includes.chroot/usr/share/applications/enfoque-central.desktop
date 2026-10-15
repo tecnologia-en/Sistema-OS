@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Enfoque Central
+GenericName=Gerenciador de dispositivos
+Comment=USB em tempo real, impressoras e aplicativos
+Exec=enfoque-central
+Icon=enfoque-central
+Terminal=false
+Categories=System;Settings;Utility;
+StartupNotify=true

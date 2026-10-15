@@ -1,0 +1,37 @@
+#!/bin/sh
+# Instalacao do agente oficial em um dispositivo corporativo autorizado.
+set -eu
+echo "Enfoque OS - Pareamento do suporte de TI"
+echo "Esta acao habilita suporte administrativo PERSISTENTE para operadores autorizados."
+echo "A empresa deve autorizar o equipamento. Toda sessao precisa ser auditada e revogavel."
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Executando autorizacao de administrador (sudo)..."
+    exec sudo /usr/local/bin/enfoque-parear-suporte
+fi
+printf "Caminho do agente Linux oficial deste equipamento: "
+IFS= read -r agent
+case "$agent" in
+    /*) ;;
+    *) echo "Informe um caminho absoluto."; exit 1 ;;
+esac
+if [ ! -f "$agent" ] || [ -L "$agent" ]; then
+    echo "Agente inexistente ou caminho simbolico."; exit 1
+fi
+printf "SHA256 obtido do administrador de TI: "
+IFS= read -r expected
+if [ "${#expected}" -ne 64 ] || printf "%s" "$expected" | LC_ALL=C grep -q '[^0123456789abcdefABCDEF]'; then
+    echo "SHA256 invalido."; exit 1
+fi
+actual="$(sha256sum "$agent" | cut -d ' ' -f1)"
+if [ "$(printf '%s' "$expected" | tr '[:upper:]' '[:lower:]')" != "$actual" ]; then
+    echo "Assinatura/checksum nao confere; instalacao recusada."; exit 1
+fi
+echo "Ao ativar, TI podera ver e controlar o desktop, teclado, mouse, arquivos,"
+echo "terminal, programas futuros e reinicializar o computador mesmo sem usuario."
+echo "O dispositivo sera identificado por chave propria apos a inscricao no servidor."
+printf "Para autorizar essa inscricao administrativa, digite AUTORIZO: "
+IFS= read -r confirmed
+[ "$confirmed" = "AUTORIZO" ] || { echo "Instalacao cancelada."; exit 0; }
+install -m 0700 -o root -g root "$agent" /usr/local/sbin/enfoque-meshagent
+/usr/local/sbin/enfoque-meshagent -install
+echo "Solicitacao de instalacao finalizada. Confirme online no painel de TI."
