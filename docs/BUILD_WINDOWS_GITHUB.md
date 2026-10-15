@@ -25,3 +25,9 @@ O computador Windows guarda o codigo-fonte e a ISO em `dist/`. A compilacao **na
 ## Correcao de compatibilidade do runner Ubuntu (15/10/2026)
 
 O primeiro build automatico chegou ao chroot, mas falhou porque o live-build do Ubuntu configurou a suite de seguranca inexistente `trixie/updates` (HTTP 404). O script agora usa `--security false` para omitir essa **origem padrao incorreta** e adiciona explicitamente os repositorios oficiais assinados `trixie-security` por meio dos arquivos `config/archives/trixie-security.list.{chroot,binary}`. Isso **nao desativa a verificacao de assinaturas APT** nem remove o repositorio oficial de atualizacoes de seguranca. E necessario verificar o proximo build e, depois, a ISO no VirtualBox.
+
+## Compilador Debian 13 isolado (15/10/2026)
+
+A segunda tentativa na maquina Ubuntu falhou ao buscar `dists/trixie/Contents-amd64.gz`, um caminho usado pelo live-build empacotado no Ubuntu que nao funciona com os repositorios atuais do Debian 13. O workflow agora usa o GitHub runner Ubuntu **apenas como anfitriao** para iniciar um container `debian:trixie`, com os utilitarios do Debian 13 instalados nele. A imagem ISO continua sendo gerada no GitHub e copiada para o Windows somente depois de validada.
+
+O container e efemero e usa `--privileged` porque o live-build monta sistemas de arquivos durante a construcao. Essa permissao deve ficar restrita a commits confiaveis na branch main; PRs e codigo de terceiros nao devem executar este workflow automaticamente.

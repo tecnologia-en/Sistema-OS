@@ -26,16 +26,26 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Install Linux build tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y live-build debootstrap squashfs-tools xorriso syslinux-common isolinux grub-pc-bin grub-efi-amd64-bin mtools dosfstools ca-certificates
-
-      - name: Check project
+      - name: Check project on host
         run: bash scripts/check-project.sh
 
-      - name: Build ISO
-        run: sudo bash scripts/build-iso.sh
+      - name: Build ISO with Debian 13 in a disposable container
+        run: |
+          # Keep build tooling on Debian 13, matching our verified VM.
+          # Privileged container is limited to this trusted main-branch CI job.
+          docker run --rm --privileged \
+            --mount type=bind,source="$GITHUB_WORKSPACE",target=/workspace \
+            --workdir /workspace \
+            --env DEBIAN_FRONTEND=noninteractive \
+            debian:trixie bash -euxc '
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                live-build debootstrap squashfs-tools xorriso \
+                syslinux-common isolinux grub-pc-bin grub-efi-amd64-bin \
+                mtools dosfstools ca-certificates git
+              bash scripts/check-project.sh
+              bash scripts/build-iso.sh
+            '
 
       - name: Verify checksums
         run: |
