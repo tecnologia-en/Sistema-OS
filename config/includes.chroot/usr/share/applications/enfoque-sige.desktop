@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=SIGE - Enfoque
+Comment=Abrir o SIGE no Firefox
+Exec=firefox-esr --new-window https://enfoquepapelaria.meusige.com.br/
+Icon=enfoque-sige
+Terminal=false
+StartupNotify=true
+Categories=Office;Network;

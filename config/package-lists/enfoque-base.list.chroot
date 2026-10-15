@@ -1,6 +1,5 @@
-# Enfoque OS 0.1.4 - Debian 13 XFCE, piloto experimental
-# Pacotes explicitamente listados porque apt-recommends esta desativado.
-# user-setup corrige o login Live; console-setup e locales suportam pt_BR e ABNT2.
+# Enfoque OS 0.1.5 - Debian 13 XFCE, piloto experimental
+# Sem recomendacoes automáticas, dependencias explicitadas.
 user-setup
 locales
 console-setup
@@ -10,6 +9,9 @@ xorg
 lightdm
 xfce4
 xfce4-terminal
+xfce4-whiskermenu-plugin
+xfce4-panel
+xfconf
 thunar
 gvfs
 network-manager
@@ -17,6 +19,8 @@ network-manager-gnome
 firefox-esr
 firefox-esr-l10n-pt-br
 arc-theme
+papirus-icon-theme
+fonts-noto-core
 systemd-timesyncd
 python3
 sudo

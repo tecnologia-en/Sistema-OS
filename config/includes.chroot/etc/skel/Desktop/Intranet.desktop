@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Intranet
+Comment=Abrir a intranet corporativa
+Exec=firefox-esr --new-window https://intranet.enfoquepapelaria.com.br/
+Icon=enfoque-intranet
+Terminal=false
+StartupNotify=true
+Categories=Office;Network;
