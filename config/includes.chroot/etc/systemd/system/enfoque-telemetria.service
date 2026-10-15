@@ -1,0 +1,23 @@
+[Unit]
+Description=Enfoque OS - Telemetria autenticada (CPU / RAM)
+Documentation=https://github.com/tecnologia-en/Sistema-OS
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/etc/enfoque-os/agent.json
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/python3 /usr/local/bin/enfoque-telemetria
+Restart=on-failure
+RestartSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/etc/enfoque-os
+CapabilityBoundingSet=
+MemoryMax=100M
+
+[Install]
+WantedBy=multi-user.target
