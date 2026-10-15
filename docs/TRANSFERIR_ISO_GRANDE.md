@@ -1,12 +1,29 @@
 # Transferir ISO grande pelo GitHub sem recompilar
 
-O arquivo da ISO 0.1.2 possui mais de 1 GB. Para conexoes lentas, o workflow `Dividir ISO para transferencia` baixa o artefato original do GitHub, verifica `SHA256SUMS` e cria quatro partes (ate 300 MiB cada) com um manifesto `SHA256_PARTS`.
+As ISOs do Enfoque OS podem ultrapassar 1 GB. Quando o download do artefato completo nao for possivel, use o workflow **Dividir ISO para transferencia** da aba Actions. Ele verifica `SHA256SUMS` e divide uma ISO pronta em quatro partes de ate 300 MiB; a compilacao **nao** e refeita.
 
-1. Abra a aba Actions, selecione `Dividir ISO para transferencia` e execute com o numero da compilacao bem-sucedida e nome do artefato.
-2. Baixe as cinco partes disponibilizadas: manifesto e quatro partes numeradas `00` a `03`.
-3. Extraia `chunk-00`, `chunk-01`, `chunk-02`, `chunk-03` e `SHA256_PARTS` para a mesma pasta.
-4. Valide a integridade SHA-256 de cada parte.
-5. Junte as quatro partes na ordem; a ISO resultante deve conferir com `SHA256SUMS`.
-6. Execute `scripts/windows/testar-iso.ps1` para montar somente na VM de testes.
+## No GitHub
 
-O workflow nao altera nem recompila a ISO; os bytes sao recombinados exatamente na ordem original. Nao instalar a imagem nos PCs de producao.
+1. Abra [Actions > Dividir ISO para transferencia](https://github.com/tecnologia-en/Sistema-OS/actions/workflows/split-iso.yml).
+2. Execute o workflow com o **run_id** do build que terminou em sucesso e o nome do artefato correspondente. Exemplo da 0.1.3: `run_id=38795132198`, `artifact_name=enfoque-os-iso-4`.
+3. Aguarde o resultado de sucesso. Baixe os cinco ZIPs resultantes: `enfoque-iso-manifesto` e `enfoque-iso-parte-00` ate `enfoque-iso-parte-03`.
+
+## No Windows
+
+Extraia os arquivos para uma unica pasta, por exemplo `dist/0.1.3-parts/`. Ela deve conter exatamente `chunk-00`, `chunk-01`, `chunk-02`, `chunk-03`, `SHA256_PARTS` e `SHA256SUMS` (ZIPs originais podem permanecer na pasta).
+
+Dentro da pasta `OS da enfoque`, execute:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\juntar-iso-partes.ps1 -PartsDirectory .\dist\0.1.3-parts
+```
+
+O script verifica o SHA-256 **de cada parte** antes de unir, compara o SHA-256 final da ISO, e so entao entrega `dist/<versao>/enfoque-os-<versao>-piloto-amd64.iso`. Se a ISO ja existir, verifica seu hash sem sobrescrever arquivos. O montador foi testado com quatro partes sinteticas e tambem com reexecucao idempotente.
+
+Com a VM de testes desligada:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\testar-iso.ps1 -IsoPath .\dist\0.1.3\enfoque-os-0.1.3-piloto-amd64.iso -StartVM
+```
+
+**Seguranca:** nao montar uma ISO se algum hash falhar. A VM e experimental; nao instalar em computadores de loja, PDVs ou equipamento de producao.
