@@ -32,4 +32,14 @@ grep -q 'keyboard-layouts=br' "$ROOT/scripts/build-iso.sh"
 grep -q 'keyboard-model=abnt2' "$ROOT/scripts/build-iso.sh"
 grep -q 'timezone=America/Sao_Paulo' "$ROOT/scripts/build-iso.sh"
 echo "Versao definida: $version"
+# Debian Security e incluido via repositorio oficial explicito. --security false
+# desativa somente a origem padrao incompatível do live-build Ubuntu.
+for f in "$ROOT/config/archives/trixie-security.list.chroot" "$ROOT/config/archives/trixie-security.list.binary"; do
+  test -s "$f" || { echo "ERRO: repositorio de seguranca ausente: $f" >&2; exit 1; }
+  grep -q 'trixie-security main non-free-firmware' "$f"
+done
+grep -Fq -- '--security false' "$ROOT/scripts/build-iso.sh" || {
+  echo 'ERRO: live-build Ubuntu usara trixie/updates (inexistente).' >&2
+  exit 1
+}
 echo 'Estrutura valida. A ISO deve ser compilada e testada em VM.'

@@ -21,3 +21,7 @@ O computador Windows guarda o codigo-fonte e a ISO em `dist/`. A compilacao **na
 - Somente pessoas autorizadas devem disparar builds e publicar versoes oficiais.
 - O primeiro workflow ainda exige uma execucao para validar compatibilidade com o runner Ubuntu.
 - O projeto e publico, portanto nao incluir senhas ou segredos corporativos.
+
+## Correcao de compatibilidade do runner Ubuntu (15/10/2026)
+
+O primeiro build automatico chegou ao chroot, mas falhou porque o live-build do Ubuntu configurou a suite de seguranca inexistente `trixie/updates` (HTTP 404). O script agora usa `--security false` para omitir essa **origem padrao incorreta** e adiciona explicitamente os repositorios oficiais assinados `trixie-security` por meio dos arquivos `config/archives/trixie-security.list.{chroot,binary}`. Isso **nao desativa a verificacao de assinaturas APT** nem remove o repositorio oficial de atualizacoes de seguranca. E necessario verificar o proximo build e, depois, a ISO no VirtualBox.

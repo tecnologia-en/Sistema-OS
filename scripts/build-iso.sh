@@ -33,6 +33,7 @@ lb config noauto \
   --debian-installer none \
   --archive-areas 'main non-free-firmware' \
   --apt-recommends false \
+  --security false \
   --bootappend-live 'boot=live components locales=pt_BR.UTF-8 keyboard-layouts=br keyboard-model=abnt2 timezone=America/Sao_Paulo user-default-groups=audio,cdrom,dip,floppy,video,plugdev,netdev' \
   --iso-application "Enfoque OS piloto $VERSION" \
   --iso-publisher 'Enfoque Papelaria - piloto interno' \
