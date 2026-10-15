@@ -1,4 +1,5 @@
 NAME="Enfoque OS"
-VERSION="0.1-piloto"
+VERSION="0.1.2"
+CHANNEL="piloto"
 BASE="Debian 13 (trixie)"
 STATUS="experimental"

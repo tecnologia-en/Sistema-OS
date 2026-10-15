@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION="0.1.1"
+VERSION="$(sed -n 's/^VERSION="\([^"]*\)"/\1/p' "$ROOT/config/includes.chroot/etc/enfoque-os-release")"
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "Versao invalida em /etc/enfoque-os-release: $VERSION" >&2
+  exit 1
+fi
 WORK="$ROOT/.build/enfoque-os"
 OUT="$ROOT/dist"
 TARGET="$OUT/enfoque-os-${VERSION}-piloto-amd64.iso"
@@ -29,10 +33,10 @@ lb config noauto \
   --debian-installer none \
   --archive-areas 'main non-free-firmware' \
   --apt-recommends false \
-  --bootappend-live 'boot=live components locales=pt_BR.UTF-8 keyboard-layouts=br' \
+  --bootappend-live 'boot=live components locales=pt_BR.UTF-8 keyboard-layouts=br keyboard-model=abnt2 timezone=America/Sao_Paulo user-default-groups=audio,cdrom,dip,floppy,video,plugdev,netdev' \
   --iso-application "Enfoque OS piloto $VERSION" \
   --iso-publisher 'Enfoque Papelaria - piloto interno' \
-  --iso-volume 'ENFOQUE_OS_011'
+  --iso-volume "ENFOQUE_OS_${VERSION//./}"
 lb build
 shopt -s nullglob
 isos=( ./*.iso )

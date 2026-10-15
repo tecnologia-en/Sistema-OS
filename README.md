@@ -1,52 +1,27 @@
 # Enfoque OS
 
-Distribuição Linux corporativa **experimental**, baseada em Debian 13 (Trixie) e XFCE.
+Distribuicao Linux corporativa **experimental**, baseada em Debian 13 (Trixie) e XFCE.
 
-**Estado atual:** código-fonte de uma ISO Live piloto. A imagem ainda não foi compilada, inicializada ou homologada. Não instalar nos caixas e computadores de produção.
+A imagem Live 0.1.1 foi compilada e iniciou na VM de testes com 2 GB de RAM. Login, XFCE, Firefox, rede, gerenciador de arquivos, diagnostico e reboot passaram nos primeiros testes. **Ainda nao esta homologada para instalacao em PCs da empresa.**
 
-## Como trabalharemos
+## Fluxo oficial Windows + GitHub
 
-- **GitHub:** guarda a versão oficial do código e dos scripts.
-- **VM Debian (desenvolvimento):** recebe alterações com `git pull --ff-only` e compila a ISO.
-- **Outra VM (testes, 2 GB RAM):** inicia a ISO gerada, verifica desempenho e compatibilidade.
+1. Codigo-fonte mantido em https://github.com/tecnologia-en/Sistema-OS
+2. Pasta de trabalho no Windows: Area de Trabalho / OS da enfoque
+3. Atualize via `git pull --ff-only`, sem precisar entrar no Debian.
+4. GitHub Actions executa o Linux Live Build na nuvem quando arquivos da ISO mudam; tambem pode ser acionado manualmente.
+5. Depois de um build bem-sucedido, baixe a ISO e o SHA256SUMS da aba **Actions**, guarde-os em `dist/` e teste na VM Enfoque OS - Teste.
 
-### Preparar a VM de desenvolvimento (primeira vez)
+A antiga VM Enfoque OS - Dev fica reservada como contingencia; nao e necessaria ao fluxo normal depois que o build no GitHub Actions for comprovado.
 
-```bash
-sudo apt update
-sudo apt install -y git live-build debootstrap squashfs-tools xorriso syslinux-common isolinux grub-pc-bin grub-efi-amd64-bin mtools dosfstools
-cd ~
-git clone https://github.com/tecnologia-en/Sistema-OS.git
-cd Sistema-OS
-./scripts/check-project.sh
-./scripts/check-host.sh
-```
+## Versoes
 
-### Receber as próximas alterações
+- 0.1: ISO Live gerada, mas usuario Live ausente.
+- 0.1.1: usuario Live corrigido; testado com 2 GB; locale/teclado/horario pendentes.
+- 0.1.2: codigo preparado para portugues do Brasil, ABNT2 e identificacao correta da versao. A ISO ainda precisa ser compilada e testada.
 
-```bash
-cd ~/Sistema-OS
-git pull --ff-only
-./scripts/check-project.sh
-```
+Documentacao: [Windows e GitHub](docs/BUILD_WINDOWS_GITHUB.md), [testes](docs/TESTES_PILOTO.md), [relatorio 0.1.1](docs/TESTE_2026-10-15_0.1.1.md), [arquitetura](docs/ARQUITETURA.md), [continuidade](docs/SEGURANCA_E_CONTINUIDADE.md).
 
-### Gerar a primeira ISO
+**Nao existem nesta fase:** instalador de disco validado, controle central de usuarios, inventario corporativo, atualizacao remota, politica de bloqueios, controle de tela e automacoes ChatGPT. O SIGE e periféricos ainda nao foram testados.
 
-```bash
-cd ~/Sistema-OS
-sudo ./scripts/build-iso.sh
-```
-
-Se a compilação funcionar, procure `dist/enfoque-os-0.1-piloto-amd64.iso`. **Compilar não significa homologar:** a ISO precisa iniciar em outra VM e passar pelos testes.
-
-## O que esta versão contém
-
-Arquivos para criar uma ISO Debian 13 amd64 em modo Live com XFCE, Firefox ESR, rede, terminal e utilitário de diagnóstico local. Inclui documentação, validação de scripts e política inicial de atualizações controladas.
-
-**Ainda não contém:** instalador em disco, painel de TI, agente de gerenciamento, atualização corporativa remota, controle de tela, restrições de funcionários, integração ChatGPT ou compatibilidade validada com SIGE e periféricos.
-
-Documentação: [primeiros passos](docs/PRIMEIROS_PASSOS.md), [fluxo Git](docs/FLUXO_GIT.md), [arquitetura](docs/ARQUITETURA.md), [testes](docs/TESTES_PILOTO.md) e [continuidade](docs/SEGURANCA_E_CONTINUIDADE.md).
-
-**Segurança:** este repositório é público. Não publique tokens, senhas, endereços internos, dumps, chaves de VPN, documentos corporativos ou dados de funcionários. A licença para o código próprio ainda deve ser decidida pela empresa.
-
-Referência: [manual Debian Live](https://live-team.pages.debian.net/live-manual/html/live-manual.en.html).
+**Seguranca:** repositorio publico; jamais adicionar tokens, senhas, certificados, dados internos ou informacoes pessoais. As alteracoes de seguranca requerem testes e autorizacao da empresa.

@@ -10,7 +10,8 @@
 - [x] Vincular pasta Windows `OS da enfoque` ao GitHub
 - [x] Publicar workflow manual GitHub Actions para construir ISO
 - [ ] Validar execução real do workflow GitHub Actions e baixar artefato
-- [ ] Corrigir metadata interna de versão da próxima ISO
+- [x] Preparar correcoes de locale, teclado, fuso e metadata interna para 0.1.2 (ainda sem validar)
+- [ ] Compilar e homologar 0.1.2 em VM com 2 GB
 - [ ] Testar navegação e SIGE sob carga; teclado ABNT2; uso de HD
 - [ ] Identidade visual exclusiva Enfoque OS
 - [ ] Instalador e recuperação

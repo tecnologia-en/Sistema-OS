@@ -1,6 +1,6 @@
-ENFOQUE OS 0.1 - PILOTO TECNICO
+ENFOQUE OS - PILOTO TECNICO
 
-Imagem Live sem instalador em disco, nao homologada.
-Controle remoto, distribuicao de apps, politicas e IA ainda nao existem.
-Nunca substituir um caixa ou PDV em producao por esta imagem.
-Verificar funcionamento em outra VM antes de qualquer piloto.
+Imagem Live sem instalador em disco e nao homologada para producao.
+Os recursos corporativos de controle remoto, politicas de funcionarios e IA
+ainda nao foram implementados. Testes apenas em VM isolada.
+O numero exato da versao consta em /etc/enfoque-os-release na imagem.

@@ -2,6 +2,14 @@ name: Build Enfoque OS ISO
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'config/**'
+      - 'scripts/build-iso.sh'
+      - 'scripts/check-project.sh'
+      - '.github/workflows/build-iso.yml'
 
 permissions:
   contents: read

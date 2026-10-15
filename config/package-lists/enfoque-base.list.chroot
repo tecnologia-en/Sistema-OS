@@ -1,7 +1,11 @@
-# Enfoque OS 0.1.1 - Debian 13 XFCE, piloto sem restricoes corporativas
-# Com --apt-recommends false, live-config NAO instala user-setup automaticamente.
-# Este pacote e obrigatorio para criar o usuario temporario do modo Live.
+# Enfoque OS 0.1.2 - Debian 13 XFCE, piloto experimental
+# Pacotes explicitamente listados porque apt-recommends esta desativado.
+# user-setup corrige o login Live; console-setup e locales suportam pt_BR e ABNT2.
 user-setup
+locales
+console-setup
+keyboard-configuration
+tzdata
 xorg
 lightdm
 xfce4
@@ -11,6 +15,7 @@ gvfs
 network-manager
 network-manager-gnome
 firefox-esr
+firefox-esr-l10n-pt-br
 sudo
 ca-certificates
 curl

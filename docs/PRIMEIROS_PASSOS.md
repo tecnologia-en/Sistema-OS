@@ -1,22 +1,20 @@
-# Primeiro uso no Debian de desenvolvimento
+# Instrucoes de uso
 
-Na maquina virtual Debian 13 XFCE (nao nos PCs da empresa):
+## Windows + GitHub (fluxo principal)
 
-```bash
-sudo apt update
-sudo apt install -y git live-build debootstrap squashfs-tools xorriso syslinux-common isolinux grub-pc-bin grub-efi-amd64-bin mtools dosfstools
-cd ~
-git clone https://github.com/tecnologia-en/Sistema-OS.git
-cd Sistema-OS
-./scripts/check-project.sh
-./scripts/check-host.sh
-sudo ./scripts/build-iso.sh
+Abra o terminal na pasta `OS da enfoque` do Windows:
+```powershell
+git pull --ff-only
 ```
+O codigo-fonte sera atualizado. A ISO continua sendo compilada em Linux, mas pela maquina temporaria do GitHub Actions, nao pelo Windows nem pela VM de teste.
 
-A versao atual gera `dist/enfoque-os-0.1.1-piloto-amd64.iso`.
-Ela inicia em modo Live: **nao instala no disco**.
+Entre no repositorio GitHub, abra a guia **Actions** e verifique **Build Enfoque OS ISO**. O workflow e automatico para alteracoes na configuracao da ISO ou manual via **Run workflow**. So baixe a ISO de um build com status *success*.
 
-## Para atualizar e recompilar na VM existente
+Extraia o artefato para a pasta `dist`, compare o hash SHA256SUMS e monte a nova ISO na VM **Enfoque OS - Teste**. Mantenha a VM de desenvolvimento desligada.
+
+## Recuperacao com VM Debian (apenas contingencia)
+
+Se o GitHub Actions ficar indisponivel, a VM Enfoque OS - Dev ainda pode compilar a imagem:
 
 ```bash
 cd ~/Sistema-OS
@@ -25,19 +23,4 @@ git pull --ff-only
 sudo ./scripts/build-iso.sh
 ```
 
-O script detecta o cache de build antigo, chama `lb clean --all` apenas dentro de
-`.build/enfoque-os` (preservando caches) e atualiza a configuracao. O arquivo
-ISO da versao anterior nao e sobrescrito. Se ja houver ISO com o nome da versao
-atual, a compilacao e recusada para evitar sobrescrita.
-
-## Resultado do primeiro teste
-
-- Enfoque OS 0.1: criou a ISO e iniciou no VirtualBox com 2 GB RAM;
-- BUG: nao foi criado usuario Live, impossibilitando login grafico e em TTY;
-- CAUSA: `--apt-recommends false` sem o pacote recomendado `user-setup`;
-- CORRECAO 0.1.1: pacote `user-setup` incluso e validado no `check-project.sh`;
-- PENDENTE: compilar a 0.1.1, iniciar no VirtualBox e confirmar login, XFCE e apps.
-
-Documentacao Debian: https://live-team.pages.debian.net/live-manual/html/live-manual/customizing-package-installation.en.html
-
-Nao usar na loja nem no caixa antes da homologacao.
+A versao sera obtida de `config/includes.chroot/etc/enfoque-os-release`. A imagem e Live sem instalador; nunca testar em um computador de loja.

@@ -17,4 +17,19 @@ grep -Eq '^[[:space:]]*sudo[[:space:]]*$' "$ROOT/config/package-lists/enfoque-ba
   echo 'ERRO: pacote sudo ausente no modo Live.' >&2
   exit 1
 }
+for pkg in locales console-setup keyboard-configuration firefox-esr-l10n-pt-br tzdata; do
+  grep -Eq "^[[:space:]]*$pkg[[:space:]]*$" "$ROOT/config/package-lists/enfoque-base.list.chroot" || {
+    echo "ERRO: dependencia obrigatoria para pt_BR: $pkg" >&2
+    exit 1
+  }
+done
+version="$(sed -n 's/^VERSION="\([^"]*\)"/\1/p' "$ROOT/config/includes.chroot/etc/enfoque-os-release")"
+if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "ERRO: versao invalida em enfoque-os-release: $version" >&2
+  exit 1
+fi
+grep -q 'keyboard-layouts=br' "$ROOT/scripts/build-iso.sh"
+grep -q 'keyboard-model=abnt2' "$ROOT/scripts/build-iso.sh"
+grep -q 'timezone=America/Sao_Paulo' "$ROOT/scripts/build-iso.sh"
+echo "Versao definida: $version"
 echo 'Estrutura valida. A ISO deve ser compilada e testada em VM.'
