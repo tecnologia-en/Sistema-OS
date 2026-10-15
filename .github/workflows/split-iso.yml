@@ -1,0 +1,95 @@
+name: Dividir ISO para transferencia
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Numero da execucao de Build Enfoque OS ISO'
+        required: false
+        default: '38774722812'
+        type: string
+      artifact_name:
+        description: 'Nome do artefato original'
+        required: false
+        default: 'enfoque-os-iso-3'
+        type: string
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/split-iso.yml'
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  split:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Baixar imagem ja compilada
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id || '38774722812' }}
+          ARTIFACT_NAME: ${{ inputs.artifact_name || 'enfoque-os-iso-3' }}
+        run: |
+          set -euo pipefail
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]]
+          mkdir -p original
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$ARTIFACT_NAME" --dir original
+          [[ $(find original -maxdepth 1 -type f -name '*.iso' | wc -l) -eq 1 ]]
+          (cd original && sha256sum -c SHA256SUMS)
+
+      - name: Dividir em quatro partes e gerar hashes
+        run: |
+          set -euo pipefail
+          mkdir -p parts
+          iso=$(find original -maxdepth 1 -type f -name '*.iso' -print -quit)
+          split -b 300m -d -a 2 "$iso" parts/chunk-
+          for suffix in 00 01 02 03; do test -s "parts/chunk-$suffix"; done
+          [[ $(find parts -maxdepth 1 -type f -name 'chunk-*' | wc -l) -eq 4 ]]
+          cp original/SHA256SUMS parts/SHA256SUMS
+          (cd parts && sha256sum chunk-* > SHA256_PARTS)
+          (cd parts && sha256sum -c SHA256_PARTS)
+
+      - name: Enviar manifesto
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-iso-manifesto
+          path: |
+            parts/SHA256SUMS
+            parts/SHA256_PARTS
+          compression-level: 0
+          retention-days: 7
+
+      - name: Enviar parte 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-iso-parte-00
+          path: parts/chunk-00
+          compression-level: 0
+          retention-days: 7
+
+      - name: Enviar parte 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-iso-parte-01
+          path: parts/chunk-01
+          compression-level: 0
+          retention-days: 7
+
+      - name: Enviar parte 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-iso-parte-02
+          path: parts/chunk-02
+          compression-level: 0
+          retention-days: 7
+
+      - name: Enviar parte 03
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-iso-parte-03
+          path: parts/chunk-03
+          compression-level: 0
+          retention-days: 7
