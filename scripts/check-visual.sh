@@ -49,8 +49,6 @@ grep -Fq 'value="whiskermenu"' "$ROOT/config/includes.chroot/etc/skel/.config/xf
 grep -Fq 'p=10;' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'barra inferior ausente'
 grep -Fq 'https://enfoquepapelaria.meusige.com.br/' "$ROOT/config/includes.chroot/etc/skel/Desktop/SIGE.desktop" || fail 'atalho SIGE errado'
 grep -Fq 'https://intranet.enfoquepapelaria.com.br/' "$ROOT/config/includes.chroot/etc/skel/Desktop/Intranet.desktop" || fail 'atalho Intranet errado'
-grep -Eq '^xfce4-whiskermenu-plugin
- "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'whiskermenu ausente'
-grep -Eq '^papirus-icon-theme
- "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'papirus ausente'
+grep -Eq '^xfce4-whiskermenu-plugin$' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'whiskermenu ausente'
+grep -Eq '^papirus-icon-theme$' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'papirus ausente'
 echo 'OK: boot BIOS/EFI; interface tipo Windows; atalhos SIGE e Intranet.'
