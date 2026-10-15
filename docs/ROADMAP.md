@@ -1,16 +1,21 @@
 # Roadmap
 
-- [x] VM Debian 13 com XFCE criada para desenvolvimento
-- [x] Repo GitHub com scripts e documentacao inicial
-- [x] Compilar ISO Live 0.1 e confirmar checksum
-- [x] Inicializar ISO 0.1 em segunda VM com 2 GB RAM (ate a tela de login)
-- [x] Diagnosticar ausencia de usuario Live na 0.1
-- [ ] Recompilar 0.1.1 com user-setup e validar login
-- [ ] Medir memoria, CPU, tempo de boot, navegador e rede
-- [ ] Desenvolver identidade visual e instalador proprio testado
-- [ ] Mapear SIGE e perifericos das lojas
-- [ ] Agente de inventario com autenticacao individual
-- [ ] Atualizacoes corporativas por grupos com rollback
-- [ ] Politicas de acesso por perfil e logs de auditoria
-- [ ] Suporte remoto com consentimento
-- [ ] Automacao ChatGPT limitada e auditavel
+- [x] VM Debian 13 XFCE configurada para desenvolvimento
+- [x] Repositório GitHub com código e scripts da ISO
+- [x] ISO Live 0.1 compilada e checksum confirmado
+- [x] Detectar falha de usuário Live na 0.1
+- [x] Incluir `user-setup` e recompilar 0.1.1
+- [x] ISO 0.1.1 inicia no VirtualBox e abre XFCE automaticamente com 2 GB RAM
+- [x] Validar rede, Firefox, utilitário de diagnóstico e RAM em repouso
+- [x] Vincular pasta Windows `OS da enfoque` ao GitHub
+- [x] Publicar workflow manual GitHub Actions para construir ISO
+- [ ] Validar execução real do workflow GitHub Actions e baixar artefato
+- [ ] Corrigir metadata interna de versão da próxima ISO
+- [ ] Testar navegação e SIGE sob carga; teclado ABNT2; uso de HD
+- [ ] Identidade visual exclusiva Enfoque OS
+- [ ] Instalador e recuperação
+- [ ] Agente de inventário com autenticação
+- [ ] Atualizações corporativas em grupos e rollback
+- [ ] Políticas de acesso e logs
+- [ ] Suporte remoto consentido
+- [ ] Integração ChatGPT limitada e auditável
