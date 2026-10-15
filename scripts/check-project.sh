@@ -42,4 +42,5 @@ grep -Fq -- '--security false' "$ROOT/scripts/build-iso.sh" || {
   echo 'ERRO: live-build Ubuntu usara trixie/updates (inexistente).' >&2
   exit 1
 }
+bash "$ROOT/scripts/check-visual.sh"
 echo 'Estrutura valida. A ISO deve ser compilada e testada em VM.'

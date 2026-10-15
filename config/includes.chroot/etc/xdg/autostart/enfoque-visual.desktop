@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Enfoque OS - Aparencia inicial
+Comment=Aplica o visual da sessao de teste
+Exec=/usr/local/bin/enfoque-aplicar-visual
+OnlyShowIn=XFCE;
+NoDisplay=true
+Terminal=false
+X-GNOME-Autostart-enabled=true

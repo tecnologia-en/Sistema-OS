@@ -1,0 +1,12 @@
+label live-@FLAVOUR@
+	menu label ^Iniciar Enfoque OS (Live)
+	menu default
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE@
+
+label live-@FLAVOUR@-failsafe
+	menu label ^Modo de compatibilidade (Live)
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE_FAILSAFE@

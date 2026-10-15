@@ -19,6 +19,7 @@ A antiga VM Enfoque OS - Dev fica reservada como contingencia; o fluxo Windows +
 - 0.1: ISO Live gerada, mas usuario Live ausente.
 - 0.1.1: usuario Live corrigido; testado com 2 GB; locale/teclado/horario pendentes.
 - 0.1.2: ISO compilada no GitHub Actions e testada em VM de 2 GB; pt_BR, ABNT2, horario de Sao Paulo, versao interna, Firefox e reboot aprovados. **Somente piloto Live.**
+- 0.1.3: proximo piloto em desenvolvimento com boot Live automatico, wallpaper e identidade proprios, tema escuro e sincronizacao NTP. Ainda sem ISO validada.
 
 Documentacao: [Windows e GitHub](docs/BUILD_WINDOWS_GITHUB.md), [testes](docs/TESTES_PILOTO.md), [relatorio 0.1.2](docs/TESTE_2026-10-15_0.1.2.md), [relatorio 0.1.1](docs/TESTE_2026-10-15_0.1.1.md), [arquitetura](docs/ARQUITETURA.md), [continuidade](docs/SEGURANCA_E_CONTINUIDADE.md).
 

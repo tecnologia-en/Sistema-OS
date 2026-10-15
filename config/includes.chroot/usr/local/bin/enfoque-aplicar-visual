@@ -1,0 +1,54 @@
+#!/bin/sh
+# Identidade visual do piloto Live; executa apenas na sessao XFCE do usuario.
+# Nao altera rede, dados ou politicas de seguranca.
+set -eu
+
+WALLPAPER=/usr/share/backgrounds/enfoque-os/wallpaper.png
+MARKER="${HOME}/.cache/enfoque-os-visual-v013"
+if [ ! -f "$WALLPAPER" ] || ! command -v xfconf-query >/dev/null 2>&1; then
+  exit 0
+fi
+if [ -f "$MARKER" ]; then
+  exit 0
+fi
+
+set_xfconf() {
+  channel="$1"
+  key="$2"
+  type="$3"
+  value="$4"
+  if xfconf-query -c "$channel" -p "$key" >/dev/null 2>&1; then
+    xfconf-query -c "$channel" -p "$key" -s "$value" >/dev/null 2>&1 || true
+  else
+    xfconf-query -c "$channel" -p "$key" -n -t "$type" -s "$value" >/dev/null 2>&1 || true
+  fi
+}
+
+# Aguarda o xfdesktop registrar nomes reais dos monitores.
+sleep 2
+set_xfconf xsettings /Net/ThemeName string Arc-Dark
+set_xfconf xsettings /Net/IconThemeName string Adwaita
+set_xfconf xfwm4 /general/theme string Arc-Dark
+set_xfconf xfwm4 /general/title_alignment string left
+
+props=''
+i=0
+while [ "$i" -lt 5 ]; do
+  props="$(xfconf-query -c xfce4-desktop -l 2>/dev/null | grep -E '^/backdrop/screen[0-9]+/monitor[^/]+/workspace[0-9]+/last-image$' || true)"
+  [ -n "$props" ] && break
+  i=$((i+1))
+  sleep 1
+done
+if [ -z "$props" ]; then
+  props='/backdrop/screen0/monitor0/workspace0/last-image
+/backdrop/screen0/monitorVirtual1/workspace0/last-image'
+fi
+printf '%s\n' "$props" | while IFS= read -r prop; do
+  [ -n "$prop" ] || continue
+  set_xfconf xfce4-desktop "$prop" string "$WALLPAPER"
+  style="${prop%/last-image}/image-style"
+  set_xfconf xfce4-desktop "$style" int 5
+done
+xfdesktop --reload >/dev/null 2>&1 || true
+mkdir -p "${HOME}/.cache"
+: > "$MARKER"
