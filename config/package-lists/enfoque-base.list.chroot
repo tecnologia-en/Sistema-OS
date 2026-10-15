@@ -1,4 +1,7 @@
-# Enfoque OS 0.1 - Debian 13 XFCE, piloto sem restricoes corporativas
+# Enfoque OS 0.1.1 - Debian 13 XFCE, piloto sem restricoes corporativas
+# Com --apt-recommends false, live-config NAO instala user-setup automaticamente.
+# Este pacote e obrigatorio para criar o usuario temporario do modo Live.
+user-setup
 xorg
 lightdm
 xfce4

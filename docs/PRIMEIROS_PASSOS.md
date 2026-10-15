@@ -13,17 +13,31 @@ cd Sistema-OS
 sudo ./scripts/build-iso.sh
 ```
 
-A ISO resultante deve aparecer em `dist/enfoque-os-0.1-piloto-amd64.iso`.
+A versao atual gera `dist/enfoque-os-0.1.1-piloto-amd64.iso`.
 Ela inicia em modo Live: **nao instala no disco**.
 
-Para receber futuras atualizacoes do repositorio:
+## Para atualizar e recompilar na VM existente
 
 ```bash
 cd ~/Sistema-OS
 git pull --ff-only
 ./scripts/check-project.sh
+sudo ./scripts/build-iso.sh
 ```
 
-Se o build falhar, registre a mensagem. O script nao apaga automaticamente a pasta `.build/` nem sobrescreve ISO anterior.
+O script detecta o cache de build antigo, chama `lb clean --all` apenas dentro de
+`.build/enfoque-os` (preservando caches) e atualiza a configuracao. O arquivo
+ISO da versao anterior nao e sobrescrito. Se ja houver ISO com o nome da versao
+atual, a compilacao e recusada para evitar sobrescrita.
 
-Teste a imagem numa **segunda VM** com 2 GB RAM, sem dados importantes. Verifique inicializacao, consumo de RAM, rede, Firefox, teclado e o atalho de diagnostico. Nao usar no caixa, nem na VPS de producao.
+## Resultado do primeiro teste
+
+- Enfoque OS 0.1: criou a ISO e iniciou no VirtualBox com 2 GB RAM;
+- BUG: nao foi criado usuario Live, impossibilitando login grafico e em TTY;
+- CAUSA: `--apt-recommends false` sem o pacote recomendado `user-setup`;
+- CORRECAO 0.1.1: pacote `user-setup` incluso e validado no `check-project.sh`;
+- PENDENTE: compilar a 0.1.1, iniciar no VirtualBox e confirmar login, XFCE e apps.
+
+Documentacao Debian: https://live-team.pages.debian.net/live-manual/html/live-manual/customizing-package-installation.en.html
+
+Nao usar na loja nem no caixa antes da homologacao.

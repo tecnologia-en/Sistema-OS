@@ -7,4 +7,14 @@ for f in "$ROOT/config/package-lists/enfoque-base.list.chroot" "$ROOT/config/inc
   test -s "$f" || { echo "Arquivo ausente ou vazio: $f" >&2; exit 1; }
   echo "OK arquivo: ${f#"$ROOT"/}"
 done
-echo 'Estrutura valida. Ainda falta compilar e testar a ISO.'
+# Falha detectada no primeiro boot do piloto 0.1:
+# user-setup precisa ser explicitamente instalado se o apt-recommends esta desativado.
+grep -Eq '^[[:space:]]*user-setup[[:space:]]*$' "$ROOT/config/package-lists/enfoque-base.list.chroot" || {
+  echo 'ERRO: pacote user-setup ausente; modo Live nao criara o usuario.' >&2
+  exit 1
+}
+grep -Eq '^[[:space:]]*sudo[[:space:]]*$' "$ROOT/config/package-lists/enfoque-base.list.chroot" || {
+  echo 'ERRO: pacote sudo ausente no modo Live.' >&2
+  exit 1
+}
+echo 'Estrutura valida. A ISO deve ser compilada e testada em VM.'
