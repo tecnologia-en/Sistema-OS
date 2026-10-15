@@ -1,0 +1,41 @@
+name: Publicar ISO piloto 0.1.6
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-iso-016.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Baixar artefato ja aprovado da compilacao 9
+        uses: actions/download-artifact@v4
+        with:
+          name: enfoque-os-iso-9
+          path: dist
+          repository: tecnologia-en/Sistema-OS
+          run-id: 38824788750
+          github-token: ${{ github.token }}
+      - name: Confirmar SHA-256 da ISO
+        run: |
+          test -s dist/enfoque-os-0.1.6-piloto-amd64.iso
+          test -s dist/SHA256SUMS
+          (cd dist && sha256sum -c SHA256SUMS)
+          ls -lh dist
+      - name: Publicar prerelease para laboratorio
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v0.1.6-piloto \
+            --repo tecnologia-en/Sistema-OS \
+            --target 41575b9da936e352b07a6cc078c7b1a9d409aeac \
+            --title 'Enfoque OS 0.1.6 - piloto experimental' \
+            --notes 'ISO de testes em VM. Nao homologada para instalacao nas lojas. Acesso remoto, impressao Bematech e interface ainda exigem ensaio de ponta a ponta.' \
+            --prerelease \
+            dist/enfoque-os-0.1.6-piloto-amd64.iso dist/SHA256SUMS
