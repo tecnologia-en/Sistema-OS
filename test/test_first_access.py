@@ -63,7 +63,8 @@ class FirstAccessTests(unittest.TestCase):
         self.assertIn("Exec=/usr/local/bin/enfoque-instalar",app)
         script=(CONFIG/"usr/local/bin/enfoque-instalar").read_text(encoding="utf-8")
         self.assertIn("/run/live/medium",script)
-        self.assertIn("exec install-debian",script)
+        self.assertIn("exec calamares-install-debian",script)
+        self.assertIn("TryExec=calamares-install-debian",app)
 
     def test_password_login_installed_only(self):
         binary=(CONFIG/"usr/local/sbin/enfoque-login-instalado").read_text(encoding="utf-8")
