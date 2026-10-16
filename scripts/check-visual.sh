@@ -68,6 +68,16 @@ grep -Fq 'dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb' "$R
 if grep -E '^(firefox-esr|firefox-esr-l10n-pt-br)$' "$ROOT/config/package-lists/enfoque-base.list.chroot"; then
   fail 'Firefox ainda incluido na lista de pacotes'
 fi
+for f in \
+  config/includes.chroot/usr/local/sbin/enfoque-ativar-grafico \
+  config/includes.chroot/etc/systemd/system/enfoque-ativar-grafico.service \
+  config/hooks/normal/095-enable-graphical-vt.hook.chroot; do
+  need "$f"
+done
+grep -Fq 'WantedBy=graphical.target' "$ROOT/config/includes.chroot/etc/systemd/system/enfoque-ativar-grafico.service" || fail 'ativacao do VT fora do alvo grafico'
+grep -Fq 'ConditionPathExists=/run/live/medium' "$ROOT/config/includes.chroot/etc/systemd/system/enfoque-ativar-grafico.service" || fail 'protecao de modo Live ausente'
+grep -Fq 'systemctl enable enfoque-ativar-grafico.service' "$ROOT/config/hooks/normal/095-enable-graphical-vt.hook.chroot" || fail 'servico VT nao habilitado'
+sh -n "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-ativar-grafico" "$ROOT/config/hooks/normal/095-enable-graphical-vt.hook.chroot"
 sh -n "$ROOT/config/includes.chroot/usr/local/bin/enfoque-parear-suporte" "$ROOT/config/hooks/normal/090-google-chrome.hook.chroot"
 python3 -m py_compile "$ROOT/config/includes.chroot/usr/local/lib/enfoque-hub/app.py" "$ROOT/config/includes.chroot/usr/local/lib/enfoque-hub/devices.py"
 echo 'OK: boot BIOS/EFI, Chrome, painel USB, CUPS, suporte e atalhos SIGE/Intranet.'

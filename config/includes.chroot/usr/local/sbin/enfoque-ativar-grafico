@@ -1,0 +1,25 @@
+#!/bin/sh
+# Forca o VT correto quando LightDM usa Xorg -novtswitch no modo Live.
+# Nunca define um VT fixo: extrai o terminal grafico do processo Xorg real.
+set -eu
+attempt=0
+while [ "$attempt" -lt 45 ]; do
+  attempt=$((attempt + 1))
+  if pgrep -x xfce4-session >/dev/null 2>&1; then
+    vt="$(ps -C Xorg -o args= 2>/dev/null | tr ' ' '\n' | sed -nE 's/^vt([0-9]+)$/\1/p' | head -n 1)"
+    if [ -n "$vt" ]; then
+      current="$(fgconsole 2>/dev/null || true)"
+      if [ "$current" != "$vt" ]; then
+        if chvt "$vt"; then
+          logger -t enfoque-os "Sessao XFCE ativada no terminal grafico vt$vt"
+        else
+          logger -t enfoque-os "Nao foi possivel ativar o terminal grafico vt$vt"
+        fi
+      fi
+      exit 0
+    fi
+  fi
+  sleep 1
+done
+logger -t enfoque-os "Sessao grafica nao encontrada no periodo de inicializacao"
+exit 0
