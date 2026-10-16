@@ -1,0 +1,42 @@
+name: Publicar Enfoque OS 0.2.4 como piloto
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-iso-024.yml'
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - name: Aguardar validacao da ISO 0.2.4
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run watch 38934719837 --repo tecnologia-en/Sistema-OS --exit-status --interval 15
+      - name: Baixar artefato da compilacao 17
+        uses: actions/download-artifact@v4
+        with:
+          name: enfoque-os-iso-17
+          path: dist
+          repository: tecnologia-en/Sistema-OS
+          run-id: 38934719837
+          github-token: ${{ github.token }}
+      - name: Conferir ISO e SHA256SUMS antes de publicar
+        run: |
+          test -s dist/enfoque-os-0.2.4-piloto-amd64.iso
+          test -s dist/SHA256SUMS
+          (cd dist && sha256sum -c SHA256SUMS)
+      - name: Publicar prerelease 0.2.4 para laboratorio
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v0.2.4-piloto \
+            --repo tecnologia-en/Sistema-OS \
+            --target 89c42d74645f39edf3c0f8fc86a6ee0ee99ebdc5 \
+            --title 'Enfoque OS 0.2.4 - Nova interface, audio e rede (piloto)' \
+            --notes 'ISO experimental Debian 13 XFCE: novo wallpaper de identidade Enfoque com logo original, menu renovado, SVGs corporativos, barra inferior com data e hora, controle de audio PulseAudio, rede Wi-Fi pelo NetworkManager, guia Primeiros passos e SIGE direcionado a /sistema. Testes em VM obrigatorios antes de homologacao dos PCs de lojas.' \
+            --prerelease \
+            dist/enfoque-os-0.2.4-piloto-amd64.iso dist/SHA256SUMS
