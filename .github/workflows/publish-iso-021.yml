@@ -1,0 +1,38 @@
+name: Publicar Enfoque OS 0.2.1 como piloto
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-iso-021.yml'
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - name: Baixar a ISO compilada pelo GitHub Actions
+        uses: actions/download-artifact@v4
+        with:
+          name: enfoque-os-iso-14
+          path: dist
+          repository: tecnologia-en/Sistema-OS
+          run-id: 38913329236
+          github-token: ${{ github.token }}
+      - name: Validar SHA-256 antes da publicacao
+        run: |
+          test -s dist/enfoque-os-0.2.1-piloto-amd64.iso
+          test -s dist/SHA256SUMS
+          (cd dist && sha256sum -c SHA256SUMS)
+      - name: Publicar a prerelease experimental 0.2.1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v0.2.1-piloto \
+            --repo tecnologia-en/Sistema-OS \
+            --target 79827bd98006ad4f14fe27b79e02616fed5fd7eb \
+            --title 'Enfoque OS 0.2.1 - Correcao de boot grafico (piloto)' \
+            --notes 'Versao experimental para laboratorio VirtualBox: atualizacao de VT grafico em boot Live e testes automatizados. Ainda nao homologada para implantacao; controle remoto MeshCentral requer inscricao individual, autorizacao e testes de TI. Nenhum token ou segredo acompanha a ISO.' \
+            --prerelease \
+            dist/enfoque-os-0.2.1-piloto-amd64.iso dist/SHA256SUMS
