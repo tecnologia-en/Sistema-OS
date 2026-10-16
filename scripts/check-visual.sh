@@ -88,4 +88,23 @@ grep -Fq 'systemctl enable enfoque-ativar-grafico.service' "$ROOT/config/hooks/n
 sh -n "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-ativar-grafico" "$ROOT/config/hooks/normal/095-enable-graphical-vt.hook.chroot"
 sh -n "$ROOT/config/includes.chroot/usr/local/bin/enfoque-parear-suporte" "$ROOT/config/hooks/normal/090-google-chrome.hook.chroot"
 python3 -m py_compile "$ROOT/config/includes.chroot/usr/local/lib/enfoque-hub/app.py" "$ROOT/config/includes.chroot/usr/local/lib/enfoque-hub/devices.py"
+# O Chrome precisa ser default XDG real, nao apenas um botao do painel.
+need config/includes.chroot/usr/local/bin/enfoque-chrome-padrao
+need config/includes.chroot/etc/xdg/autostart/enfoque-chrome-padrao.desktop
+need config/includes.chroot/etc/xdg/mimeapps.list
+need config/includes.chroot/usr/share/icons/hicolor/48x48/apps/enfoque-intranet.png
+need config/hooks/normal/092-set-default-browser.hook.chroot
+sh -n "$ROOT/config/includes.chroot/usr/local/bin/enfoque-chrome-padrao"
+sh -n "$ROOT/config/hooks/normal/092-set-default-browser.hook.chroot"
+grep -Fq 'xdg-settings set default-web-browser' "$ROOT/config/includes.chroot/usr/local/bin/enfoque-chrome-padrao" || fail 'Chrome nao forcado no primeiro login'
+grep -Fq 'xdg-settings get default-web-browser' "$ROOT/config/includes.chroot/usr/local/bin/enfoque-chrome-padrao" || fail 'Sem validacao do default do Chrome'
+grep -Fq 'Exec=/usr/local/bin/enfoque-chrome-padrao' "$ROOT/config/includes.chroot/etc/xdg/autostart/enfoque-chrome-padrao.desktop" || fail 'Autostart Chrome default ausente'
+for f in config/includes.chroot/etc/xdg/mimeapps.list config/includes.chroot/etc/skel/.config/mimeapps.list; do
+  grep -Fxq 'x-scheme-handler/https=google-chrome.desktop' "$ROOT/$f" || fail "HTTPS nao tem Chrome default: $f"
+  grep -Fxq 'text/html=google-chrome.desktop' "$ROOT/$f" || fail "HTML nao tem Chrome default: $f"
+done
+grep -Fxq 'librsvg2-common' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'librsvg2-common ausente para icones SVG'
+magic="$(od -An -tx1 -N8 "$ROOT/config/includes.chroot/usr/share/icons/hicolor/48x48/apps/enfoque-intranet.png" | tr -d ' \n')"
+[ "$magic" = '89504e470d0a1a0a' ] || fail 'Fallback PNG Intranet invalido'
+
 echo 'OK: boot BIOS/EFI, Chrome, painel USB, CUPS, suporte e atalhos SIGE/Intranet.'

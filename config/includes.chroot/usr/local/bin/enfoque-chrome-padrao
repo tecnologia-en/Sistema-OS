@@ -1,0 +1,38 @@
+#!/bin/sh
+# First-login Chrome default for Enfoque OS (XFCE + XDG + MIME).
+# Only configure once per user so later explicit browser choices are respected.
+set -eu
+app=google-chrome.desktop
+command -v google-chrome-stable >/dev/null 2>&1 || exit 0
+command -v xdg-settings >/dev/null 2>&1 || exit 1
+command -v xdg-mime >/dev/null 2>&1 || exit 1
+
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/enfoque-os"
+marker="$state_dir/chrome-default-v023"
+[ ! -e "$marker" ] || exit 0
+
+attempt=0
+while [ "$attempt" -lt 12 ]; do
+  attempt=$((attempt + 1))
+  # Wait for the desktop session's XDG / D-Bus handlers to be available.
+  if xdg-settings set default-web-browser "$app" >/dev/null 2>&1; then
+    if xdg-mime default "$app" \
+      x-scheme-handler/http x-scheme-handler/https \
+      text/html application/xhtml+xml application/pdf >/dev/null 2>&1; then
+      chosen="$(xdg-settings get default-web-browser 2>/dev/null || true)"
+      html="$(xdg-mime query default text/html 2>/dev/null || true)"
+      if [ "$chosen" = "$app" ] && [ "$html" = "$app" ]; then
+        mkdir -p "$state_dir"
+        : > "$marker"
+        exit 0
+      fi
+    fi
+  fi
+  sleep 2
+done
+
+# Preserve the ability to retry next login if the session is not ready.
+if command -v logger >/dev/null 2>&1; then
+  logger -t enfoque-os "Chrome nao pode ser configurado como navegador padrao nesta sessao"
+fi
+exit 1

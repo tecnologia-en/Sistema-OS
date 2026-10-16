@@ -1,4 +1,4 @@
-# Enfoque OS 0.2.0 - Debian 13 XFCE
+# Enfoque OS 0.2.3 - Debian 13 XFCE
 # Chrome oficial do Google via hook HTTPS em build, sem Firefox.
 user-setup
 locales
@@ -11,6 +11,7 @@ lightdm-gtk-greeter
 accountsservice
 dbus-x11
 x11-xserver-utils
+librsvg2-common
 xserver-xorg-video-vmware
 xserver-xorg-video-fbdev
 xserver-xorg-video-vesa

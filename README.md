@@ -37,3 +37,7 @@ Documentacao: [Windows e GitHub](docs/BUILD_WINDOWS_GITHUB.md), [testes](docs/TE
 - 0.2.2: corrigida estrutura XML do painel XFCE; barra inferior fixa de largura total com atalhos independentes Chrome, SIGE e Intranet. Icones vindos dos favicons reais: Intranet em SVG, SIGE em ICO/PNG incorporado em SVG. Pendente de teste em VM.
 
 Teste detalhado: [0.2.1 e plano 0.2.2](docs/TESTE_2026-10-16_0.2.1_E_PLANO_0.2.2.md).
+
+- 0.2.3: Google Chrome configurado como navegador padrao XDG e Debian no primeiro login do XFCE (HTTP, HTTPS, HTML, XHTML, PDF), preservando mudancas posteriores feitas pelo usuario. Correcoes de icones SVG com librsvg2-common e PNG derivado do favicon oficial da Intranet. Pendente de teste de ISO em VM.
+
+QA 0.2.2: [teste real e pendencias](docs/TESTE_2026-10-16_0.2.2.md).

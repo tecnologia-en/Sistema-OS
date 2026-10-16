@@ -1,0 +1,9 @@
+#!/bin/sh
+# Debian fallback browsers should point to Chrome, too.
+set -eu
+browser=/usr/bin/google-chrome-stable
+test -x "$browser"
+for group in x-www-browser gnome-www-browser; do
+  update-alternatives --install "/usr/bin/$group" "$group" "$browser" 220
+  update-alternatives --set "$group" "$browser"
+done

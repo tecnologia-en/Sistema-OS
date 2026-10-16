@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Enfoque OS - Configurar Chrome como navegador padrao
+Comment=Primeiro login: aplica Chrome aos protocolos e associacoes XDG
+Exec=/usr/local/bin/enfoque-chrome-padrao
+TryExec=google-chrome-stable
+OnlyShowIn=XFCE;
+NoDisplay=true
+Terminal=false
+X-GNOME-Autostart-enabled=true
