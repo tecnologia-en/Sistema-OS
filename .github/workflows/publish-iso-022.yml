@@ -1,0 +1,38 @@
+name: Publicar Enfoque OS 0.2.2 como piloto
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-iso-022.yml'
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - name: Recuperar ISO validada da compilacao 0.2.2
+        uses: actions/download-artifact@v4
+        with:
+          name: enfoque-os-iso-15
+          path: dist
+          repository: tecnologia-en/Sistema-OS
+          run-id: 38921356234
+          github-token: ${{ github.token }}
+      - name: Conferir ISO e assinatura SHA-256
+        run: |
+          test -s dist/enfoque-os-0.2.2-piloto-amd64.iso
+          test -s dist/SHA256SUMS
+          (cd dist && sha256sum -c SHA256SUMS)
+      - name: Publicar prerelease somente para testes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v0.2.2-piloto \
+            --repo tecnologia-en/Sistema-OS \
+            --target fe3201b87c4870e228c338a9bc64b8e8cc3c889d \
+            --title 'Enfoque OS 0.2.2 - Barra inferior e favicons reais (piloto)' \
+            --notes 'ISO experimental para VM: barra de tarefas XFCE configurada no rodape com atalhos separados Chrome, SIGE e Intranet. Intranet usa SVG publico; SIGE preserva o favicon original ICO/PNG, disponivel como SVG incorporado. Nenhuma credencial incorporada. Acesso remoto e hardware de loja ainda requerem homologacao.' \
+            --prerelease \
+            dist/enfoque-os-0.2.2-piloto-amd64.iso dist/SHA256SUMS
