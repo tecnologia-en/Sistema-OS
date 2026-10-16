@@ -35,7 +35,7 @@ grep -Fq 'menu default' "$ROOT/config/bootloaders/syslinux_common/live.cfg.in" |
 grep -Fq 'Exec=/usr/local/bin/enfoque-aplicar-visual' "$ROOT/config/includes.chroot/etc/xdg/autostart/enfoque-visual.desktop" || fail 'autostart sem execucao'
 grep -Eq '^arc-theme$' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'tema Arc nao instalado'
 grep -Eq '^systemd-timesyncd$' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'NTP nao instalado'
-grep -Fq 'value="Arc-Dark"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" || fail 'tema nao configurado'
+grep -Fq 'value="Arc"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" || fail 'tema nao configurado'
 for p in \
   config/bootloaders/isolinux/splash.png \
   config/bootloaders/grub-pc/splash.png \
@@ -121,4 +121,25 @@ grep -Fq 'meusige.com.br/sistema' "$ROOT/config/includes.chroot/usr/share/applic
 for name in enfoque-start enfoque-central enfoque-suporte enfoque-diagnostico enfoque-sobre enfoque-inscrever; do
   need "config/includes.chroot/usr/share/icons/hicolor/scalable/apps/$name.svg"
 done
+# Installer + non-automatic login for persistent installed OS only.
+for name in calamares-settings-debian pkexec; do
+  grep -Fxq "$name" "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail "instalador ausente: $name"
+done
+need config/includes.chroot/usr/share/applications/enfoque-instalar.desktop
+need config/includes.chroot/usr/local/bin/enfoque-instalar
+need config/includes.chroot/usr/local/sbin/enfoque-login-instalado
+need config/includes.chroot/etc/systemd/system/enfoque-login-instalado.service
+need config/includes.chroot/usr/local/lib/enfoque-onboarding/identity.py
+need config/includes.chroot/usr/local/bin/enfoque-primeiro-acesso
+need config/includes.chroot/etc/xdg/autostart/enfoque-primeiro-acesso.desktop
+need config/hooks/normal/098-enable-installed-login.hook.chroot
+need config/includes.chroot/etc/lightdm/lightdm-gtk-greeter.conf.d/50-enfoque-theme.conf
+for f in config/includes.chroot/usr/local/bin/enfoque-instalar config/includes.chroot/usr/local/sbin/enfoque-login-instalado config/hooks/normal/098-enable-installed-login.hook.chroot; do
+  sh -n "$ROOT/$f"
+done
+grep -Fq 'calamares-settings-debian' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'instalador de disco ausente'
+grep -Fq 'greeter-hide-users=false' "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-login-instalado" || fail 'login de usuario nao aparece'
+grep -Fq 'autologin-user=' "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-login-instalado" || fail 'login automatico nao desabilitado'
+grep -Fq 'digital-date-format' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'data deve aparecer no relogio'
+
 echo 'OK: boot BIOS/EFI, Chrome, painel USB, CUPS, suporte e atalhos SIGE/Intranet.'

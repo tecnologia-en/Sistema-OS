@@ -45,3 +45,5 @@ QA 0.2.2: [teste real e pendencias](docs/TESTE_2026-10-16_0.2.2.md).
 QA 0.2.3: [dois boots e navegador padrao no laboratorio](docs/TESTE_2026-10-16_0.2.3.md).
 
 - 0.2.4: interface renovada com wallpaper da marca, barra inferior com data/hora, controle real de volume, indicador NetworkManager de rede/Wi-Fi, menu didatico, SVGs dos aplicativos internos e atalho do SIGE para /sistema. [Detalhes](docs/GUI_0.2.4.md).
+
+- 0.2.5: login persistente com usuario e senha no instalador Debian (Calamares) e seletor de empresa no primeiro login, tela LightDM exigindo senha nos proximos acessos; correcoes finais de data e contraste na interface.

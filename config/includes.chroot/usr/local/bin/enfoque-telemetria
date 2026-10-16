@@ -70,6 +70,67 @@ def os_release_version():
     return "piloto"
 
 
+def active_session_company():
+    """Return only non-secret self-declared local profile for active GUI sessions.
+
+    This is informational inventory data. The server must NEVER use it
+    to authorize Intranet users or allow administrative access.
+    """
+    import pwd
+    import re
+    import subprocess
+    from pathlib import Path
+
+    try:
+        sessions = subprocess.run(
+            ["loginctl", "list-sessions", "--no-legend", "--no-pager"],
+            capture_output=True, text=True, timeout=4, check=True,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    for entry in sessions.splitlines():
+        tokens = entry.split()
+        if not tokens:
+            continue
+        sid = tokens[0]
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,35}", sid):
+            continue
+        try:
+            raw = subprocess.run(
+                ["loginctl", "show-session", sid, "--no-pager",
+                 "-p", "Active", "-p", "Type", "-p", "Name", "-p", "Remote"],
+                capture_output=True, text=True, timeout=4, check=True,
+            ).stdout
+            attrs = dict(row.split("=", 1) for row in raw.splitlines() if "=" in row)
+            if attrs.get("Active") != "yes" or attrs.get("Type") not in ("x11", "wayland") or attrs.get("Remote") == "yes":
+                continue
+            name = attrs.get("Name", "")
+            if not re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}", name):
+                continue
+            account = pwd.getpwnam(name)
+            filename = Path(account.pw_dir) / ".config" / "enfoque-os" / "identity.json"
+            if filename.is_symlink():
+                continue
+            stat = filename.stat()
+            if stat.st_uid != account.pw_uid or stat.st_mode & 0o077:
+                continue
+            data = json.loads(filename.read_text(encoding="utf-8"))
+            if data.get("username") != name or data.get("origin") != "declared-by-local-user":
+                continue
+            cid, unit = data.get("companyId"), data.get("unitId")
+            known = {
+                "enfoque": ("ilha-plaza", "copacabana", "itaipu", "icarai",
+                            "sao-goncalo", "centro", "deposito", "administracao"),
+                "papel-arte": ("papel-arte", "administracao"),
+            }
+            if cid not in known or unit not in known[cid]:
+                continue
+            return {"localUsername": name, "companyId": cid, "companyUnitId": unit}
+        except (OSError, ValueError, KeyError, json.JSONDecodeError, subprocess.SubprocessError):
+            continue
+    return {}
+
+
 def send_heartbeat(did, token):
     used, total = mem_usage()
     before = cpu_sample()
@@ -82,8 +143,9 @@ def send_heartbeat(did, token):
     payload = {
         "cpuPct": cpu, "ramUsedMb": used, "ramTotalMb": total,
         "uptimeSeconds": uptime, "os": "Enfoque OS " + os_release_version(),
-        "agentVersion": "0.1.7", "ip": local_ip()
+        "agentVersion": "0.2.5", "ip": local_ip()
     }
+    payload.update(active_session_company())
     request = urllib.request.Request(URL, data=json.dumps(payload).encode("utf-8"), method="POST",
         headers={"Content-Type": "application/json", "X-Enfoque-Device-Id": did,
                  "X-Enfoque-Device-Token": token})

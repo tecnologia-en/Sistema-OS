@@ -1,0 +1,21 @@
+#!/bin/sh
+# Enforce password login on installed systems without changing Live behaviour.
+set -eu
+[ ! -d /run/live/medium ] || exit 0
+if grep -Eq '(^| )boot=live( |$)' /proc/cmdline; then exit 0; fi
+mkdir -p /etc/lightdm/lightdm.conf.d
+target=/etc/lightdm/lightdm.conf.d/99-enfoque-login.conf
+if [ ! -e "$target" ]; then
+    umask 022
+    cat > "$target" <<'EOF'
+[Seat:*]
+greeter-session=lightdm-gtk-greeter
+user-session=xfce
+greeter-hide-users=false
+greeter-show-manual-login=true
+allow-guest=false
+autologin-guest=false
+autologin-user=
+EOF
+fi
+exit 0

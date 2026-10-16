@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Enfoque OS - Primeiro acesso
+Comment=Solicitar empresa e unidade no primeiro login local apos a instalacao
+Exec=/usr/local/bin/enfoque-primeiro-acesso
+OnlyShowIn=XFCE;
+NoDisplay=true
+Terminal=false
+X-GNOME-Autostart-enabled=true

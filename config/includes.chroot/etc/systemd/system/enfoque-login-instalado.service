@@ -1,0 +1,14 @@
+[Unit]
+Description=Enfoque OS - Exigir login com senha no sistema instalado
+After=local-fs.target
+Before=lightdm.service
+ConditionPathExists=!/run/live/medium
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/enfoque-login-instalado
+NoNewPrivileges=true
+ProtectHome=true
+
+[Install]
+WantedBy=lightdm.service

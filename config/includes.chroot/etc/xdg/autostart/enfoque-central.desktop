@@ -6,4 +6,4 @@ Comment=Exibir o painel nativo de dispositivos USB e impressoras
 Exec=/usr/local/bin/enfoque-central
 OnlyShowIn=XFCE;
 NoDisplay=true
-X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-enabled=false

@@ -35,9 +35,10 @@ class DesktopV024Tests(unittest.TestCase):
 
     def test_clock_has_date_and_time(self):
         self.assertEqual(plugin(10).get("value"), "clock")
-        f = plugin(10).find("./property[@name='digital-format']").get("value")
-        self.assertIn("%H:%M", f)
-        self.assertIn("%d/%m/%Y", f)
+        t = plugin(10).find("./property[@name='digital-time-format']").get("value")
+        d = plugin(10).find("./property[@name='digital-date-format']").get("value")
+        self.assertIn("%H:%M", t)
+        self.assertIn("%d/%m/%Y", d)
         self.assertEqual(plugin(11).get("value"), "showdesktop")
 
     def test_launchers_use_exact_sige_system_url(self):
@@ -68,13 +69,13 @@ class DesktopV024Tests(unittest.TestCase):
             self.assertEqual(icon.get("viewBox"), "0 0 64 64")
             self.assertGreater(len(list(icon)), 3)
         settings = (CONFIG / "etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml").read_text()
-        self.assertIn('value="Arc-Dark"', settings)
+        self.assertIn('value="Arc"', settings)
         css = CONFIG / "etc/skel/.config/gtk-3.0/gtk.css"
         self.assertTrue(css.is_file())
 
     def test_boot_screen_shows_correct_version(self):
-        self.assertIn("0.2.4", (BASE / "config/bootloaders/syslinux_common/menu.cfg").read_text())
-        self.assertIn("0.2.4", (BASE / "config/bootloaders/grub-pc/live-theme/theme.txt").read_text())
+        self.assertIn("0.2.5", (BASE / "config/bootloaders/syslinux_common/menu.cfg").read_text())
+        self.assertIn("0.2.5", (BASE / "config/bootloaders/grub-pc/live-theme/theme.txt").read_text())
 
 
 if __name__ == "__main__":

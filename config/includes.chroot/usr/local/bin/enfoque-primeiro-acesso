@@ -1,0 +1,122 @@
+#!/usr/bin/env python3
+"""First graphical company association of an installed Debian user."""
+import importlib.util
+import os
+from pathlib import Path
+import pwd
+import sys
+
+LIB = "/usr/local/lib/enfoque-onboarding/identity.py"
+spec = importlib.util.spec_from_file_location("enfoque_identity", LIB)
+identity = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(identity)
+try:
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk, Gdk
+except (ImportError, ValueError) as error:
+    print("Interface GTK nao disponivel", file=sys.stderr)
+    raise SystemExit(1) from error
+
+
+def running_live():
+    return Path("/run/live/medium").exists() or "boot=live" in Path("/proc/cmdline").read_text(errors="replace")
+
+class Onboarding(Gtk.Window):
+    def __init__(self, preview=False):
+        super().__init__(title="Enfoque OS — Primeiro acesso")
+        self.preview=preview
+        self.username=pwd.getpwuid(os.getuid()).pw_name
+        self.set_default_size(640,470)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.set_resizable(False)
+        self.set_icon_name("enfoque-start")
+        self.connect("destroy", Gtk.main_quit)
+        root=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12)
+        root.set_border_width(26)
+        self.add(root)
+        heading=Gtk.Label()
+        heading.set_markup('<span size="xx-large" weight="bold" foreground="#1468d6">Bem-vindo ao Enfoque OS</span>')
+        heading.set_xalign(0)
+        root.pack_start(heading,False,False,0)
+        intro=Gtk.Label(label="Seu usuario e senha foram definidos na instalacao do sistema.\nAgora precisamos identificar a empresa e a unidade deste computador.")
+        intro.set_xalign(0)
+        intro.set_line_wrap(True)
+        root.pack_start(intro,False,False,4)
+        user=Gtk.Label(label="Usuario do computador:  "+self.username)
+        user.set_xalign(0)
+        root.pack_start(user,False,False,2)
+        root.pack_start(Gtk.Separator(),False,False,8)
+        root.pack_start(Gtk.Label(label="Empresa"),False,False,0)
+        self.company=Gtk.ComboBoxText()
+        self.company.append("","Escolha a empresa...")
+        for key,rec in identity.COMPANIES.items():
+            self.company.append(key,rec["name"])
+        self.company.set_active_id("")
+        self.company.connect("changed", self.company_changed)
+        root.pack_start(self.company,False,False,0)
+        root.pack_start(Gtk.Label(label="Loja / unidade"),False,False,0)
+        self.unit=Gtk.ComboBoxText()
+        self.unit.append("","Primeiro selecione a empresa...")
+        self.unit.set_active_id("")
+        root.pack_start(self.unit,False,False,0)
+        self.notice=Gtk.Label(label=("MODO DE DEMONSTRACAO: nada sera salvo." if preview else
+                "A empresa informada identifica este equipamento, mas nao libera permissoes na Intranet."))
+        self.notice.set_line_wrap(True)
+        self.notice.set_xalign(0)
+        root.pack_start(self.notice,False,False,6)
+        root.pack_start(Gtk.Separator(),False,False,2)
+        row=Gtk.Box(spacing=12)
+        self.save=Gtk.Button(label="Concluir primeiro acesso" if not preview else "Fechar demonstracao")
+        self.save.get_style_context().add_class("suggested-action")
+        self.save.connect("clicked",self.finish)
+        row.pack_end(self.save,False,False,0)
+        root.pack_start(row,False,False,0)
+
+    def company_changed(self,*_):
+        self.unit.remove_all()
+        company=identity.COMPANIES.get(self.company.get_active_id())
+        if company:
+            self.unit.append("","Escolha a unidade...")
+            for key,name in company["units"].items():
+                self.unit.append(key,name)
+            self.unit.set_active_id("")
+        else:
+            self.unit.append("","Primeiro selecione a empresa...")
+            self.unit.set_active_id("")
+
+    def finish(self,*_):
+        if self.preview:
+            Gtk.main_quit()
+            return
+        try:
+            identity.store_identity(self.username,self.company.get_active_id(),self.unit.get_active_id())
+        except (ValueError,FileExistsError,OSError) as error:
+            dialog=Gtk.MessageDialog(self,0,Gtk.MessageType.WARNING,Gtk.ButtonsType.OK,str(error))
+            dialog.run()
+            dialog.destroy()
+            return
+        ok=Gtk.MessageDialog(self,0,Gtk.MessageType.INFO,Gtk.ButtonsType.OK,
+            "Primeiro acesso concluido! Nos proximos acessos, escolha seu usuario e digite sua senha na tela do Linux.")
+        ok.run()
+        ok.destroy()
+        Gtk.main_quit()
+
+
+def main():
+    preview="--preview" in sys.argv
+    if os.geteuid()==0:
+        print("Nao execute o cadastro da empresa como root.",file=sys.stderr)
+        return 1
+    if running_live() and not preview:
+        # Live is a demonstration; accounts don't survive reboot here.
+        return 0
+    if identity.default_identity_path().exists() and not preview:
+        return 0
+    gui=Onboarding(preview)
+    gui.show_all()
+    Gtk.main()
+    return 0
+
+if __name__=="__main__":
+    sys.exit(main())
