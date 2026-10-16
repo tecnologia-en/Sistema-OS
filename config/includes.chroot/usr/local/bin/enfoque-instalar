@@ -5,8 +5,8 @@ if [ ! -d /run/live/medium ]; then
     echo "O instalador so pode ser executado a partir do modo Live." >&2
     exit 1
 fi
-if ! command -v install-debian >/dev/null 2>&1; then
+if ! command -v calamares-install-debian >/dev/null 2>&1; then
     echo "O instalador Debian Calamares nao esta presente." >&2
     exit 1
 fi
-exec install-debian
+exec calamares-install-debian
