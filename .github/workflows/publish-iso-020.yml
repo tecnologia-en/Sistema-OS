@@ -32,7 +32,7 @@ jobs:
         run: |
           gh release create v0.2.0-piloto \
             --repo tecnologia-en/Sistema-OS \
-            --target 32adf6a1 \
+            --target 32adf6a19c9c2af6a1c543e4a4dab95e247cf265 \
             --title 'Enfoque OS 0.2.0 - Laboratorio MeshCentral' \
             --notes 'ISO experimental Debian 13 XFCE, com assistente opt-in para MeshAgent por identidade unica. Testar em VM antes de instalar em lojas. Nenhum token empresarial incluido. Desktop/terminal/arquivos requerem grupo MeshCentral e autorizacao da intranet; homologacao real ainda em andamento.' \
             --prerelease \
