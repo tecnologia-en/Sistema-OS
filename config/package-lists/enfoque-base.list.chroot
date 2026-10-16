@@ -1,4 +1,4 @@
-# Enfoque OS 0.1.8 - Debian 13 XFCE
+# Enfoque OS 0.1.9 - Debian 13 XFCE
 # Chrome oficial do Google via hook HTTPS em build, sem Firefox.
 user-setup
 locales

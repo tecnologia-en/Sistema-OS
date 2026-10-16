@@ -70,7 +70,7 @@ def desktop():
     d.text((804,370),"OS",font=font(81),fill=(79,183,251))
     d.line([(205,531),(1160,531)],fill=(61,147,218,190),width=2)
     d.text((207,553),"SISTEMA OPERACIONAL CORPORATIVO",font=font(29,False),fill=(181,208,231))
-    d.text((205,1007),"ENFOQUE  /  PILOTO 0.1.8  /  AMBIENTE DE TESTES",font=font(21,False),fill=(123,163,195))
+    d.text((205,1007),"ENFOQUE  /  PILOTO 0.1.9  /  AMBIENTE DE TESTES",font=font(21,False),fill=(123,163,195))
     dest=ROOT/"config/includes.chroot/usr/share/backgrounds/enfoque-os/wallpaper.png"
     dest.parent.mkdir(parents=True,exist_ok=True)
     im.convert("RGB").save(dest,optimize=True)
@@ -85,7 +85,7 @@ def splash(w,h,path):
            font=font(int(h*.088)),fill=WHITE)
     d.line([(int(w*.08),int(h*.28)),(int(w*.91),int(h*.28))],
            fill=(61,147,218,180),width=2)
-    d.text((int(w*.09),int(h*.92)),"PILOTO 0.1.8  |  AMBIENTE DE TESTES",
+    d.text((int(w*.09),int(h*.92)),"PILOTO 0.1.9  |  AMBIENTE DE TESTES",
            font=font(int(h*.027),False),fill=(158,194,224))
     path.parent.mkdir(parents=True,exist_ok=True)
     im.convert("RGB").save(path,optimize=True)

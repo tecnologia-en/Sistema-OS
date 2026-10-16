@@ -15,7 +15,8 @@ import urllib.request
 
 IDENTITY = Path("/etc/enfoque-os/agent.json")
 ENDPOINT = "https://intranet.enfoquepapelaria.com.br/api/remote-access/agent/screen"
-INTERVAL = 4
+DEMAND_ENDPOINT = "https://intranet.enfoquepapelaria.com.br/api/remote-access/agent/screen-demand"
+IDLE_POLL_SEC = 1.5
 STOP = False
 
 
@@ -98,12 +99,30 @@ def capture_frame():
     return bytes(jpeg)
 
 
+def check_demand(device_id, token):
+    request = urllib.request.Request(
+        DEMAND_ENDPOINT,
+        headers={"X-Enfoque-Device-Id": device_id, "X-Enfoque-Device-Token": token},
+        method="GET",
+    )
+    with urllib.request.urlopen(request, timeout=6) as response:
+        value = json.loads(response.read(2048).decode("utf-8"))
+    interval = int(value.get("cadenceMs", 1500))
+    return value.get("active") is True, max(300, min(2000, interval)) / 1000.0
+
+
 def main():
     dev_id, token = identity()
     errors = 0
     last_success_log = 0
     while not STOP:
+        sleep_for = IDLE_POLL_SEC
         try:
+            active, requested_interval = check_demand(dev_id, token)
+            if not active:
+                time.sleep(IDLE_POLL_SEC)
+                continue
+            sleep_for = requested_interval
             jpeg = capture_frame()
             request = urllib.request.Request(
                 ENDPOINT, jpeg,
@@ -122,10 +141,8 @@ def main():
             errors += 1
             if errors <= 5 or errors % 15 == 0:
                 print("Falha na captura/envio: %s: %s" % (type(exc).__name__, str(exc)[:120]), file=sys.stderr, flush=True)
-        for _ in range(INTERVAL * 2):
-            if STOP:
-                break
-            time.sleep(0.5)
+        if not STOP:
+            time.sleep(sleep_for)
 
 
 if __name__ == "__main__":
