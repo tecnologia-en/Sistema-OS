@@ -1,4 +1,4 @@
-# Enfoque OS 0.2.3 - Debian 13 XFCE
+# Enfoque OS 0.2.4 - Debian 13 XFCE
 # Chrome oficial do Google via hook HTTPS em build, sem Firefox.
 user-setup
 locales
@@ -22,6 +22,14 @@ xfce4
 xfce4-terminal
 xfce4-whiskermenu-plugin
 xfce4-panel
+xfce4-pulseaudio-plugin
+pulseaudio
+pavucontrol
+alsa-utils
+xfce4-power-manager
+xfce4-notifyd
+mousepad
+ristretto
 xfconf
 thunar
 gvfs

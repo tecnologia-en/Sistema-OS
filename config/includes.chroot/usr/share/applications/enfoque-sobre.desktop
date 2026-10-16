@@ -4,6 +4,6 @@ Type=Application
 Name=Sobre o Enfoque OS
 Comment=Versao e diagnostico local do Enfoque OS
 Exec=xfce4-terminal --command=enfoque-diagnostico
-Icon=enfoque-os
+Icon=enfoque-sobre
 Terminal=false
 Categories=System;Utility;

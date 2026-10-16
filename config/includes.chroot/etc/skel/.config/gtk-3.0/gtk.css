@@ -1,0 +1,9 @@
+/* Enfoque OS: visual de menu padronizado */
+#whiskermenu-window, window#whiskermenu-window {
+  background-color: #17263c;
+  color: #edf6ff;
+  border: 1px solid #3c628f;
+  border-radius: 12px;
+}
+#whiskermenu-window button:hover { background-color: #285d9f; }
+#whiskermenu-window entry { border-radius: 8px; }

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Enfoque OS - Rede e Wi-Fi
+Comment=Redes conectadas e disponiveis no painel de notificacoes
+Exec=/usr/local/bin/enfoque-iniciar-rede
+TryExec=nm-applet
+OnlyShowIn=XFCE;
+NoDisplay=true
+Terminal=false
+X-GNOME-Autostart-enabled=true

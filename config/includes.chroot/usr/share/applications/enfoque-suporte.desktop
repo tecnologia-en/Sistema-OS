@@ -4,6 +4,6 @@ Type=Application
 Name=Suporte TI Enfoque
 Comment=Inscrever computador corporativo no controle remoto autorizado
 Exec=xfce4-terminal --hold -e /usr/local/bin/enfoque-parear-suporte
-Icon=network-workgroup
+Icon=enfoque-suporte
 Terminal=false
 Categories=System;Network;

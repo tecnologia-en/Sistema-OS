@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Primeiros passos - Enfoque OS
+Comment=Guia visual de aplicativos, rede, volume e suporte
+Exec=google-chrome-stable --new-window file:///usr/share/doc/enfoque-os/primeiros-passos.html
+Icon=enfoque-ajuda
+Terminal=false
+StartupNotify=true
+Categories=Education;Utility;

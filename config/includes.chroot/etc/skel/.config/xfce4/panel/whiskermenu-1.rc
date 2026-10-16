@@ -1,12 +1,12 @@
-favorites=google-chrome.desktop,thunar.desktop,enfoque-central.desktop,enfoque-intranet.desktop,enfoque-sige.desktop,enfoque-diagnostico.desktop
+favorites=google-chrome.desktop,enfoque-sige.desktop,enfoque-intranet.desktop,thunar.desktop,enfoque-central.desktop,enfoque-diagnostico.desktop,enfoque-primeiros-passos.desktop,enfoque-suporte.desktop
 recent=google-chrome.desktop
 button-title=Enfoque OS
 button-icon=enfoque-start
 button-single-row=true
-show-button-title=false
+show-button-title=true
 show-button-icon=true
-menu-width=480
-menu-height=620
+menu-width=540
+menu-height=660
 search-actions=true
 hover-switch-category=false
 view-as-icons=false

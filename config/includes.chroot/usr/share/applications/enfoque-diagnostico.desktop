@@ -4,6 +4,6 @@ Type=Application
 Name=Enfoque Diagnostico
 Comment=Informacoes locais do sistema (somente leitura)
 Exec=xfce4-terminal --command=enfoque-diagnostico
-Icon=utilities-system-monitor
+Icon=enfoque-diagnostico
 Terminal=false
 Categories=System;Utility;

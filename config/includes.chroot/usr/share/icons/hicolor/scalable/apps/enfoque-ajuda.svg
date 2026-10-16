@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Primeiros passos">
+<defs><linearGradient id="a" x1="0" x2="1" y2="1"><stop stop-color="#56B6FF"/><stop offset="1" stop-color="#1364E8"/></linearGradient></defs>
+<rect x="3" y="3" width="58" height="58" rx="15" fill="#102D54"/><rect x="6" y="6" width="52" height="52" rx="12" fill="url(#a)"/>
+<rect x="16" y="14" width="32" height="38" rx="5" fill="#EFF9FF"/>
+<path d="M23 25h18m-18 9h18m-18 8h11" stroke="#177AE9" stroke-width="3" stroke-linecap="round"/>
+<circle cx="45" cy="44" r="9" fill="#0F54BE"/><path d="M45 40v9m0-13v1" stroke="white" stroke-width="3" stroke-linecap="round"/>
+</svg>

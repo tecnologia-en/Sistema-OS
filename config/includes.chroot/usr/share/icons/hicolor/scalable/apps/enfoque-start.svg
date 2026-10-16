@@ -1,1 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="a" x2=".8" y2="1"><stop stop-color="#6cd0ff"/><stop offset="1" stop-color="#1874f7"/></linearGradient></defs><rect width="64" height="64" rx="15" fill="#10253f"/><path d="M16 18L30 16V30H16zm18-2 15-2v16H34zM16 34h14v14l-14-2zm18 0h15v16l-15-2z" fill="url(#a)"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="enfoque-start">
+<defs><linearGradient id="brand" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#3DAAFB"/><stop offset="1" stop-color="#0964E6"/></linearGradient>
+<linearGradient id="glass" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#FFF" stop-opacity=".28"/><stop offset="1" stop-color="#FFF" stop-opacity="0"/></linearGradient></defs>
+<rect x="2" y="3" width="60" height="58" rx="15" fill="#102D54"/>
+<rect x="5" y="6" width="54" height="52" rx="12" fill="url(#brand)"/>
+<path d="M17 9h30Q57 9 57 20v14H7V20Q7 9 17 9Z" fill="url(#glass)"/>
+<circle cx="32" cy="32" r="18" fill="#FFF" fill-opacity=".95"/>
+<path d="M42 33H26c0 4 2 6 6 6 3 0 5-1 7-3" fill="none" stroke="#0B69DA" stroke-width="5" stroke-linecap="round"/>
+<path d="M24 28c2-6 12-8 17-2" fill="none" stroke="#0B69DA" stroke-width="5" stroke-linecap="round"/>
+<circle cx="49" cy="46" r="4" fill="#A6EDFF"/>
+</svg>

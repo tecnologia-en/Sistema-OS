@@ -35,7 +35,7 @@ grep -Fq 'menu default' "$ROOT/config/bootloaders/syslinux_common/live.cfg.in" |
 grep -Fq 'Exec=/usr/local/bin/enfoque-aplicar-visual' "$ROOT/config/includes.chroot/etc/xdg/autostart/enfoque-visual.desktop" || fail 'autostart sem execucao'
 grep -Eq '^arc-theme$' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'tema Arc nao instalado'
 grep -Eq '^systemd-timesyncd$' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'NTP nao instalado'
-grep -Fq 'value="Arc"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" || fail 'tema nao configurado'
+grep -Fq 'value="Arc-Dark"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" || fail 'tema nao configurado'
 for p in \
   config/bootloaders/isolinux/splash.png \
   config/bootloaders/grub-pc/splash.png \
@@ -107,4 +107,18 @@ grep -Fxq 'librsvg2-common' "$ROOT/config/package-lists/enfoque-base.list.chroot
 magic="$(od -An -tx1 -N8 "$ROOT/config/includes.chroot/usr/share/icons/hicolor/48x48/apps/enfoque-intranet.png" | tr -d ' \n')"
 [ "$magic" = '89504e470d0a1a0a' ] || fail 'Fallback PNG Intranet invalido'
 
+# Check usable audio, date and network interactions (not merely decorative icons).
+need config/includes.chroot/usr/local/bin/enfoque-iniciar-rede
+need config/includes.chroot/etc/xdg/autostart/enfoque-rede.desktop
+sh -n "$ROOT/config/includes.chroot/usr/local/bin/enfoque-iniciar-rede"
+grep -Fq 'Exec=/usr/local/bin/enfoque-iniciar-rede' "$ROOT/config/includes.chroot/etc/xdg/autostart/enfoque-rede.desktop" || fail 'NetworkManager applet sem autostart'
+for name in xfce4-pulseaudio-plugin pulseaudio pavucontrol alsa-utils network-manager-gnome; do
+  grep -Fxq "$name" "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail "pacote essencial ausente: $name"
+done
+grep -Fq 'value="pulseaudio"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'controle clicavel de audio ausente'
+grep -Fq '%d/%m/%Y' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'data nao aparece no relogio'
+grep -Fq 'meusige.com.br/sistema' "$ROOT/config/includes.chroot/usr/share/applications/enfoque-sige.desktop" || fail 'SIGE aponta para pagina errada'
+for name in enfoque-start enfoque-central enfoque-suporte enfoque-diagnostico enfoque-sobre enfoque-inscrever; do
+  need "config/includes.chroot/usr/share/icons/hicolor/scalable/apps/$name.svg"
+done
 echo 'OK: boot BIOS/EFI, Chrome, painel USB, CUPS, suporte e atalhos SIGE/Intranet.'
