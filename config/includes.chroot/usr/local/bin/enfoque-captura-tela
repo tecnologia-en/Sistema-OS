@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+"""Captura JPEG do desktop X11 corporativo inscrito e envia via HTTPS.
+Somente demonstracao VM, requer pareamento individual root 0600.
+"""
+from __future__ import annotations
+import json
+import os
+from pathlib import Path
+import pwd
+import signal
+import sys
+import time
+import urllib.error
+import urllib.request
+
+IDENTITY = Path("/etc/enfoque-os/agent.json")
+ENDPOINT = "https://intranet.enfoquepapelaria.com.br/api/remote-access/agent/screen"
+INTERVAL = 4
+STOP = False
+
+
+def on_stop(*_):
+    global STOP
+    STOP = True
+
+
+signal.signal(signal.SIGTERM, on_stop)
+signal.signal(signal.SIGINT, on_stop)
+
+
+def identity():
+    stat = IDENTITY.stat()
+    if stat.st_uid != 0 or stat.st_mode & 0o077:
+        raise RuntimeError("Credencial do dispositivo nao pertence ao root com modo 0600.")
+    d = json.loads(IDENTITY.read_text(encoding="utf-8"))
+    if len(d.get("id", "")) != 36 or len(d.get("token", "")) < 35:
+        raise RuntimeError("Dispositivo nao pareado.")
+    return d["id"], d["token"]
+
+
+def x11_session():
+    for process in Path("/proc").iterdir():
+        if not process.name.isdigit():
+            continue
+        try:
+            name = (process / "comm").read_text().strip()
+            if name != "xfce4-session":
+                continue
+            pid = int(process.name)
+            raw = (process / "environ").read_bytes().split(b"\0")
+            env = {}
+            for field in raw:
+                if b"=" in field:
+                    key, value = field.split(b"=", 1)
+                    env[key.decode("utf-8", "replace")] = value.decode("utf-8", "replace")
+            home = pwd.getpwuid((process / "status").stat().st_uid).pw_dir
+            display = env.get("DISPLAY") or ":0"
+            auth = env.get("XAUTHORITY") or str(Path(home) / ".Xauthority")
+            if not Path(auth).is_file():
+                for candidate in ("/run/lightdm/root/:0", "/var/run/lightdm/root/:0", str(Path(home) / ".Xauthority")):
+                    if Path(candidate).is_file():
+                        auth = candidate
+                        break
+            return display, auth
+        except (OSError, ValueError, KeyError):
+            continue
+    return ":0", "/run/lightdm/root/:0"
+
+
+def capture_frame():
+    display, auth = x11_session()
+    os.environ["DISPLAY"] = display
+    os.environ["XAUTHORITY"] = auth
+
+    import gi
+    gi.require_version("Gdk", "3.0")
+    gi.require_version("GdkPixbuf", "2.0")
+    from gi.repository import Gdk, GdkPixbuf
+
+    gd = Gdk.Display.get_default()
+    if gd is None:
+        raise RuntimeError("Nao foi possivel conectar ao Xorg; verifique XAUTHORITY.")
+    root = Gdk.get_default_root_window()
+    if root is None:
+        raise RuntimeError("Desktop X11 indisponivel.")
+    width, height = root.get_width(), root.get_height()
+    if width <= 0 or height <= 0 or width > 8192 or height > 8192:
+        raise RuntimeError("Dimensoes da tela invalidas.")
+    frame = Gdk.pixbuf_get_from_window(root, 0, 0, width, height)
+    if frame is None:
+        raise RuntimeError("Captura X11 falhou.")
+    if width > 1280:
+        new_height = max(1, round(height * 1280 / width))
+        frame = frame.scale_simple(1280, new_height, GdkPixbuf.InterpType.BILINEAR)
+    success, jpeg = frame.save_to_bufferv("jpeg", ["quality"], ["55"])
+    if not success or len(jpeg) > 350000:
+        raise RuntimeError("JPEG excede tamanho permitido ou nao foi criado.")
+    return bytes(jpeg)
+
+
+def main():
+    dev_id, token = identity()
+    errors = 0
+    last_success_log = 0
+    while not STOP:
+        try:
+            jpeg = capture_frame()
+            request = urllib.request.Request(
+                ENDPOINT, jpeg,
+                headers={"Content-Type": "image/jpeg", "X-Enfoque-Device-Id": dev_id,
+                         "X-Enfoque-Device-Token": token},
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=8) as response:
+                if response.status != 204:
+                    raise RuntimeError("Servidor recusou imagem.")
+            errors = 0
+            if time.monotonic() - last_success_log > 900:
+                print("Captura autenticada enviada: %d bytes" % len(jpeg), flush=True)
+                last_success_log = time.monotonic()
+        except (OSError, RuntimeError, urllib.error.URLError, ImportError, ValueError, TypeError) as exc:
+            errors += 1
+            if errors <= 5 or errors % 15 == 0:
+                print("Falha na captura/envio: %s: %s" % (type(exc).__name__, str(exc)[:120]), file=sys.stderr, flush=True)
+        for _ in range(INTERVAL * 2):
+            if STOP:
+                break
+            time.sleep(0.5)
+
+
+if __name__ == "__main__":
+    main()
