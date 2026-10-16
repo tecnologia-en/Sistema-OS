@@ -74,8 +74,8 @@ class DesktopV024Tests(unittest.TestCase):
         self.assertTrue(css.is_file())
 
     def test_boot_screen_shows_correct_version(self):
-        self.assertIn("0.2.5", (BASE / "config/bootloaders/syslinux_common/menu.cfg").read_text())
-        self.assertIn("0.2.5", (BASE / "config/bootloaders/grub-pc/live-theme/theme.txt").read_text())
+        self.assertIn("0.2.6", (BASE / "config/bootloaders/syslinux_common/menu.cfg").read_text())
+        self.assertIn("0.2.6", (BASE / "config/bootloaders/grub-pc/live-theme/theme.txt").read_text())
 
 
 if __name__ == "__main__":
