@@ -1,0 +1,42 @@
+name: Publicar Enfoque OS 0.2.5 como piloto
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-iso-025.yml'
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Aguardar build 0.2.5 aprovado
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run watch 38945882051 --repo tecnologia-en/Sistema-OS --exit-status --interval 15
+      - name: Baixar ISO da compilacao 18
+        uses: actions/download-artifact@v4
+        with:
+          name: enfoque-os-iso-18
+          path: dist
+          repository: tecnologia-en/Sistema-OS
+          run-id: 38945882051
+          github-token: ${{ github.token }}
+      - name: Conferir checksum
+        run: |
+          test -s dist/enfoque-os-0.2.5-piloto-amd64.iso
+          test -s dist/SHA256SUMS
+          (cd dist && sha256sum -c SHA256SUMS)
+      - name: Publicar piloto 0.2.5 para laboratorio
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v0.2.5-piloto \
+            --repo tecnologia-en/Sistema-OS \
+            --target b9cdb92570461b7e41b1e9cd9421f21c6e88c85e \
+            --title 'Enfoque OS 0.2.5 - Primeiro acesso e login (piloto)' \
+            --notes 'ISO de testes Debian 13 XFCE: instalador oficial Calamares para criar conta/senha persistentes; login LightDM com usuario e senha em sistema instalado; escolha da empresa e unidade no primeiro login; metadados locais sem senha; integracao com a Intranet mostra identificacao ainda nao validada. Data, contraste, banner de boot e Enfoque Central ajustados. Nao homologado para PCs das lojas.' \
+            --prerelease \
+            dist/enfoque-os-0.2.5-piloto-amd64.iso dist/SHA256SUMS
