@@ -38,6 +38,8 @@ Documentacao: [Windows e GitHub](docs/BUILD_WINDOWS_GITHUB.md), [testes](docs/TE
 
 Teste detalhado: [0.2.1 e plano 0.2.2](docs/TESTE_2026-10-16_0.2.1_E_PLANO_0.2.2.md).
 
-- 0.2.3: Google Chrome configurado como navegador padrao XDG e Debian no primeiro login do XFCE (HTTP, HTTPS, HTML, XHTML, PDF), preservando mudancas posteriores feitas pelo usuario. Correcoes de icones SVG com librsvg2-common e PNG derivado do favicon oficial da Intranet. Pendente de teste de ISO em VM.
+- 0.2.3: Google Chrome configurado como navegador padrao XDG e Debian no primeiro login do XFCE (HTTP, HTTPS, HTML, XHTML, PDF), preservando mudancas posteriores feitas pelo usuario. Correcoes de icones SVG com librsvg2-common e PNG derivado do favicon oficial da Intranet. Testada em VM Live de 2 GB, com dois boots sem troca manual de VT, Chrome reconhecido como navegador padrao no primeiro login e apos reinicio, e atalhos SVG/PNG visiveis. Ainda nao homologada para lojas.
 
 QA 0.2.2: [teste real e pendencias](docs/TESTE_2026-10-16_0.2.2.md).
+
+QA 0.2.3: [dois boots e navegador padrao no laboratorio](docs/TESTE_2026-10-16_0.2.3.md).
