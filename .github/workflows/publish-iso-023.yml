@@ -1,0 +1,42 @@
+name: Publicar Enfoque OS 0.2.3 como piloto
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-iso-023.yml'
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - name: Aguardar compilacao 0.2.3 com sucesso
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run watch 38926681540 --repo tecnologia-en/Sistema-OS --exit-status --interval 15
+      - name: Baixar ISO do build 16
+        uses: actions/download-artifact@v4
+        with:
+          name: enfoque-os-iso-16
+          path: dist
+          repository: tecnologia-en/Sistema-OS
+          run-id: 38926681540
+          github-token: ${{ github.token }}
+      - name: Conferir checksum da ISO
+        run: |
+          test -s dist/enfoque-os-0.2.3-piloto-amd64.iso
+          test -s dist/SHA256SUMS
+          (cd dist && sha256sum -c SHA256SUMS)
+      - name: Publicar a versao piloto 0.2.3
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v0.2.3-piloto \
+            --repo tecnologia-en/Sistema-OS \
+            --target 4919c6f5772700b851c916a6365bbdca55ce562c \
+            --title 'Enfoque OS 0.2.3 - Chrome padrao e icones SVG (piloto)' \
+            --notes 'ISO experimental Debian 13 XFCE: Google Chrome como navegador padrao no primeiro login, fallback SVG/PNG para identidade visual da Intranet, e barra inferior estilo Windows. Somente testes de VM; nao homologada para lojas nem para controle remoto administrativo.' \
+            --prerelease \
+            dist/enfoque-os-0.2.3-piloto-amd64.iso dist/SHA256SUMS
