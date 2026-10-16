@@ -1,52 +1,108 @@
 #!/usr/bin/env python3
-"""Inscricao administrativa explicita; ativa telemetria e tela apos pareamento."""
+"""Pareamento individual Enfoque OS (telemetria, telas e MeshCentral sob politica TI)."""
 import getpass
 import json
 import os
 from pathlib import Path
+import platform
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
+import urllib.request
 import uuid
 
 CONFIG = Path("/etc/enfoque-os/agent.json")
+SERVER = "https://intranet.enfoquepapelaria.com.br"
+
+
+def mesh_download(device_id, token, name, limit):
+    request = urllib.request.Request(
+        SERVER + "/api/remote-access/agent/" + name,
+        headers={"X-Enfoque-Device-Id": device_id, "X-Enfoque-Device-Token": token},
+        method="GET",
+    )
+    with urllib.request.urlopen(request, timeout=45) as response:
+        if response.status != 200:
+            raise RuntimeError("Provisionamento remoto recusado.")
+        result = response.read(limit + 1)
+    if not result or len(result) > limit:
+        raise RuntimeError("Resposta do provisionamento fora do limite.")
+    return result
+
+
+def install_mesh(device_id, token, folder=Path("/var/lib/enfoque-os")):
+    if platform.machine().lower() not in ("x86_64", "amd64"):
+        print("MeshCentral nesta fase suporta apenas computadores x86_64.")
+        return False
+    binary = mesh_download(device_id, token, "meshagent", 15000000)
+    configuration = mesh_download(device_id, token, "mesh-config", 70000)
+    if binary[:4] != b"\x7fELF" or not binary[4:5] == b"\x02":
+        raise RuntimeError("Arquivo do agente MeshCentral nao e um binario Linux 64-bit.")
+    if not configuration.startswith(b"\r\nMeshName=") and not configuration.startswith(b"MeshName="):
+        raise RuntimeError("Configuracao de agente inesperada.")
+    if b"MeshServer=wss://intranet.enfoquepapelaria.com.br:443/sistema-os/agent.ashx" not in configuration:
+        raise RuntimeError("Servidor MeshCentral incorreto.")
+    if ("Tag=" + device_id.replace("-", "")).encode() not in configuration:
+        raise RuntimeError("Configuracao MeshCentral nao pertence a este computador.")
+
+    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(folder, 0o700)
+    with tempfile.TemporaryDirectory(prefix="mesh-install-", dir=folder) as dirname:
+        workdir = Path(dirname)
+        agent = workdir / "meshagent"
+        msh = workdir / "meshagent.msh"
+        agent.write_bytes(binary)
+        msh.write_bytes(configuration)
+        os.chmod(agent, 0o700)
+        os.chmod(msh, 0o600)
+        subprocess.run([str(agent), "-fullinstall", "--copy-msh=1"], cwd=workdir, timeout=120, check=True)
+    return True
 
 
 def main():
     if os.geteuid() != 0:
         os.execvp("sudo", ["sudo", sys.executable, __file__])
     print("=== Enfoque OS: inscricao corporativa de computador ===")
-    print("Apos a inscricao, a TI autorizada podera receber CPU/RAM e a tela deste PC.")
-    print("O monitoramento administrativo e persistente; o acesso web exige autenticação adicional.")
-    print("Use apenas em computador de propriedade ou administrado pela empresa.")
-    confirm = input("Digite INSCREVER para continuar: ").strip()
-    if confirm != "INSCREVER":
-        print("Cancelado."); return 1
-    if CONFIG.exists():
-        replace = input("Ja ha identidade cadastrada. Digite TROCAR para substituir: ").strip()
-        if replace != "TROCAR":
-            return 1
-    device_id = input("Identificador UUID deste PC (da Central de Computadores): ").strip()
+    print("A inscricao ativa monitoramento e permite gerenciamento remoto pela TI autorizada.")
+    print("Use exclusivamente em computador administrado pela empresa e com politica aprovada.")
+    if input("Digite INSCREVER para continuar: ").strip() != "INSCREVER":
+        print("Cancelado.")
+        return 1
+    if CONFIG.exists() and input("Ja existe inscricao. Digite TROCAR para substituir: ").strip() != "TROCAR":
+        return 1
+    device_id = input("UUID deste computador (fornecido pela Central): ").strip().lower()
     try:
         parsed = uuid.UUID(device_id)
-        if parsed.version != 4 or str(parsed) != device_id.lower():
-            raise ValueError("UUID nao e v4.")
+        if parsed.version != 4 or str(parsed) != device_id:
+            raise ValueError
     except ValueError:
-        print("Identificador invalido."); return 1
-    token = getpass.getpass("Token individual (sera ocultado): ").strip()
+        print("UUID invalido.")
+        return 1
+    token = getpass.getpass("Token individual (entrada oculta): ").strip()
     if not re.fullmatch(r"[A-Za-z0-9_-]{40,150}", token):
-        print("Token invalido."); return 1
+        print("Token individual invalido.")
+        return 1
+
     CONFIG.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(CONFIG.parent, 0o700)
-    temp = CONFIG.with_suffix(".tmp")
-    with open(temp, "x", encoding="utf-8") as stream:
-        json.dump({"id": device_id.lower(), "token": token}, stream)
-        stream.write("\n")
-    os.chmod(temp, 0o600)
-    os.replace(temp, CONFIG)
+    staging = CONFIG.with_suffix(".tmp")
+    with open(staging, "x", encoding="utf-8") as file:
+        json.dump({"id": device_id, "token": token}, file)
+        file.write("\n")
+    os.chmod(staging, 0o600)
+    os.replace(staging, CONFIG)
     for service in ("enfoque-telemetria.service", "enfoque-captura-tela.service"):
         subprocess.run(["systemctl", "enable", "--now", service], check=True)
-    print("Inscricao efetuada. Verifique o status online e a tela na intranet.")
+    try:
+        if install_mesh(device_id, token):
+            print("MeshAgent instalado, com identidade unica deste equipamento.")
+    except Exception as error:
+        print("O cadastro foi salvo, mas o MeshAgent ainda precisa de revisao:", type(error).__name__)
+        print("Verifique internet e entre em contato com a TI; a telemetria permanece ativa.")
+        return 2
+    print("Concluido. Consulte o equipamento na Central de Computadores.")
     return 0
 
 

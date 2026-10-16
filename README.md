@@ -30,3 +30,5 @@ Documentacao: [Windows e GitHub](docs/BUILD_WINDOWS_GITHUB.md), [testes](docs/TE
 **Ainda pendentes nesta fase:** instalador de disco validado, distribuicao de agentes e pareamento homologados, controle remoto de tela, atualizacao remota e automacoes ChatGPT. A telemetria 0.1.4 apenas reporta CPU/RAM depois do pareamento. O SIGE e periféricos ainda nao foram testados.
 
 **Seguranca:** repositorio publico; jamais adicionar tokens, senhas, certificados, dados internos ou informacoes pessoais. As alteracoes de seguranca requerem testes e autorizacao da empresa.
+
+- 0.2.0: o assistente de inscricao baixa o MeshAgent diretamente do servidor, somente apos autenticacao com identidade individual do dispositivo. Controle remoto via MeshCentral e modulo Telas da intranet requerem autorizacao da TI; validar primeiro na VM.
