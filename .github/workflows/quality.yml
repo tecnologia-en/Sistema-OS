@@ -9,4 +9,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - run: bash ./scripts/check-project.sh
+      - name: Validar estrutura e scripts
+        run: bash ./scripts/check-project.sh
+      - name: Testar tela grafica, inscricao Mesh e dispositivos USB
+        run: python3 -m unittest discover -s test -p 'test_*.py' -v

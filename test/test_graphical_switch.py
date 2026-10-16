@@ -1,4 +1,4 @@
-"""Tests that the Live XFCE activation selects the actual Xorg VT."""
+"""Regression tests for the Live XFCE VT refresh at boot."""
 import os
 import stat
 import subprocess
@@ -10,7 +10,7 @@ SCRIPT = Path(__file__).resolve().parents[1] / "config/includes.chroot/usr/local
 
 
 class GraphicalSwitchTests(unittest.TestCase):
-    def run_mock(self, current):
+    def run_mock(self, current, fail_vt=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             fakebin = root / "bin"
@@ -19,7 +19,8 @@ class GraphicalSwitchTests(unittest.TestCase):
                 "pgrep": "#!/bin/sh\nexit 0\n",
                 "ps": "#!/bin/sh\nprintf '%s\\n' '/usr/lib/xorg/Xorg :0 -seat seat0 vt7 -novtswitch'\n",
                 "fgconsole": "#!/bin/sh\nprintf '%s\\n' '" + str(current) + "'\n",
-                "chvt": "#!/bin/sh\nprintf '%s\\n' \"$1\" >> \"$TEST_CHVT_LOG\"\n",
+                "chvt": "#!/bin/sh\nprintf '%s\\n' \"$1\" >> \"$TEST_CHVT_LOG\"\n"
+                        + (f'[ "$1" = "{fail_vt}" ] && exit 1\n' if fail_vt else "") + "exit 0\n",
                 "logger": "#!/bin/sh\nexit 0\n",
                 "sleep": "#!/bin/sh\nexit 0\n",
             }
@@ -30,14 +31,19 @@ class GraphicalSwitchTests(unittest.TestCase):
             out = root / "chvt.log"
             env = dict(os.environ, PATH=str(fakebin) + ":/usr/bin:/bin", TEST_CHVT_LOG=str(out))
             result = subprocess.run(["/bin/sh", str(SCRIPT)], env=env, capture_output=True, text=True, timeout=8)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            return out.read_text().strip() if out.exists() else ""
+            return result.returncode, out.read_text().strip() if out.exists() else ""
 
-    def test_switches_to_xorg_vt_from_tty1(self):
-        self.assertEqual(self.run_mock("1"), "7")
+    def test_switches_from_tty1_to_graphic_vt(self):
+        self.assertEqual(self.run_mock("1"), (0, "7"))
 
-    def test_no_switch_when_graphic_vt_already_active(self):
-        self.assertEqual(self.run_mock("7"), "")
+    def test_refreshes_graphic_vt_even_if_reported_active(self):
+        self.assertEqual(self.run_mock("7"), (0, "1\n7"))
+
+    def test_refreshes_when_fgconsole_cannot_report_console(self):
+        self.assertEqual(self.run_mock(""), (0, "1\n7"))
+
+    def test_fails_when_graphic_vt_cannot_be_activated(self):
+        self.assertEqual(self.run_mock("7", fail_vt="7"), (1, "1\n7"))
 
 
 if __name__ == "__main__":
