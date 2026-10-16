@@ -1,0 +1,18 @@
+[Unit]
+Description=Enfoque OS - Exibir sessao grafica XFCE no boot Live
+Documentation=https://github.com/tecnologia-en/Sistema-OS
+After=lightdm.service
+Requires=lightdm.service
+ConditionPathExists=/run/live/medium
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/enfoque-ativar-grafico
+TimeoutStartSec=60
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=graphical.target

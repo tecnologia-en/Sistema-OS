@@ -67,7 +67,7 @@ def read_cpu():
 class EnfoqueHub(Gtk.Window):
     def __init__(self):
         super().__init__(title="Enfoque Central")
-        self.set_default_size(1080, 700)
+        self.set_default_size(940, 650)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.connect("destroy", Gtk.main_quit)
         self.last_devices = None

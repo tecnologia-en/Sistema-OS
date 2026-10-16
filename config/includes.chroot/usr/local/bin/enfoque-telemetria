@@ -59,6 +59,17 @@ def read_identity():
     return did, token
 
 
+def os_release_version():
+    try:
+        with open("/etc/enfoque-os-release", encoding="utf-8") as file:
+            for raw in file:
+                if raw.startswith("VERSION="):
+                    return raw.partition("=")[2].strip().strip('"')[:20]
+    except OSError:
+        pass
+    return "piloto"
+
+
 def send_heartbeat(did, token):
     used, total = mem_usage()
     before = cpu_sample()
@@ -70,8 +81,8 @@ def send_heartbeat(did, token):
         uptime = max(0, int(float(stream.read().split()[0])))
     payload = {
         "cpuPct": cpu, "ramUsedMb": used, "ramTotalMb": total,
-        "uptimeSeconds": uptime, "os": "Enfoque OS 0.1.4",
-        "agentVersion": "0.1.4", "ip": local_ip()
+        "uptimeSeconds": uptime, "os": "Enfoque OS " + os_release_version(),
+        "agentVersion": "0.1.7", "ip": local_ip()
     }
     request = urllib.request.Request(URL, data=json.dumps(payload).encode("utf-8"), method="POST",
         headers={"Content-Type": "application/json", "X-Enfoque-Device-Id": did,
