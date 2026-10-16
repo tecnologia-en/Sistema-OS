@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+"""Inscricao administrativa explicita; ativa telemetria e tela apos pareamento."""
+import getpass
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import uuid
+
+CONFIG = Path("/etc/enfoque-os/agent.json")
+
+
+def main():
+    if os.geteuid() != 0:
+        os.execvp("sudo", ["sudo", sys.executable, __file__])
+    print("=== Enfoque OS: inscricao corporativa de computador ===")
+    print("Apos a inscricao, a TI autorizada podera receber CPU/RAM e a tela deste PC.")
+    print("O monitoramento administrativo e persistente; o acesso web exige autenticação adicional.")
+    print("Use apenas em computador de propriedade ou administrado pela empresa.")
+    confirm = input("Digite INSCREVER para continuar: ").strip()
+    if confirm != "INSCREVER":
+        print("Cancelado."); return 1
+    if CONFIG.exists():
+        replace = input("Ja ha identidade cadastrada. Digite TROCAR para substituir: ").strip()
+        if replace != "TROCAR":
+            return 1
+    device_id = input("Identificador UUID deste PC (da Central de Computadores): ").strip()
+    try:
+        parsed = uuid.UUID(device_id)
+        if parsed.version != 4 or str(parsed) != device_id.lower():
+            raise ValueError("UUID nao e v4.")
+    except ValueError:
+        print("Identificador invalido."); return 1
+    token = getpass.getpass("Token individual (sera ocultado): ").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{40,150}", token):
+        print("Token invalido."); return 1
+    CONFIG.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(CONFIG.parent, 0o700)
+    temp = CONFIG.with_suffix(".tmp")
+    with open(temp, "x", encoding="utf-8") as stream:
+        json.dump({"id": device_id.lower(), "token": token}, stream)
+        stream.write("\n")
+    os.chmod(temp, 0o600)
+    os.replace(temp, CONFIG)
+    for service in ("enfoque-telemetria.service", "enfoque-captura-tela.service"):
+        subprocess.run(["systemctl", "enable", "--now", service], check=True)
+    print("Inscricao efetuada. Verifique o status online e a tela na intranet.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

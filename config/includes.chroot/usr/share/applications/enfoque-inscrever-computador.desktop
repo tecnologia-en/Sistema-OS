@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Vincular este PC a Enfoque
+Comment=Registrar dispositivo corporativo e ativar telemetria e tela de laboratorio
+Exec=xfce4-terminal --hold -e /usr/local/bin/enfoque-inscrever-computador
+Icon=enfoque-suporte
+Terminal=false
+StartupNotify=true
+Categories=System;Network;

@@ -58,6 +58,10 @@ for f in \
   config/includes.chroot/usr/share/applications/enfoque-central.desktop \
   config/includes.chroot/etc/xdg/autostart/enfoque-central.desktop \
   config/includes.chroot/usr/local/bin/enfoque-parear-suporte \
+  config/includes.chroot/usr/local/bin/enfoque-inscrever-computador \
+  config/includes.chroot/usr/local/bin/enfoque-captura-tela \
+  config/includes.chroot/etc/systemd/system/enfoque-captura-tela.service \
+  config/includes.chroot/usr/share/applications/enfoque-inscrever-computador.desktop \
   config/hooks/normal/090-google-chrome.hook.chroot; do
   need "$f"
 done
