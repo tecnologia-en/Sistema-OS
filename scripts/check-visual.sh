@@ -11,7 +11,7 @@ for path in \
   config/bootloaders/grub-pc/config.cfg \
   config/bootloaders/grub-pc/splash.png \
   config/bootloaders/grub-pc/live-theme/theme.txt \
-  config/includes.chroot/usr/share/backgrounds/enfoque-os/wallpaper.png \
+  config/includes.chroot/usr/share/backgrounds/enfoque-os/wallpaper.jpg \
   config/includes.chroot/usr/share/icons/hicolor/256x256/apps/enfoque-os.png \
   config/includes.chroot/usr/local/bin/enfoque-aplicar-visual \
   config/includes.chroot/etc/xdg/autostart/enfoque-visual.desktop \
@@ -39,12 +39,16 @@ grep -Fq 'value="Arc"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfco
 for p in \
   config/bootloaders/isolinux/splash.png \
   config/bootloaders/grub-pc/splash.png \
-  config/includes.chroot/usr/share/backgrounds/enfoque-os/wallpaper.png \
   config/includes.chroot/usr/share/icons/hicolor/256x256/apps/enfoque-os.png
 do
   magic="$(od -An -tx1 -N8 "$ROOT/$p" | tr -d ' \n')"
   [ "$magic" = '89504e470d0a1a0a' ] || fail "PNG invalido: $p"
 done
+need config/includes.chroot/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
+if ! grep -Fq 'unlocked="root"' "$ROOT/config/includes.chroot/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml"; then fail 'wallpaper corporativo sem bloqueio de alteracao'; fi
+if ! grep -Fq 'wallpaper.jpg' "$ROOT/config/includes.chroot/usr/local/bin/enfoque-aplicar-visual"; then fail 'wallpaper desatualizado'; fi
+magic="$(od -An -tx1 -N3 "$ROOT/config/includes.chroot/usr/share/backgrounds/enfoque-os/wallpaper.jpg" | tr -d ' \n')"
+[ "$magic" = 'ffd8ff' ] || fail 'JPEG corporativo invalido'
 grep -Fq 'value="whiskermenu"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'menu iniciar ausente'
 grep -Fq 'p=10;' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'barra inferior ausente'
 grep -Fq 'https://enfoquepapelaria.meusige.com.br/' "$ROOT/config/includes.chroot/etc/skel/Desktop/SIGE.desktop" || fail 'atalho SIGE errado'
