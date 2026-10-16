@@ -1,0 +1,39 @@
+name: Publicar Enfoque OS 0.2.0 como piloto
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-iso-020.yml'
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - name: Baixar ISO homologada pelo build automatico
+        uses: actions/download-artifact@v4
+        with:
+          name: enfoque-os-iso-13
+          path: dist
+          repository: tecnologia-en/Sistema-OS
+          run-id: 38897403071
+          github-token: ${{ github.token }}
+      - name: Verificar integridade
+        run: |
+          test -s dist/enfoque-os-0.2.0-piloto-amd64.iso
+          test -s dist/SHA256SUMS
+          (cd dist && sha256sum -c SHA256SUMS)
+          ls -lh dist
+      - name: Publicar versao experimental, sem credenciais
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v0.2.0-piloto \
+            --repo tecnologia-en/Sistema-OS \
+            --target 32adf6a1 \
+            --title 'Enfoque OS 0.2.0 - Laboratorio MeshCentral' \
+            --notes 'ISO experimental Debian 13 XFCE, com assistente opt-in para MeshAgent por identidade unica. Testar em VM antes de instalar em lojas. Nenhum token empresarial incluido. Desktop/terminal/arquivos requerem grupo MeshCentral e autorizacao da intranet; homologacao real ainda em andamento.' \
+            --prerelease \
+            dist/enfoque-os-0.2.0-piloto-amd64.iso dist/SHA256SUMS
