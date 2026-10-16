@@ -32,3 +32,8 @@ Documentacao: [Windows e GitHub](docs/BUILD_WINDOWS_GITHUB.md), [testes](docs/TE
 **Seguranca:** repositorio publico; jamais adicionar tokens, senhas, certificados, dados internos ou informacoes pessoais. As alteracoes de seguranca requerem testes e autorizacao da empresa.
 
 - 0.2.0: o assistente de inscricao baixa o MeshAgent diretamente do servidor, somente apos autenticacao com identidade individual do dispositivo. Controle remoto via MeshCentral e modulo Telas da intranet requerem autorizacao da TI; validar primeiro na VM.
+
+- 0.2.1: nova ISO compilada e validada em VM VirtualBox Live de 2 GB; XFCE iniciou sem a alternancia manual do terminal grafico, embora o boot ainda tenha atraso; Chrome e Enfoque Central conferidos no laboratorio.
+- 0.2.2: corrigida estrutura XML do painel XFCE; barra inferior fixa de largura total com atalhos independentes Chrome, SIGE e Intranet. Icones vindos dos favicons reais: Intranet em SVG, SIGE em ICO/PNG incorporado em SVG. Pendente de teste em VM.
+
+Teste detalhado: [0.2.1 e plano 0.2.2](docs/TESTE_2026-10-16_0.2.1_E_PLANO_0.2.2.md).

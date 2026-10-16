@@ -2,7 +2,7 @@
 # Personalizacao da sessao XFCE: visual estilo Windows sem componentes proprietarios.
 set -eu
 WALLPAPER=/usr/share/backgrounds/enfoque-os/wallpaper.jpg
-MARKER="${HOME}/.cache/enfoque-os-visual-v020"
+MARKER="${HOME}/.cache/enfoque-os-visual-v022"
 if [ ! -f "$WALLPAPER" ] || ! command -v xfconf-query >/dev/null 2>&1; then
   exit 0
 fi
@@ -22,6 +22,16 @@ set_xfconf xfwm4 /general/theme string Arc
 set_xfconf xfwm4 /general/title_alignment string left
 set_xfconf xfce4-desktop /desktop-icons/style int 2
 set_xfconf xfce4-desktop /desktop-icons/icon-size int 48
+
+# No modo Live a barra deve ocupar toda a borda inferior, sem auto-ocultar.
+# Respeite personalizacoes de equipamentos instalados fora do modo Live.
+if [ -d /run/live/medium ]; then
+  set_xfconf xfce4-panel /panels/panel-1/position string "p=10;x=0;y=0"
+  set_xfconf xfce4-panel /panels/panel-1/length uint 100
+  set_xfconf xfce4-panel /panels/panel-1/autohide-behavior uint 0
+  set_xfconf xfce4-panel /panels/panel-1/position-locked bool true
+fi
+
 
 # Respeita a pasta de area de trabalho traduzida pelo xdg-user-dirs.
 DESKTOP="${HOME}/Desktop"
