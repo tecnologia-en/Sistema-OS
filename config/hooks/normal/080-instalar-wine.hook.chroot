@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+export DEBIAN_FRONTEND=noninteractive
+dpkg --add-architecture i386
+apt-get update
+apt-get install -y --no-install-recommends wine wine64 wine32:i386 fonts-wine
