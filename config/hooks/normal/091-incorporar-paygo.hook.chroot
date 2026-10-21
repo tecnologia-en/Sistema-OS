@@ -3,7 +3,7 @@
 set -eu
 export DEBIAN_FRONTEND=noninteractive
 apt-get install -y --no-install-recommends unzip
-url='https://setis.com.br/filevista/public/z485/paygodev-pgwindocintegracao/20260914-integracao-setuppaygo-v5-1-50-24.zip'
+url='https://setis.com.br/filevista/public/gaz4/paygodev-pgwindocintegracao/20260923-integracao-setuppaygo-v5-1-50-924.zip'
 tmp=/tmp/enfoque-paygo-oficial.zip
 dest=/opt/enfoque/paygo
 mkdir -p "$dest"
