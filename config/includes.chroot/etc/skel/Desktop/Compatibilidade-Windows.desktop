@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Compatibilidade Windows
+GenericName=Wine para PayGo
+Comment=Configurar camada de compatibilidade Wine
+Exec=enfoque-paygo configurar
+Icon=enfoque-wincompat
+Terminal=false
+StartupNotify=true
+Categories=Settings;Utility;

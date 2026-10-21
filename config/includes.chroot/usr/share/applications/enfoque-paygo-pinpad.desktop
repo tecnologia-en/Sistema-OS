@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=PayGo - PIN-pad (piloto)
+Comment=Selecionar porta COM1 para PIN-pad quando conectado
+Exec=enfoque-paygo portas
+Icon=enfoque-paygo
+Terminal=false
+Categories=Settings;Utility;

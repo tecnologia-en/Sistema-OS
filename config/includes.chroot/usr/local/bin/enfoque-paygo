@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+"""PayGo no Wine: instalacao por usuario e diagnostico; nunca envia transacoes."""
+import argparse
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+
+PREFIX = Path.home() / ".local" / "share" / "enfoque-os" / "paygo-wine"
+SETUP = Path("/opt/enfoque/paygo/SetupPayGo.exe")
+os.environ["WINEPREFIX"] = str(PREFIX)
+os.environ["WINEARCH"] = "win64"
+
+
+def aviso(texto, erro=False):
+    if shutil.which("zenity") and os.environ.get("DISPLAY"):
+        subprocess.run(["zenity", "--error" if erro else "--info",
+                        "--title=PayGo - Enfoque OS (piloto)", "--width=460",
+                        "--text=" + texto], check=False)
+    else:
+        print(texto, file=sys.stderr)
+
+
+def wine_pronto():
+    if not all(shutil.which(c) for c in ("wine", "wineboot")):
+        aviso("Wine indisponivel. Verifique a instalacao do Sistema OS.", True)
+        return False
+    PREFIX.mkdir(parents=True, exist_ok=True, mode=0o700)
+    PREFIX.chmod(0o700)
+    if not (PREFIX / "drive_c").is_dir():
+        if subprocess.call(["wineboot", "--init"]):
+            aviso("Falha ao iniciar o ambiente Windows do PayGo.", True)
+            return False
+    return True
+
+
+def principal_instalado():
+    pastas = [PREFIX / "drive_c" / "Program Files",
+              PREFIX / "drive_c" / "Program Files (x86)"]
+    encontrados = []
+    for pasta in pastas:
+        if not pasta.exists():
+            continue
+        for diretorio, subdirs, nomes in os.walk(pasta):
+            subdirs[:] = [d for d in subdirs if d.lower() not in
+                          ("uninstall", "uninstaller", "updates", "temp")]
+            for nome in nomes:
+                nome_l = nome.lower()
+                if not nome_l.endswith(".exe"):
+                    continue
+                caminho = Path(diretorio) / nome
+                contexto = str(caminho).lower()
+                if not any(s in contexto for s in ("paygo", "pay&go", "pgwin")):
+                    continue
+                if any(s in nome_l for s in
+                       ("setup", "unins", "update", "install", "remove", "repair", "collector")):
+                    continue
+                score = (0 if ("paygo" in nome_l or "pgwin" in nome_l) else 1,
+                         len(str(caminho)))
+                encontrados.append((score, caminho))
+    return min(encontrados)[1] if encontrados else None
+
+
+def instalar():
+    if not SETUP.is_file():
+        aviso("O instalador oficial nao foi encontrado na ISO.", True)
+        return False
+    aviso("Instalacao experimental do PayGo no Wine. Este assistente nao ativa "
+          "o ponto de captura nem executa vendas. Nao utilize dados de producao no piloto.")
+    if subprocess.call(["wine", str(SETUP)]):
+        aviso("Instalador retornou erro. O PayGo nao esta pronto para uso.", True)
+        return False
+    return True
+
+
+def portas():
+    import glob
+    caminhos = [p for modelo in ("/dev/serial/by-id/*", "/dev/ttyUSB*", "/dev/ttyACM*")
+                for p in glob.glob(modelo) if os.path.exists(p)]
+    caminhos = sorted(set(caminhos))
+    if not caminhos:
+        aviso("Nenhuma porta serial USB foi encontrada. Nenhuma alteracao realizada.")
+        return 0
+    if not (shutil.which("zenity") and os.environ.get("DISPLAY")):
+        print("\n".join(caminhos))
+        return 0
+    resposta = subprocess.run(["zenity", "--list", "--title=Selecionar PIN-pad",
+                              "--width=720", "--height=360",
+                              "--column=Dispositivo Linux", *caminhos],
+                             text=True, capture_output=True, check=False)
+    selecionado = resposta.stdout.strip()
+    if resposta.returncode or selecionado not in caminhos:
+        return 0
+    if not os.access(selecionado, os.R_OK | os.W_OK):
+        aviso("Permissao USB insuficiente. Solicite verificacao da TI.", True)
+        return 1
+    dos = PREFIX / "dosdevices"
+    dos.mkdir(parents=True, exist_ok=True)
+    com = dos / "com1"
+    if com.is_symlink():
+        com.unlink()
+    elif com.exists():
+        aviso("COM1 ja existe; mapeamento preservado.", True)
+        return 1
+    com.symlink_to(selecionado)
+    aviso("COM1 aponta para " + selecionado +
+          ". Isto nao comprova comunicacao funcional com o PayGo.")
+    return 0
+
+
+def main():
+    parser = argparse.ArgumentParser(description="PayGo Windows no Enfoque OS (piloto)")
+    parser.add_argument("acao", nargs="?", choices=["abrir", "instalar", "configurar",
+                        "portas", "diagnostico"], default="abrir")
+    args = parser.parse_args()
+    if args.acao == "diagnostico":
+        print("Wine:", shutil.which("wine") or "ausente")
+        print("Instalador:", "presente" if SETUP.is_file() else "ausente")
+        print("Prefixo:", PREFIX)
+        print("Executavel:", principal_instalado() or "nao localizado")
+        print("Status: experimental; NAO homologado para pagamentos")
+        return 0
+    if not wine_pronto():
+        return 1
+    if args.acao == "configurar":
+        return subprocess.call(["winecfg"])
+    if args.acao == "portas":
+        return portas()
+    aplicativo = principal_instalado()
+    if args.acao == "instalar" or aplicativo is None:
+        if not instalar():
+            return 1
+        aplicativo = principal_instalado()
+    if aplicativo is None:
+        aviso("Instalador executado, mas aplicativo principal nao localizado. "
+              "Pode faltar dependencia .NET ou o instalador pode ter falhado.", True)
+        return 1
+    return subprocess.call(["wine", str(aplicativo)])
+
+
+if __name__ == "__main__":
+    sys.exit(main())

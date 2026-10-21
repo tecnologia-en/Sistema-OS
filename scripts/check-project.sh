@@ -42,5 +42,20 @@ grep -Fq -- '--security false' "$ROOT/scripts/build-iso.sh" || {
   echo 'ERRO: live-build Ubuntu usara trixie/updates (inexistente).' >&2
   exit 1
 }
+
+# Verifica componentes PayGo/Wine para nao aceitar ISO sem hooks executaveis.
+for hook in 080-instalar-wine 091-incorporar-paygo; do
+  f="$ROOT/config/hooks/normal/$hook.hook.chroot"
+  test -x "$f" || { echo "Hook nao executavel: $f" >&2; exit 1; }
+  sh -n "$f"
+done
+test -x "$ROOT/config/includes.chroot/usr/local/bin/enfoque-paygo" || exit 1
+python3 -c 'import ast,sys; ast.parse(open(sys.argv[1]).read())' "$ROOT/config/includes.chroot/usr/local/bin/enfoque-paygo"
+for app in PayGo Compatibilidade-Windows; do
+  f="$ROOT/config/includes.chroot/etc/skel/Desktop/$app.desktop"
+  test -x "$f" || { echo "Atalho nao executavel: $f" >&2; exit 1; }
+  grep -q '^Exec=enfoque-paygo ' "$f"
+done
+
 bash "$ROOT/scripts/check-visual.sh"
 echo 'Estrutura valida. A ISO deve ser compilada e testada em VM.'
