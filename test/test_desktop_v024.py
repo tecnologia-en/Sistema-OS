@@ -74,8 +74,10 @@ class DesktopV024Tests(unittest.TestCase):
         self.assertTrue(css.is_file())
 
     def test_boot_screen_shows_correct_version(self):
-        self.assertIn("0.2.6", (BASE / "config/bootloaders/syslinux_common/menu.cfg").read_text())
-        self.assertIn("0.2.6", (BASE / "config/bootloaders/grub-pc/live-theme/theme.txt").read_text())
+        release = (CONFIG / "etc/enfoque-os-release").read_text()
+        version = release.split('VERSION="', 1)[1].split('"', 1)[0]
+        self.assertIn(version, (BASE / "config/bootloaders/syslinux_common/menu.cfg").read_text())
+        self.assertIn(version, (BASE / "config/bootloaders/grub-pc/live-theme/theme.txt").read_text())
 
 
 if __name__ == "__main__":
