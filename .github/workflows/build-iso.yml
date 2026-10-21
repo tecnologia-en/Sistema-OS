@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - feat/paygo-wine-os-027
     paths:
       - 'config/**'
       - 'scripts/build-iso.sh'
