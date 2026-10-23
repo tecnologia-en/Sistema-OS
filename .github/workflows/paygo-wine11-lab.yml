@@ -1,0 +1,106 @@
+name: PayGo Wine 11 GUI lab (no payments)
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/paygo-wine11-lab.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  wine11:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Download and verify SETIS official PayGo installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p wine11-lab-work/logs
+          cd wine11-lab-work
+          curl --fail --silent --show-error --location --retry 3 --connect-timeout 30 --max-time 900 \
+            'https://setis.com.br/filevista/public/gaz4/paygodev-pgwindocintegracao/20260923-integracao-setuppaygo-v5-1-50-924.zip' -o paygo.zip
+          echo "6b90e797b928eef815c6463cf657c1b3d22b331e387e478a3f71dfbc0c207a39  paygo.zip" | sha256sum -c -
+          unzip -Z1 paygo.zip | grep -Ei '(^|/)SetupPayGo_full_v[^/]*[.]exe$' | head -n 1 > installer-entry.txt
+          unzip -p paygo.zip "$(cat installer-entry.txt)" > SetupPayGo.exe
+          echo "bccab187ff5ac25ad1e5351d584193aeb1a6f2ce467f783c5305f98d6b2d0531  SetupPayGo.exe" | sha256sum -c -
+          rm -f paygo.zip
+      - name: Execute Wine 11 with nested PayGo wizard and capture screen
+        shell: bash
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          lab="$PWD/wine11-lab-work"
+          cat > "$lab/run.sh" <<'PAYGOSCRIPT'
+          #!/bin/bash
+          set -u
+          export WINEARCH=win32
+          export WINEPREFIX=/home/wineuser/paygo-win32
+          export WINEDEBUG=err+all
+          export DISPLAY=:99
+          mkdir -p /work/logs
+          wine --version > /work/logs/wine-version.txt 2>&1
+          timeout 200 wineboot --init > /work/logs/wineboot.log 2>&1
+          timeout 1250 winetricks -q dotnet48 corefonts > /work/logs/dotnet48.log 2>&1
+          echo "DOTNET_EXIT=$?" > /work/logs/dotnet48.exit
+          timeout 30 wine reg query 'HKLM\Software\Microsoft\NET Framework Setup\NDP\v4\Full' /v Release > /work/logs/dotnet-release.txt 2>&1
+          host=api.controlpay.com.br
+          getent ahostsv4 "$host" | head -n 10 > /work/logs/ipv4.txt || true
+          timeout 400 wine /work/SetupPayGo.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- > /work/logs/outer-install.log 2>&1
+          echo "OUTER_EXIT=$?" > /work/logs/outer-install.exit
+          sleep 15
+          import -display :99 -window root /work/logs/wizard-0.png 2>/work/logs/screenshot.err || true
+          xdotool mousemove --sync 804 623 click 1
+          sleep 4
+          import -display :99 -window root /work/logs/wizard-1.png 2>>/work/logs/screenshot.err || true
+          xdotool mousemove --sync 804 623 click 1
+          sleep 80
+          import -display :99 -window root /work/logs/wizard-2.png 2>>/work/logs/screenshot.err || true
+          xdotool mousemove --sync 804 623 click 1
+          sleep 10
+          import -display :99 -window root /work/logs/wizard-3.png 2>>/work/logs/screenshot.err || true
+          find "$WINEPREFIX/drive_c" -type f -iname '*paygo*.exe' -print > /work/logs/executables.txt 2>&1
+          APP=$(find "$WINEPREFIX/drive_c/Program Files" -type f -iname PayGo.exe -print -quit 2>/dev/null)
+          if [ -z "$APP" ]; then
+            NESTED="$WINEPREFIX/drive_c/ProgramData/PayGo/Atualizacoes/SetupPayGo.exe"
+            if [ -f "$NESTED" ]; then
+              timeout 200 wine "$NESTED" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- > /work/logs/nested-silent.log 2>&1
+              echo "NESTED_EXIT=$?" > /work/logs/nested-silent.exit
+              sleep 35
+            fi
+          fi
+          APP=$(find "$WINEPREFIX/drive_c/Program Files" -type f -iname PayGo.exe -print -quit 2>/dev/null)
+          echo "APP=$APP" > /work/logs/app.txt
+          find "$WINEPREFIX/drive_c" -type f -iname '*paygo*.exe' -print > /work/logs/executables-final.txt 2>&1
+          if [ -n "$APP" ]; then
+            timeout 120 wine "$APP" > /work/logs/paygo-runtime.log 2>&1 &
+            echo "APP_START_PID=$!" >> /work/logs/app.txt
+            sleep 35
+          else
+            echo "MAIN_PAYGO_EXE_NOT_FOUND" > /work/logs/paygo-runtime.log
+          fi
+          xdotool search --onlyvisible --name '.*' getwindowname > /work/logs/windows.txt 2>&1 || true
+          import -display :99 -window root /work/logs/paygo-final.png 2>>/work/logs/screenshot.err || true
+          PAYGOSCRIPT
+          sudo chown -R 1010:1010 "$lab"
+          timeout 700 docker pull scottyhardy/docker-wine:stable-11.0-20261018
+          set +e
+          timeout 1500 docker run --rm --platform linux/amd64 --shm-size=2g \
+            -e RUN_AS_ROOT=yes -e USE_XVFB=yes -e XVFB_SERVER=:99 -e XVFB_SCREEN=0 -e XVFB_RESOLUTION=1280x800x24 \
+            -e DISPLAY=:99 -v "$lab:/work" scottyhardy/docker-wine:stable-11.0-20261018 \
+            bash -lc 'apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends xdotool imagemagick >/work/logs/apt-extras.log 2>&1 && gosu wineuser bash /work/run.sh' \
+            > "$lab/logs/docker-run.log" 2>&1
+          result=$?
+          set -e
+          echo "DOCKER_LAB_EXIT=$result"
+          sudo chmod -R a+rX "$lab/logs"
+          test -f "$lab/logs/app.txt" && cat "$lab/logs/app.txt" || true
+          test -f "$lab/logs/executables-final.txt" && cat "$lab/logs/executables-final.txt" || true
+          exit 0
+      - name: Upload Wine 11 diagnostic screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paygo-wine11-gui-diagnostics
+          path: wine11-lab-work/logs/
+          retention-days: 2
+          if-no-files-found: warn
