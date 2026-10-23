@@ -15,7 +15,7 @@ jobs:
     env:
       DISPLAY: ":99"
       WINEARCH: win32
-      WINEPREFIX: /tmp/paygo-wine32-lab
+      WINEPREFIX: /home/runner/paygo-wine32-lab
       WINEDEBUG: err+all
       WINETRICKS_GUI: none
     steps:
@@ -102,14 +102,14 @@ jobs:
             sleep 35
             ps -e -o pid,comm,args | grep -Ei 'wine|paygo|services.exe|explorer.exe' | head -n 100 > "$LOGDIR/processes.txt"
             xdotool search --onlyvisible --name '.*' getwindowname > "$LOGDIR/windows.txt" 2>&1
-            convert -display :99 x: "$LOGDIR/paygo-desktop.png" 2> "$LOGDIR/screenshot.err" || true
+            import -display :99 -window root "$LOGDIR/paygo-desktop.png" 2> "$LOGDIR/screenshot.err" || true
             echo "APP_PROCESS_PID=$APPPID" >> "$LOGDIR/selected-executable.txt"
             cat "$LOGDIR/windows.txt"
             tail -n 90 "$LOGDIR/paygo-runtime.log"
           else
             echo "PayGo executable not found after installation" > "$LOGDIR/paygo-runtime.log"
             xdotool search --onlyvisible --name '.*' getwindowname > "$LOGDIR/windows.txt" 2>&1
-            convert -display :99 x: "$LOGDIR/paygo-desktop.png" 2> "$LOGDIR/screenshot.err" || true
+            import -display :99 -window root "$LOGDIR/paygo-desktop.png" 2> "$LOGDIR/screenshot.err" || true
           fi
           exit 0
 
