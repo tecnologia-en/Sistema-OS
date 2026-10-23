@@ -82,6 +82,9 @@ jobs:
           import -display :99 -window root /work/logs/paygo-final.png 2>>/work/logs/screenshot.err || true
           PAYGOSCRIPT
           sudo chown -R 1010:1010 "$lab"
+          sudo touch "$lab/logs/docker-run.log"
+          sudo chmod 666 "$lab/logs/docker-run.log"
+          sudo chmod 777 "$lab/logs"
           timeout 700 docker pull scottyhardy/docker-wine:stable-11.0-20261018
           set +e
           timeout 1500 docker run --rm --platform linux/amd64 --shm-size=2g \
