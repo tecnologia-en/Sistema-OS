@@ -73,6 +73,19 @@ jobs:
           cat "${{ runner.temp }}/paygo-logs/dotnet48-registry.txt"
           exit 0
 
+      - name: Prefer dynamic IPv4 for ControlPay lab connectivity (not production)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The runner has no IPv6 internet route. Lab-only temporary hosts
+          # entries use current DNS IPv4 results; do not ship fixed payment IPs.
+          host=api.controlpay.com.br
+          ipv4=$(getent ahostsv4 "$host" | awk '$2=="STREAM" {print $1; exit}')
+          if [ -n "$ipv4" ]; then
+            printf '%s %s\n' "$ipv4" "$host" | sudo tee -a /etc/hosts
+          fi
+          getent ahosts "$host" | head -n 15 || true
+
       - name: Install PayGo Windows silently in isolated lab
         shell: bash
         continue-on-error: true
@@ -81,7 +94,8 @@ jobs:
           timeout 360 wine "${{ runner.temp }}/paygo-src/SetupPayGo.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- \
             > "${{ runner.temp }}/paygo-logs/paygo-installer.log" 2>&1
           echo "PAYGO_SETUP_EXIT=$?" | tee "${{ runner.temp }}/paygo-logs/paygo-installer-exit.txt"
-          find "$WINEPREFIX/drive_c/Program Files" -maxdepth 6 -iname '*paygo*.exe' -print \
+          sleep 15
+          find "$WINEPREFIX/drive_c" -type f \\( -iname '*paygo*.exe' -o -iname 'pgwin*.exe' \\) -print \
             > "${{ runner.temp }}/paygo-logs/executables.txt" 2>&1
           cat "${{ runner.temp }}/paygo-logs/executables.txt"
 
@@ -91,9 +105,9 @@ jobs:
         run: |
           set +e
           LOGDIR="${{ runner.temp }}/paygo-logs"
-          APP=$(find "$WINEPREFIX/drive_c/Program Files" -type f -iname 'PayGo.exe' -print -quit 2>/dev/null)
+          APP=$(find "$WINEPREFIX/drive_c" -type f -iname 'PayGo.exe' -print -quit 2>/dev/null)
           if [ -z "$APP" ]; then
-            APP=$(find "$WINEPREFIX/drive_c/Program Files" -type f -iname 'PayGoWindows.exe' -print -quit 2>/dev/null)
+            APP=$(find "$WINEPREFIX/drive_c" -type f -iname 'PayGoWindows.exe' -print -quit 2>/dev/null)
           fi
           echo "APP=$APP" | tee "$LOGDIR/selected-executable.txt"
           if [ -n "$APP" ]; then
