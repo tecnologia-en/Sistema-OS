@@ -41,7 +41,7 @@ class PayGoImageTests(unittest.TestCase):
             self.assertIn(cmd, path.read_text())
             self.assertTrue((CFG / "includes.chroot/usr/share/icons/hicolor/scalable/apps" /
                              (icon + ".svg")).is_file())
-        self.assertIn('VERSION="0.2.8"', (CFG / "includes.chroot/etc/enfoque-os-release").read_text())
+        self.assertIn('VERSION="0.2.9"', (CFG / "includes.chroot/etc/enfoque-os-release").read_text())
 
     def test_launcher_valid_python(self):
         self.assertTrue(LAUNCHER.stat().st_mode & stat.S_IXUSR)
@@ -59,13 +59,44 @@ class PayGoImageTests(unittest.TestCase):
         module = importlib.util.module_from_spec(spec)
         loader.exec_module(module)
         with tempfile.TemporaryDirectory() as tmp:
-            prefix = Path(tmp)
+            prefix = Path(tmp) / "paygo-win32"
             path = prefix / "drive_c/Program Files (x86)/PayGo/PayGoWindows.exe"
             path.parent.mkdir(parents=True)
             path.write_bytes(b"MZ")
             (path.parent / "SetupPayGo.exe").write_bytes(b"MZ")
+            generic = prefix / "drive_c/Program Files/Internet Explorer/iexplore.exe"
+            generic.parent.mkdir(parents=True)
+            generic.write_bytes(b"MZfake")
             with mock.patch.object(module, "PREFIX", prefix):
                 self.assertEqual(module.principal_instalado(), path)
+
+    def test_pinpad_auto_mapping_is_limited_to_known_device(self):
+        loader = importlib.machinery.SourceFileLoader("paygo_pinpad_test", str(LAUNCHER))
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        module = importlib.util.module_from_spec(spec)
+        loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dev = root / "pinpad"
+            dev.write_bytes(b"")
+            prefix = root / "prefix"
+            dos = prefix / "dosdevices"
+            dos.mkdir(parents=True)
+            (dos / "com1").symlink_to("/dev/ttyS0")
+            (dos / "com8").symlink_to("/dev/ttyS7")
+            with mock.patch.object(module, "PREFIX", prefix), mock.patch.object(
+                    module, "GERTEC_PINPAD", dev):
+                self.assertTrue(module.mapear_pinpad_detectado())
+                self.assertEqual((dos / "com1").readlink(), dev)
+                self.assertEqual((dos / "com8").readlink(), dev)
+                self.assertTrue(module.mapear_pinpad_detectado())
+
+    def test_udev_rule_grants_serial_access_to_ppc930(self):
+        rule = (CFG / "includes.chroot/etc/udev/rules.d/"
+                "70-enfoque-gertec-pinpad.rules").read_text()
+        for token in ('1753', 'c902', 'plugdev', 'MODE="0660"',
+                      'SYMLINK+="enfoque-pinpad"'):
+            self.assertIn(token, rule)
 
 
 if __name__ == "__main__":

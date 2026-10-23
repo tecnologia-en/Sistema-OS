@@ -15,6 +15,7 @@ WINE32 = Path("/usr/lib/wine/wine")
 SETUP = Path("/opt/enfoque/paygo/SetupPayGo.exe")
 MIN_FREE_INIT = 900 * 1024 * 1024
 MIN_FREE_INSTALL = 650 * 1024 * 1024
+GERTEC_PINPAD = Path("/dev/enfoque-pinpad")
 os.environ["WINEPREFIX"] = str(PREFIX)
 os.environ["WINEARCH"] = "win32"
 os.environ["WINELOADER"] = str(WINE32)
@@ -49,6 +50,34 @@ def comando_wine(*argumentos, timeout=None):
     return subprocess.run([str(WINE32), *argumentos], timeout=timeout, check=False).returncode
 
 
+def mapear_pinpad_detectado():
+    """Expoe a GERTEC no prefixo Wine, sem modificar outros dispositivos."""
+    if not GERTEC_PINPAD.exists() or not os.access(
+            GERTEC_PINPAD, os.R_OK | os.W_OK):
+        return False
+    dos = PREFIX / "dosdevices"
+    if not dos.is_dir():
+        return False
+    mapeado = False
+    for porta in ("com1", "com8"):
+        com = dos / porta
+        if com.is_symlink():
+            destino_atual = os.readlink(com)
+            if destino_atual == str(GERTEC_PINPAD):
+                mapeado = True
+                continue
+            if destino_atual.startswith("/dev/ttyS"):
+                com.unlink()
+            else:
+                # Nao trocar mapeamento personalizado por outro operador.
+                continue
+        elif com.exists():
+            continue
+        com.symlink_to(GERTEC_PINPAD)
+        mapeado = True
+    return mapeado
+
+
 def wine_pronto():
     if not PREFIX.is_absolute():
         aviso("O caminho do ambiente Wine precisa ser absoluto.", True)
@@ -61,6 +90,7 @@ def wine_pronto():
     PREFIX.chmod(0o700)
     pronto = PREFIX / ".enfoque-wine32-ready"
     if pronto.is_file():
+        mapear_pinpad_detectado()
         return True
     if not armazenamento_suficiente(MIN_FREE_INIT):
         return False
@@ -78,11 +108,15 @@ def wine_pronto():
               ". O programa PayGo nao foi executado.", True)
         return False
     pronto.write_text("Wine32 testado com cmd.exe\n")
+    mapear_pinpad_detectado()
     return True
 
 
 def principal_instalado():
+    """Usa apenas nomes de executaveis PayGo, nunca o nome do prefixo."""
     encontrados = []
+    ignorar = ("setup", "unins", "update", "install", "remove", "repair",
+               "collector", "teste", "test", "helper")
     for pasta in ("Program Files", "Program Files (x86)"):
         raiz = PREFIX / "drive_c" / pasta
         if not raiz.is_dir():
@@ -91,19 +125,20 @@ def principal_instalado():
             subdirs[:] = [d for d in subdirs if d.lower() not in
                           ("uninstall", "uninstaller", "updates", "temp")]
             for nome in nomes:
-                if not nome.lower().endswith(".exe"):
+                curto = nome.lower()
+                if not curto.endswith(".exe") or any(
+                        p in curto for p in ignorar):
+                    continue
+                if curto == "paygo.exe":
+                    prioridade = 0
+                elif curto in ("paygowindows.exe", "pgwin.exe"):
+                    prioridade = 1
+                elif "paygo" in curto or "pgwin" in curto:
+                    prioridade = 2
+                else:
                     continue
                 caminho = Path(diretorio) / nome
-                if not any(p in str(caminho).lower() for p in
-                           ("paygo", "pay&go", "pgwin")):
-                    continue
-                if any(p in nome.lower() for p in
-                       ("setup", "unins", "update", "install", "remove",
-                        "repair", "collector")):
-                    continue
-                encontrados.append((
-                    (0 if ("paygo" in nome.lower() or "pgwin" in nome.lower())
-                     else 1, len(str(caminho))), caminho))
+                encontrados.append(((prioridade, len(str(caminho))), caminho))
     return min(encontrados)[1] if encontrados else None
 
 
@@ -128,7 +163,7 @@ def instalar():
 
 def portas():
     caminhos = sorted(set(
-        p for padrao in ("/dev/serial/by-id/*", "/dev/ttyUSB*", "/dev/ttyACM*")
+        p for padrao in ("/dev/enfoque-pinpad", "/dev/serial/by-id/*", "/dev/ttyUSB*", "/dev/ttyACM*")
         for p in glob.glob(padrao) if os.path.exists(p)))
     if not caminhos:
         aviso("Nenhuma porta serial USB encontrada. Nenhuma alteracao realizada.")
@@ -173,6 +208,10 @@ def main():
         print("Espaco livre:", shutil.disk_usage(Path.home()).free // 1048576, "MB")
         print("Live temporario:", Path("/run/live/overlay").exists())
         print("Executavel:", principal_instalado() or "nao localizado")
+        print("GERTEC PPC930:", "detectada" if GERTEC_PINPAD.exists()
+              else "nao conectada")
+        print("Porta COM:", "mapeada" if mapear_pinpad_detectado()
+              else "pendente ou sem permissao")
         print("Status: piloto, sem homologacao para pagamentos reais")
         return 0
     if not wine_pronto():
