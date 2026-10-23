@@ -93,6 +93,22 @@ class PayGoImageTests(unittest.TestCase):
             with mock.patch.object(module, "PREFIX", prefix):
                 self.assertEqual(module.principal_instalado(), path)
 
+    def test_nested_installer_requires_real_application_file(self):
+        loader = importlib.machinery.SourceFileLoader("paygo_nested_setup_test", str(LAUNCHER))
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        module = importlib.util.module_from_spec(spec)
+        loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as tmp:
+            prefix = Path(tmp) / "paygo-win32"
+            app = prefix / "drive_c/Program Files/PayGo/PayGo.exe"
+            with mock.patch.object(module, "PREFIX", prefix):
+                # An outer installer returning successfully is not proof of installation.
+                self.assertIsNone(module.aguardar_paygo_instalado(segundos=0))
+                app.parent.mkdir(parents=True)
+                app.write_bytes(b"MZ" + b"0" * (1024 * 1024))
+                with mock.patch.object(module.time, "sleep", return_value=None):
+                    self.assertEqual(module.aguardar_paygo_instalado(segundos=0), app)
+
     def test_pinpad_auto_mapping_is_limited_to_known_device(self):
         loader = importlib.machinery.SourceFileLoader("paygo_pinpad_test", str(LAUNCHER))
         spec = importlib.util.spec_from_loader(loader.name, loader)
