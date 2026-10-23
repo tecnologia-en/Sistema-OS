@@ -47,6 +47,7 @@ jobs:
           WORK="${{ runner.temp }}/boot-smoke"
           mkdir -p "$WORK"
           xorriso -indev "$ISO" -find /live -type f -exec echo -- > "$WORK/live-files.txt"
+          sed -i "s/^\x27//; s/\x27$//" "$WORK/live-files.txt"
           cat "$WORK/live-files.txt"
           KERNEL=$(grep -E '^/live/vmlinuz[^/]*$' "$WORK/live-files.txt" | head -n 1)
           INITRD=$(grep -E '^/live/initrd[^/]*$' "$WORK/live-files.txt" | head -n 1)
