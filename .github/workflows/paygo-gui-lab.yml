@@ -1,0 +1,124 @@
+name: PayGo Wine GUI lab (no payments)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/paygo-gui-lab.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  paygo-gui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 42
+    env:
+      DISPLAY: ":99"
+      WINEARCH: win32
+      WINEPREFIX: ${{ runner.temp }}/paygo-wine32
+      WINEDEBUG: err+all
+      WINETRICKS_GUI: none
+      WINEDLLOVERRIDES: "mscoree,mshtml="
+    steps:
+      - name: Install Wine32 and virtual X display
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo dpkg --add-architecture i386
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            wine wine32:i386 libwine:i386 xvfb xdotool imagemagick \
+            cabextract unzip curl p7zip-full winbind winetricks
+          mkdir -p "${{ runner.temp }}/paygo-logs"
+          Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > "${{ runner.temp }}/paygo-logs/xvfb.log" 2>&1 &
+          echo $! > "${{ runner.temp }}/paygo-logs/xvfb.pid"
+          sleep 2
+          wine --version
+          winetricks --version || true
+
+      - name: Download and verify official SETIS PayGo installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${{ runner.temp }}/paygo-src"
+          cd "${{ runner.temp }}/paygo-src"
+          curl --fail --silent --show-error --location --retry 3 --connect-timeout 30 --max-time 900 \
+            'https://setis.com.br/filevista/public/gaz4/paygodev-pgwindocintegracao/20260923-integracao-setuppaygo-v5-1-50-924.zip' \
+            -o paygo.zip
+          echo "6b90e797b928eef815c6463cf657c1b3d22b331e387e478a3f71dfbc0c207a39  paygo.zip" | sha256sum -c -
+          unzip -tqq paygo.zip
+          unzip -Z1 paygo.zip | grep -Ei '(^|/)SetupPayGo_full_v[^/]*[.]exe$' | head -n 1 > installer-entry.txt
+          test -s installer-entry.txt
+          unzip -p paygo.zip "$(cat installer-entry.txt)" > SetupPayGo.exe
+          echo "bccab187ff5ac25ad1e5351d584193aeb1a6f2ce467f783c5305f98d6b2d0531  SetupPayGo.exe" | sha256sum -c -
+          file SetupPayGo.exe
+
+      - name: Create clean 32-bit Wine prefix
+        shell: bash
+        run: |
+          mkdir -p "${{ runner.temp }}/paygo-logs"
+          timeout 210 wineboot --init > "${{ runner.temp }}/paygo-logs/wineboot.log" 2>&1
+          timeout 50 wine cmd /c echo ENFOQUE_WINE32_OK > "${{ runner.temp }}/paygo-logs/cmd.log" 2>&1
+          cat "${{ runner.temp }}/paygo-logs/cmd.log"
+          test -d "$WINEPREFIX/drive_c"
+
+      - name: Install native Microsoft .NET Framework 4.8 in lab
+        shell: bash
+        continue-on-error: true
+        run: |
+          set +e
+          timeout 1250 winetricks -q dotnet48 corefonts > "${{ runner.temp }}/paygo-logs/dotnet48.log" 2>&1
+          echo "WINETRICKS_EXIT=$?" | tee "${{ runner.temp }}/paygo-logs/dotnet48-exit.txt"
+          timeout 40 wine reg query 'HKLM\Software\Microsoft\NET Framework Setup\NDP\v4\Full' /v Release > "${{ runner.temp }}/paygo-logs/dotnet48-registry.txt" 2>&1
+          tail -n 40 "${{ runner.temp }}/paygo-logs/dotnet48.log"
+          cat "${{ runner.temp }}/paygo-logs/dotnet48-registry.txt"
+          exit 0
+
+      - name: Install PayGo Windows silently in isolated lab
+        shell: bash
+        continue-on-error: true
+        run: |
+          set +e
+          timeout 360 wine "${{ runner.temp }}/paygo-src/SetupPayGo.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- \
+            > "${{ runner.temp }}/paygo-logs/paygo-installer.log" 2>&1
+          echo "PAYGO_SETUP_EXIT=$?" | tee "${{ runner.temp }}/paygo-logs/paygo-installer-exit.txt"
+          find "$WINEPREFIX/drive_c/Program Files" -maxdepth 6 -iname '*paygo*.exe' -print \
+            > "${{ runner.temp }}/paygo-logs/executables.txt" 2>&1
+          cat "${{ runner.temp }}/paygo-logs/executables.txt"
+
+      - name: Launch installed PayGo and capture GUI + errors
+        shell: bash
+        continue-on-error: true
+        run: |
+          set +e
+          LOGDIR="${{ runner.temp }}/paygo-logs"
+          APP=$(find "$WINEPREFIX/drive_c/Program Files" -type f -iname 'PayGo.exe' -print -quit 2>/dev/null)
+          if [ -z "$APP" ]; then
+            APP=$(find "$WINEPREFIX/drive_c/Program Files" -type f -iname 'PayGoWindows.exe' -print -quit 2>/dev/null)
+          fi
+          echo "APP=$APP" | tee "$LOGDIR/selected-executable.txt"
+          if [ -n "$APP" ]; then
+            timeout 160 wine "$APP" > "$LOGDIR/paygo-runtime.log" 2>&1 &
+            APPPID=$!
+            sleep 35
+            ps -e -o pid,comm,args | grep -Ei 'wine|paygo|services.exe|explorer.exe' | head -n 100 > "$LOGDIR/processes.txt"
+            xdotool search --onlyvisible --name '.*' getwindowname > "$LOGDIR/windows.txt" 2>&1
+            convert -display :99 x: "$LOGDIR/paygo-desktop.png" 2> "$LOGDIR/screenshot.err" || true
+            echo "APP_PROCESS_PID=$APPPID" >> "$LOGDIR/selected-executable.txt"
+            cat "$LOGDIR/windows.txt"
+            tail -n 90 "$LOGDIR/paygo-runtime.log"
+          else
+            echo "PayGo executable not found after installation" > "$LOGDIR/paygo-runtime.log"
+            xdotool search --onlyvisible --name '.*' getwindowname > "$LOGDIR/windows.txt" 2>&1
+            convert -display :99 x: "$LOGDIR/paygo-desktop.png" 2> "$LOGDIR/screenshot.err" || true
+          fi
+          exit 0
+
+      - name: Upload non-sensitive GUI diagnostic logs (no executables)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paygo-linux-gui-lab-diagnostics
+          path: ${{ runner.temp }}/paygo-logs/
+          if-no-files-found: warn
+          retention-days: 2
