@@ -46,7 +46,7 @@ jobs:
           ISO="${{ runner.temp }}/iso/enfoque-os-0.2.9-piloto-amd64.iso"
           WORK="${{ runner.temp }}/boot-smoke"
           mkdir -p "$WORK"
-          xorriso -indev "$ISO" -find /live -type f -print 2>/dev/null > "$WORK/live-files.txt"
+          xorriso -indev "$ISO" -find /live -type f -exec echo -- > "$WORK/live-files.txt"
           cat "$WORK/live-files.txt"
           KERNEL=$(grep -E '^/live/vmlinuz[^/]*$' "$WORK/live-files.txt" | head -n 1)
           INITRD=$(grep -E '^/live/initrd[^/]*$' "$WORK/live-files.txt" | head -n 1)
