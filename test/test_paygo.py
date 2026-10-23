@@ -83,6 +83,7 @@ class PayGoImageTests(unittest.TestCase):
             dos = prefix / "dosdevices"
             dos.mkdir(parents=True)
             (dos / "com1").symlink_to("/dev/ttyS0")
+            (dos / "com8").symlink_to("/dev/ttyS7")
             with mock.patch.object(module, "PREFIX", prefix), mock.patch.object(
                     module, "GERTEC_PINPAD", dev):
                 self.assertTrue(module.mapear_pinpad_detectado())

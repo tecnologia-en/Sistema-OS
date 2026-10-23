@@ -66,7 +66,7 @@ def mapear_pinpad_detectado():
             if destino_atual == str(GERTEC_PINPAD):
                 mapeado = True
                 continue
-            if porta == "com1" and destino_atual.startswith("/dev/ttyS"):
+            if destino_atual.startswith("/dev/ttyS"):
                 com.unlink()
             else:
                 # Nao trocar mapeamento personalizado por outro operador.
