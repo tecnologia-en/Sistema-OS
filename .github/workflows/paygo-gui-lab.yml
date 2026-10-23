@@ -95,7 +95,7 @@ jobs:
             > "${{ runner.temp }}/paygo-logs/paygo-installer.log" 2>&1
           echo "PAYGO_SETUP_EXIT=$?" | tee "${{ runner.temp }}/paygo-logs/paygo-installer-exit.txt"
           sleep 15
-          find "$WINEPREFIX/drive_c" -type f \\( -iname '*paygo*.exe' -o -iname 'pgwin*.exe' \\) -print \
+          find "$WINEPREFIX/drive_c" -type f -iname '*paygo*.exe' -print \
             > "${{ runner.temp }}/paygo-logs/executables.txt" 2>&1
           cat "${{ runner.temp }}/paygo-logs/executables.txt"
 
