@@ -99,6 +99,29 @@ jobs:
             > "${{ runner.temp }}/paygo-logs/executables.txt" 2>&1
           cat "${{ runner.temp }}/paygo-logs/executables.txt"
 
+      - name: Complete nested PayGo installer wizard in isolated GUI
+        shell: bash
+        continue-on-error: true
+        run: |
+          set +e
+          LOGDIR="${{ runner.temp }}/paygo-logs"
+          import -display :99 -window root "$LOGDIR/wizard-before.png" 2>/dev/null
+          # Inno Setup tasks page -> Ready to install -> Installing.
+          # The outer setup exits before the nested interactive wizard finishes.
+          xdotool mousemove --sync 804 623 click 1
+          sleep 4
+          import -display :99 -window root "$LOGDIR/wizard-after-next.png" 2>/dev/null
+          xdotool mousemove --sync 804 623 click 1
+          sleep 75
+          import -display :99 -window root "$LOGDIR/wizard-after-install.png" 2>/dev/null
+          # The progress screen disables Next; this may click Finish if present.
+          xdotool mousemove --sync 804 623 click 1
+          sleep 12
+          import -display :99 -window root "$LOGDIR/wizard-after-finish.png" 2>/dev/null
+          find "$WINEPREFIX/drive_c" -type f -iname '*paygo*.exe' -print > "$LOGDIR/executables-after-wizard.txt" 2>&1
+          cat "$LOGDIR/executables-after-wizard.txt"
+          exit 0
+
       - name: Launch installed PayGo and capture GUI + errors
         shell: bash
         continue-on-error: true
