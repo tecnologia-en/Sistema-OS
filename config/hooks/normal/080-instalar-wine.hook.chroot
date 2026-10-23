@@ -4,6 +4,10 @@ set -eu
 export DEBIAN_FRONTEND=noninteractive
 dpkg --add-architecture i386
 apt-get update
-apt-get install -y --no-install-recommends wine wine32:i386 libwine:i386 fonts-wine zenity unzip
+# Wine 32 bits precisa tambem das bibliotecas graficas i386 no Debian Live.
+# Sem libGL.so.1/i386 o PayGo falha ao criar contexto grafico.
+apt-get install -y --no-install-recommends \
+  wine wine32:i386 libwine:i386 fonts-wine zenity unzip \
+  libgl1:i386 libgl1-mesa-dri:i386 libvulkan1:i386 winbind
 dpkg-query -W wine wine32:i386 libwine:i386
 test -x /usr/lib/wine/wine
