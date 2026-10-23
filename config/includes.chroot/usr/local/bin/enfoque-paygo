@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import time
 import urllib.request
 
 # O instalador verificado e PE32, portanto nao misturar prefixo win64 e Wine32.
@@ -240,6 +241,29 @@ def principal_instalado():
     return min(encontrados)[1] if encontrados else None
 
 
+def aguardar_paygo_instalado(segundos=600):
+    """O bootstrap termina antes do assistente Inno Setup interno.
+
+    Nunca tratar saida zero do instalador externo como instalacao completa.
+    Exige que o executavel principal apareca e pare de ser gravado.
+    """
+    limite = time.monotonic() + segundos
+    while True:
+        aplicativo = principal_instalado()
+        if aplicativo is not None:
+            try:
+                tamanho = aplicativo.stat().st_size
+                if tamanho >= 1024 * 1024:
+                    time.sleep(2)
+                    if aplicativo.stat().st_size == tamanho:
+                        return aplicativo
+            except OSError:
+                pass
+        if time.monotonic() >= limite:
+            return None
+        time.sleep(5)
+
+
 def instalar():
     if not SETUP.is_file():
         aviso("O instalador oficial PayGo nao foi encontrado na ISO.", True)
@@ -247,19 +271,30 @@ def instalar():
     if not armazenamento_suficiente(MIN_FREE_INSTALL):
         return False
     aviso("Instalacao experimental PayGo Windows (32-bit). "
-          "Nao ative terminais de producao nem processe pagamentos.")
+          "Se aparecer um segundo assistente, avance por todas as telas "
+          "ate Concluir. Nao ative terminais de producao nem processe pagamentos.")
     try:
         codigo = comando_wine(str(SETUP), timeout=1200)
     except (OSError, subprocess.TimeoutExpired) as erro:
         aviso("Instalador PayGo nao concluiu: " + str(erro), True)
         return False
-    instalado = principal_instalado()
-    if codigo or instalado is None:
-        aviso("O instalador nao confirmou conclusao integral "
-              "(codigo " + str(codigo) + "). "
-              "Verifique o PayGo no laboratorio; nao utilize em caixa real.",
+    if codigo:
+        aviso("O instalador inicial retornou erro (codigo " + str(codigo)
+              + "). Nao utilizar em caixa real.", True)
+        return False
+    # SetupPayGo.exe faz bootstrap de outro instalador grafico. Esse processo
+    # precisa ser finalizado por completo antes de localizar PayGo.exe.
+    if principal_instalado() is None:
+        print("PayGo: aguardando o assistente de instalacao terminar; "
+              "finalize Avancar, Instalar e Concluir na janela aberta.",
+              file=sys.stderr)
+    instalado = aguardar_paygo_instalado()
+    if instalado is None:
+        aviso("O instalador inicial terminou, mas o PayGo principal "
+              "nao foi localizado apos o assistente. Termine as telas "
+              "de instalacao e tente novamente. Nenhum pagamento realizado.",
               True)
-        return bool(instalado)
+        return False
     return True
 
 
