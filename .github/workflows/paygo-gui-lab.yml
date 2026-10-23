@@ -15,10 +15,9 @@ jobs:
     env:
       DISPLAY: ":99"
       WINEARCH: win32
-      WINEPREFIX: ${{ runner.temp }}/paygo-wine32
+      WINEPREFIX: /tmp/paygo-wine32-lab
       WINEDEBUG: err+all
       WINETRICKS_GUI: none
-      WINEDLLOVERRIDES: "mscoree,mshtml="
     steps:
       - name: Install Wine32 and virtual X display
         shell: bash
