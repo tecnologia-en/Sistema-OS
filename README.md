@@ -1,7 +1,5 @@
 # Enfoque OS
 
-**Manual operacional completo:** [Acesso ao notebook, GitHub, build, transferência da ISO e testes no VirtualBox](docs/MANUAL_OPERACIONAL.md).
-
 Distribuicao Linux corporativa **experimental**, baseada em Debian 13 (Trixie) e XFCE.
 
 A imagem Live **0.1.2** foi compilada pelo GitHub Actions e testada em VM com 2 GB de RAM. Boot, XFCE, Firefox/HTTPS, rede, diagnostico, teclado ABNT2, locale pt_BR, fuso de Sao Paulo e reboot foram aprovados. **Ainda nao esta homologada para instalacao em PCs da empresa.**
@@ -51,3 +49,5 @@ QA 0.2.3: [dois boots e navegador padrao no laboratorio](docs/TESTE_2026-10-16_0
 - 0.2.5: login persistente com usuario e senha no instalador Debian (Calamares) e seletor de empresa no primeiro login, tela LightDM exigindo senha nos proximos acessos; correcoes finais de data e contraste na interface.
 
 - 0.2.7 (piloto): Wine 32/64 bits e PayGo Windows sem Warsaw incorporados; atalhos PayGo e Compatibilidade Windows na area de trabalho. Compatibilidade efetiva ainda nao foi testada. [Documentacao](docs/PAYGO_WINE_PILOTO.md).
+
+- 0.2.8 (piloto): corrigida inicializacao Wine com prefixo exclusivamente win32 e executavel PE32 do PayGo; teste real de cmd.exe, verificacao de espaco no modo Live e diagnostico ampliado. A instalacao do PayGo continua experimental, sem homologacao.

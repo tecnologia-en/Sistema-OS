@@ -1,6 +1,6 @@
-# PayGo no Enfoque OS 0.2.7 (piloto)
+# PayGo no Enfoque OS 0.2.8 (piloto)
 
-A ISO Debian 13 incorpora Wine 64 e 32 bits e o instalador oficial PayGo Windows sem Warsaw, com hashes verificados durante a compilacao. Nao e um modulo externo.
+A ISO Debian 13 incorpora Wine 32 bits e o instalador oficial PayGo Windows sem Warsaw, com hashes verificados durante a compilacao. Nao e um modulo externo.
 
 ## Area de trabalho
 
@@ -23,3 +23,23 @@ A ISO compilada nao comprova que o PayGo ou as dependencias .NET funcionam no Wi
 5. Somente sandbox, confirmacao/cancelamento e seguranca antes de considerar qualquer uso produtivo.
 
 Documentacao oficial: https://paygodev.readme.io/docs/kit-de-integra%C3%A7%C3%A3o-1
+
+
+## Atualizacao 0.2.8 - correcao comprovada
+
+O instalador oficial verificado e PE32. O launcher usa especificamente
+`/usr/lib/wine/wine`, `WINEARCH=win32` e prefixo exclusivo
+`~/.local/share/enfoque-os/paygo-win32`. O carregador Wine32 executou
+`wineboot.exe --init` e `cmd.exe /c echo ENFOQUE_WINE_OK` em
+laboratorio isolado com o conteudo da ISO. O instalador PayGo chegou
+a iniciar nesse ambiente, mas sua conclusao, requisitos .NET e operacao
+financeira continuam sem validacao.
+
+No modo Live da ISO 0.2.7, a camada gravavel era tmpfs com apenas 2 GB
+e chegava a 100% durante a inicializacao do Wine; isto causa DLLs
+faltantes e codigo 112 por falta de espaco. A 0.2.8 passa a verificar
+espaco livre, criar prefixo limpo de 32 bits e exigir teste de cmd.exe
+antes de abrir o instalador. Sem espaco, apresenta uma mensagem clara.
+Para persistencia, use um disco instalado; para laboratorio e possivel
+usar a variavel ENFOQUE_PAYGO_PREFIX apontando para um diretorio gravavel
+em volume seguro. Nao usar pagamentos reais.

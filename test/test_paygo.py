@@ -25,6 +25,11 @@ class PayGoImageTests(unittest.TestCase):
         self.assertIn("sha256sum -c -", data)
         self.assertIn("bccab187ff5ac25ad1e5351d584193aeb1a6f2ce467f783c5305f98d6b2d0531", data)
         self.assertIn("SetupPayGo.exe", data)
+        packages = (CFG / "hooks/normal/080-instalar-wine.hook.chroot").read_text()
+        self.assertIn("wine32:i386", packages)
+        self.assertIn("libwine:i386", packages)
+        self.assertNotIn("wine64", packages)
+        self.assertIn("/usr/lib/wine/wine", packages)
 
     def test_launchers_and_icons(self):
         for name, cmd, icon in (
@@ -36,11 +41,17 @@ class PayGoImageTests(unittest.TestCase):
             self.assertIn(cmd, path.read_text())
             self.assertTrue((CFG / "includes.chroot/usr/share/icons/hicolor/scalable/apps" /
                              (icon + ".svg")).is_file())
-        self.assertIn('VERSION="0.2.7"', (CFG / "includes.chroot/etc/enfoque-os-release").read_text())
+        self.assertIn('VERSION="0.2.8"', (CFG / "includes.chroot/etc/enfoque-os-release").read_text())
 
     def test_launcher_valid_python(self):
         self.assertTrue(LAUNCHER.stat().st_mode & stat.S_IXUSR)
         compile(LAUNCHER.read_text(), str(LAUNCHER), "exec")
+        src = LAUNCHER.read_text()
+        self.assertIn('WINEARCH"] = "win32"', src)
+        self.assertIn('WINELOADER"] = str(WINE32)', src)
+        self.assertIn('"cmd.exe", "/c", "echo", "ENFOQUE_WINE_OK"', src)
+        self.assertIn("MIN_FREE_INIT", src)
+        self.assertIn("paygo-win32", src)
 
     def test_executable_search_prefers_application(self):
         loader = importlib.machinery.SourceFileLoader("paygo_launcher_test", str(LAUNCHER))
