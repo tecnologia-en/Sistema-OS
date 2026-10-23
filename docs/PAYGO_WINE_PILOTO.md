@@ -43,3 +43,45 @@ antes de abrir o instalador. Sem espaco, apresenta uma mensagem clara.
 Para persistencia, use um disco instalado; para laboratorio e possivel
 usar a variavel ENFOQUE_PAYGO_PREFIX apontando para um diretorio gravavel
 em volume seguro. Nao usar pagamentos reais.
+
+## 0.2.9: USB GERTEC PPC930 no teste da VM
+O USB GERTEC PPC930 foi capturado pelo VirtualBox com VID/PID 1753:c902,
+reconhecido pelo Linux como /dev/ttyACM0 (driver cdc_acm) e aberto
+sem privilegios atraves do alias /dev/enfoque-pinpad com grupo plugdev.
+O alias passa a ser configurado pela ISO, e o Wine mapeia COM1 e COM8
+sem substituir configuracoes personalizadas de outros dispositivos.
+
+O instalador PayGo 5.1.50.924 concluiu em um prefixo Wine32 mantido num
+volume de laboratorio, com Wine Mono 10.4.1. A aplicacao PayGo.exe abriu
+uma janela de erro System.Management.WmiNetUtilsHelper (dependencia .NET/WMI),
+portanto ainda NAO foi validada a tela de ativacao ou qualquer transacao.
+O diagnostico de rede no Wine falhou para IPv6 de api.controlpay.com.br,
+embora os destinos IPv4 tenham respondido. Nao processar vendas nem ativar
+um terminal real enquanto nao houver validacao e autorizacao adequada.
+
+
+## 0.2.9 - teste de .NET nativo e assistente de dependencias
+
+Na VM Debian 13, a instalacao GUI do Microsoft .NET Framework 4.8
+oficial chegou a tela "Instalacao Concluida" num prefixo de laboratorio
+com Windows 7 SP1. A chave do registro
+`HKLM\Software\Microsoft\NET Framework Setup\NDP\v4\Full`
+retornou Release 0x80eb1 (528049); `mscorlib.dll` e `WMINet_Utils.dll`
+foram identificados. Isso valida o runtime, NAO a inicializacao completa
+da aplicacao PayGo.
+
+O launcher 0.2.9 agora verifica o registro .NET nativo antes de iniciar
+o instalador PayGo; caso falte, solicita consentimento, baixa o instalador
+da Microsoft em tempo de execucao, confere o SHA-256 e exibe a EULA.
+O binario da Microsoft NAO e redistribuido junto com a ISO. Em ambiente
+Live com espaco insuficiente, a operacao e recusada com mensagem clara.
+Nao executa transacoes reais.
+
+Os testes de comunicacao do instalador PayGo responderam em IPv4,
+mas falharam no IPv6 da API ControlPay na VM NAT sem rota IPv6 funcional.
+Somente no LABORATORIO foi experimentado um mapeamento temporario de
+`/etc/hosts` para um endereco IPv4 observado. Nao inclua IP fixo de
+API de pagamentos no sistema de producao: o destino pode mudar.
+A abertura final do PayGo e seu protocolo com o PIN-pad ainda dependem
+de validacao independente; a simples abertura de COM1/COM8 nao significa
+que pagamentos funcionem.

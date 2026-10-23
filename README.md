@@ -51,3 +51,6 @@ QA 0.2.3: [dois boots e navegador padrao no laboratorio](docs/TESTE_2026-10-16_0
 - 0.2.7 (piloto): Wine 32/64 bits e PayGo Windows sem Warsaw incorporados; atalhos PayGo e Compatibilidade Windows na area de trabalho. Compatibilidade efetiva ainda nao foi testada. [Documentacao](docs/PAYGO_WINE_PILOTO.md).
 
 - 0.2.8 (piloto): corrigida inicializacao Wine com prefixo exclusivamente win32 e executavel PE32 do PayGo; teste real de cmd.exe, verificacao de espaco no modo Live e diagnostico ampliado. A instalacao do PayGo continua experimental, sem homologacao.
+
+- 0.2.9 (piloto): alias USB persistente para pinpad GERTEC PPC930 (1753:c902), permissao restrita e mapeamento Wine COM1/COM8. Corrigida deteccao do executavel PayGo para nao confundir iexplore com PayGo quando o prefixo contem "paygo". Testes de terminal e .NET/WMI ainda pendentes.
+- PayGo piloto .NET 4.8: verificacao do registro e assistente de instalacao oficial Microsoft com consentimento, checksum e configuracao isolada de Wine32. Nao ha homologacao TEF nem runtime .NET redistribuido na ISO.
