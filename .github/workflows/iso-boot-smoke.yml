@@ -1,0 +1,82 @@
+name: Boot smoke - Enfoque OS 0.2.9
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/iso-boot-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - name: Download verified ISO artifact (run 31)
+        uses: actions/download-artifact@v4
+        with:
+          name: enfoque-os-iso-31
+          repository: tecnologia-en/Sistema-OS
+          run-id: 39997954382
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/iso
+
+      - name: Verify ISO SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${{ runner.temp }}/iso"
+          sha256sum -c SHA256SUMS
+          test -s enfoque-os-0.2.9-piloto-amd64.iso
+          ls -lh enfoque-os-0.2.9-piloto-amd64.iso
+
+      - name: Install boot smoke tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 xorriso
+
+      - name: Boot original ISO live filesystem with QEMU and inspect serial console
+        shell: bash
+        run: |
+          set -euo pipefail
+          ISO="${{ runner.temp }}/iso/enfoque-os-0.2.9-piloto-amd64.iso"
+          WORK="${{ runner.temp }}/boot-smoke"
+          mkdir -p "$WORK"
+          xorriso -indev "$ISO" -find /live -type f -print 2>/dev/null > "$WORK/live-files.txt"
+          cat "$WORK/live-files.txt"
+          KERNEL=$(grep -E '^/live/vmlinuz[^/]*$' "$WORK/live-files.txt" | head -n 1)
+          INITRD=$(grep -E '^/live/initrd[^/]*$' "$WORK/live-files.txt" | head -n 1)
+          test -n "$KERNEL"
+          test -n "$INITRD"
+          xorriso -osirrox on -indev "$ISO" -extract "$KERNEL" "$WORK/vmlinuz" -extract "$INITRD" "$WORK/initrd.img" >/dev/null
+          ACCEL=tcg
+          if test -c /dev/kvm && test -r /dev/kvm && test -w /dev/kvm; then
+            ACCEL=kvm
+          fi
+          echo "QEMU accelerator: $ACCEL"
+          set +e
+          timeout --signal=TERM 300 qemu-system-x86_64 \
+            -accel "$ACCEL" -m 2304 -smp 2 -no-reboot \
+            -cdrom "$ISO" -boot d \
+            -kernel "$WORK/vmlinuz" -initrd "$WORK/initrd.img" \
+            -append 'boot=live components nopersistence console=ttyS0,115200n8 systemd.unit=multi-user.target' \
+            -display none -serial stdio -monitor none \
+            > "$WORK/serial.log" 2>&1
+          STATUS=$?
+          set -e
+          echo "QEMU exit: $STATUS"
+          tail -n 90 "$WORK/serial.log"
+          if grep -Eiq 'Kernel panic|Unable to find a medium containing a live file system' "$WORK/serial.log"; then
+            echo 'FAIL: kernel or live media boot failure'
+            exit 1
+          fi
+          if grep -Eiq 'login:|Reached target .*Multi-User|Started Serial Getty|Reached target multi-user.target' "$WORK/serial.log"; then
+            echo 'PASS: Live Debian reached userspace login target from this ISO'
+          else
+            echo 'FAIL: No userspace login target detected on serial console'
+            exit 1
+          fi
