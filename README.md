@@ -1,5 +1,7 @@
 # Enfoque OS
 
+**Manual operacional completo:** [Acesso ao notebook, GitHub, build, transferência da ISO e testes no VirtualBox](docs/MANUAL_OPERACIONAL.md).
+
 Distribuicao Linux corporativa **experimental**, baseada em Debian 13 (Trixie) e XFCE.
 
 A imagem Live **0.1.2** foi compilada pelo GitHub Actions e testada em VM com 2 GB de RAM. Boot, XFCE, Firefox/HTTPS, rede, diagnostico, teclado ABNT2, locale pt_BR, fuso de Sao Paulo e reboot foram aprovados. **Ainda nao esta homologada para instalacao em PCs da empresa.**
