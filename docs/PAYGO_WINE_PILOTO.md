@@ -43,3 +43,18 @@ antes de abrir o instalador. Sem espaco, apresenta uma mensagem clara.
 Para persistencia, use um disco instalado; para laboratorio e possivel
 usar a variavel ENFOQUE_PAYGO_PREFIX apontando para um diretorio gravavel
 em volume seguro. Nao usar pagamentos reais.
+
+## 0.2.9: USB GERTEC PPC930 no teste da VM
+O USB GERTEC PPC930 foi capturado pelo VirtualBox com VID/PID 1753:c902,
+reconhecido pelo Linux como /dev/ttyACM0 (driver cdc_acm) e aberto
+sem privilegios atraves do alias /dev/enfoque-pinpad com grupo plugdev.
+O alias passa a ser configurado pela ISO, e o Wine mapeia COM1 e COM8
+sem substituir configuracoes personalizadas de outros dispositivos.
+
+O instalador PayGo 5.1.50.924 concluiu em um prefixo Wine32 mantido num
+volume de laboratorio, com Wine Mono 10.4.1. A aplicacao PayGo.exe abriu
+uma janela de erro System.Management.WmiNetUtilsHelper (dependencia .NET/WMI),
+portanto ainda NAO foi validada a tela de ativacao ou qualquer transacao.
+O diagnostico de rede no Wine falhou para IPv6 de api.controlpay.com.br,
+embora os destinos IPv4 tenham respondido. Nao processar vendas nem ativar
+um terminal real enquanto nao houver validacao e autorizacao adequada.
