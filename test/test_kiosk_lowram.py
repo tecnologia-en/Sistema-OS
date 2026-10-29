@@ -65,6 +65,9 @@ class KioskImageTests(unittest.TestCase):
         self.assertNotIn("xfdesktop ",session)
         self.assertNotIn("xfce4-terminal",session)
         self.assertIn("--guest",session)
+        hook=(ROOT/"config/hooks/normal/097-enfoque-lowram-kiosk.hook.chroot").read_text()
+        self.assertIn("chmod 0644",hook)
+        self.assertIn("chown root:root",hook)
         self.assertIn("https://intranet.enfoquepapelaria.com.br/",session)
 
     def test_shell_and_python_syntax(self):

@@ -24,12 +24,25 @@ if command -v plymouth-set-default-theme >/dev/null 2>&1; then
     plymouth-set-default-theme enfoque-os
     update-initramfs -u -k all
 fi
+# Security policy and systemd/Logrotate reject group-writable configuration.
+for policy in /etc/default/zramswap \
+              /etc/sysctl.d/90-enfoque-lowram.conf \
+              /etc/logrotate.d/enfoque-paygo-tef \
+              /etc/systemd/system/enfoque-paygo-tef.service \
+              /etc/default/grub.d/90-enfoque-kiosk.cfg \
+              /etc/apt/apt.conf.d/91enfoque-kiosk-maintenance; do
+    chown root:root "$policy"
+    chmod 0644 "$policy"
+done
+chown root:root /usr/share/xsessions/enfoque-kiosk.desktop
+chmod 0644 /usr/share/xsessions/enfoque-kiosk.desktop
 for program in /usr/local/bin/enfoque-kiosk-session \
                /usr/local/bin/enfoque-paygo-tef-run \
                /usr/local/bin/enfoque-tef-display-wait \
                /usr/local/bin/enfoque-paygo-tef-health \
                /usr/local/sbin/enfoque-kiosk-control \
                /usr/local/sbin/enfoque-paygo-provision; do
+    chown root:root "$program"
     chmod 0755 "$program"
 done
 # Only desktop launchers shipped by our ISO build (never user-downloaded files).
