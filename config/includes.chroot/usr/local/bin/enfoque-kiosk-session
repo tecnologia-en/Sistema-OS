@@ -39,7 +39,7 @@ if [ -z "$BROWSER" ]; then
     echo "Navegador do quiosque nao instalado" >&2
     exit 2
 fi
-if [ -n "$XDG_RUNTIME_DIR" ]; then
+if [ -n "${XDG_RUNTIME_DIR:-}" ]; then
     CACHE="$XDG_RUNTIME_DIR/enfoque-kiosk-chrome"
 else
     CACHE="$HOME/.cache/enfoque-kiosk-chrome"

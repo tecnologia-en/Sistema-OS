@@ -38,6 +38,8 @@ Referencia root-only: /opt/paygo-tef/reference. Runtime Wine root-owned: /opt/pa
 5. TI: sudo /usr/local/sbin/enfoque-kiosk-control enable --url https://intranet.enfoquepapelaria.com.br/
 6. Reiniciar em janela de manutencao, conferir systemctl status enfoque-paygo-tef e executar sudo -u enfoque-tef /usr/local/bin/enfoque-paygo-tef-health.
 
+Se o provisionamento for interrompido APOS todas as copias, a TI pode verificar as copias e repetir os mesmos parametros com --resume. Nunca sobrescrever os dados existentes automaticamente.
+
 Para desfazer sem apagar dados: sudo /usr/local/sbin/enfoque-kiosk-control disable. Reiniciar LightDM na manutencao ou reiniciar o computador. O login administrativo com senha volta a ser usado.
 
 ## Integridade e quedas de energia

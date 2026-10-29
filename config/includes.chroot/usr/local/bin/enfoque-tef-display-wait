@@ -1,0 +1,16 @@
+#!/bin/sh
+# Only the TEF service uses this preflight; wait for X11 authorization granted
+# by the restricted kiosk session before creating a Wine/PayGo process.
+set -eu
+[ "$(id -un)" = "enfoque-tef" ] || exit 2
+[ "$DISPLAY" = ":0" ] || exit 2
+attempt=0
+while [ "$attempt" -lt 45 ]; do
+    if DISPLAY=:0 /usr/bin/xset q >/dev/null 2>&1; then
+        exit 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 2
+done
+echo "Quiosque TEF: sessao grafica nao liberou acesso a display :0" >&2
+exit 1

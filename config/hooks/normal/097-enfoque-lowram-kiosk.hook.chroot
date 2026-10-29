@@ -26,6 +26,7 @@ if command -v plymouth-set-default-theme >/dev/null 2>&1; then
 fi
 for program in /usr/local/bin/enfoque-kiosk-session \
                /usr/local/bin/enfoque-paygo-tef-run \
+               /usr/local/bin/enfoque-tef-display-wait \
                /usr/local/bin/enfoque-paygo-tef-health \
                /usr/local/sbin/enfoque-kiosk-control \
                /usr/local/sbin/enfoque-paygo-provision; do

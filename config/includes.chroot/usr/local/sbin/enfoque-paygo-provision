@@ -75,6 +75,7 @@ def main():
     ap.add_argument("--wine-dir",type=Path,required=True)
     ap.add_argument("--terminal",type=int,required=True)
     ap.add_argument("--lab",action="store_true",help="permite testes em Debian Live; NUNCA habilita producao")
+    ap.add_argument("--resume",action="store_true",help="retoma exclusivamente copias completas verificadas")
     ap.add_argument("--confirm-same-device",action="store_true",help="confirma ativacao na mesma maquina")
     args=ap.parse_args()
     if os.geteuid()!=0:
@@ -95,18 +96,35 @@ def main():
         raise RuntimeError("Somente DEMO homologado; producao requer aprovacao da adquirente")
     check_wine(wine)
     if (STATE/"provisioned").exists():
-        raise RuntimeError("TEF existente: NUNCA substituir banco ou ativacao")
-    if (OPT/"reference").exists() or (OPT/"wine").exists() or (STATE/"runtime").exists():
-        raise RuntimeError("Diretorios TEF existentes; intervencao da TI necessaria")
-    # Preserve device-specific activation. Nothing below is tracked by Git.
-    safe_copy(wine,OPT/"wine")
+        raise RuntimeError("TEF ja provisionado: nao substituir dados")
+    partial_paths=(OPT/"wine",OPT/"reference",STATE/"runtime")
+    if args.resume:
+        if not all(p.is_dir() and not p.is_symlink() for p in partial_paths):
+            raise RuntimeError("Retomada recusada: as tres copias nao estao completas")
+        if any(p.with_name(p.name+".installing").exists() for p in partial_paths):
+            raise RuntimeError("Retomada recusada: copia parcial ainda existe")
+        for original,copy in (
+            (wine/"lib/wine/i386-windows/wbemprox.dll",OPT/"wine/lib/wine/i386-windows/wbemprox.dll"),
+            (source/"drive_c/ProgramData/PayGo/Data/PayGo.db",OPT/"reference/drive_c/ProgramData/PayGo/Data/PayGo.db"),
+            (source/"drive_c/ProgramData/PayGo/Data/PayGo.db",STATE/"runtime/drive_c/ProgramData/PayGo/Data/PayGo.db"),
+        ):
+            if not copy.is_file() or hashlib.sha256(original.read_bytes()).digest()!=hashlib.sha256(copy.read_bytes()).digest():
+                raise RuntimeError("Retomada recusada: arquivo diferente da fonte")
+        if db_profile(STATE/"runtime")[0]!=profile:
+            raise RuntimeError("Retomada recusada: terminal do clone incorreto")
+        print("Retomada verificada: recuperando somente as permissoes",flush=True)
+    else:
+        if any(p.exists() or p.is_symlink() for p in partial_paths):
+            raise RuntimeError("TEF anterior encontrado: nao sobrescrever")
+        # The sources are activated only on this physical/virtual device.
+        safe_copy(wine,OPT/"wine")
+        safe_copy(source,OPT/"reference")
+        safe_copy(source,STATE/"runtime")
     secure_tree(OPT/"wine",0,0,0o755,None)
     for n in ("bin/wine","bin/wineserver"):
         p=OPT/"wine"/n
         if p.exists():p.chmod(0o755)
-    safe_copy(source,OPT/"reference")
     secure_tree(OPT/"reference",0,0)
-    safe_copy(source,STATE/"runtime")
     secure_tree(STATE/"runtime",tef.pw_uid,tef.pw_gid)
     # Immutable to the unprivileged TEF process: application EXEs and DLLs.
     executable_dir=STATE/"runtime/drive_c/Program Files/PayGo"
@@ -124,21 +142,21 @@ def main():
     ):
         p=STATE/"runtime"/rel
         p.mkdir(parents=True,exist_ok=True)
-        p.chown(tef.pw_uid,tef.pw_gid)
+        os.chown(p,tef.pw_uid,tef.pw_gid)
         p.chmod(0o700)
-    STATE.chown(tef.pw_uid,tef.pw_gid)
+    os.chown(STATE,tef.pw_uid,tef.pw_gid)
     STATE.chmod(0o700)
-    OPT.chown(0,0)
+    os.chown(OPT,0,0)
     OPT.chmod(0o711)
     (OPT/"reference").chmod(0o700)
     (OPT/"wine").chmod(0o755)
     (STATE/"provisioned").write_text(
         "DEMO: copia por dispositivo; TI deve revalidar no pinpad.\n",encoding="utf-8")
-    (STATE/"provisioned").chown(0,tef.pw_gid)
+    os.chown(STATE/"provisioned",0,tef.pw_gid)
     (STATE/"provisioned").chmod(0o640)
     log=Path("/var/log/paygo-tef")
     log.mkdir(parents=True,exist_ok=True)
-    log.chown(tef.pw_uid,tef.pw_gid)
+    os.chown(log,tef.pw_uid,tef.pw_gid)
     log.chmod(0o700)
     print(f"TEF DEMO provisionado: terminal {args.terminal}. Referencia protegida; sem dados enviados ao Git.")
     print("Nunca restaure o banco de transacoes automaticamente; examine antes de recuperar.")

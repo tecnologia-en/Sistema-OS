@@ -20,6 +20,7 @@ class KioskImageTests(unittest.TestCase):
             "usr/share/xsessions/enfoque-kiosk.desktop",
             "usr/local/bin/enfoque-kiosk-session",
             "usr/local/bin/enfoque-paygo-tef-run",
+            "usr/local/bin/enfoque-tef-display-wait",
             "usr/local/bin/enfoque-paygo-tef-health",
             "usr/local/sbin/enfoque-kiosk-control",
             "usr/local/sbin/enfoque-paygo-provision",
@@ -56,7 +57,7 @@ class KioskImageTests(unittest.TestCase):
         for term in ("DenyUsers enfoque-kiosk enfoque-tef","polkit.Result.NO",
                      "autologin-user=enfoque-kiosk","live_mode()","validate_admin_recovery()"):
             self.assertIn(term,admin)
-        for term in ("User=enfoque-tef","SupplementaryGroups=dialout",
+        for term in ("ExecStartPre=/usr/local/bin/enfoque-tef-display-wait","User=enfoque-tef","SupplementaryGroups=dialout",
                      "ProtectSystem=strict","NoNewPrivileges=true","PrivateTmp=true"):
             self.assertIn(term,service)
         self.assertIn("xhost +SI:localuser:enfoque-tef",session)
@@ -70,6 +71,7 @@ class KioskImageTests(unittest.TestCase):
         for rel in (
             "usr/local/bin/enfoque-kiosk-session",
             "usr/local/bin/enfoque-paygo-tef-run",
+            "usr/local/bin/enfoque-tef-display-wait",
         ):
             f=IMAGE/rel
             # sh syntax verification on Linux CI; skip only on Windows hosts without sh.
@@ -85,6 +87,13 @@ class KioskImageTests(unittest.TestCase):
         ):
             f=IMAGE/rel
             ast.parse(f.read_text(encoding="utf-8"),filename=str(f))
+
+    def test_provisioner_can_resume_and_does_not_use_missing_path_chown(self):
+        script=(IMAGE/"usr/local/sbin/enfoque-paygo-provision").read_text()
+        self.assertIn('--resume',script)
+        self.assertIn('os.chown(STATE,tef.pw_uid,tef.pw_gid)',script)
+        self.assertIn('Retomada recusada',script)
+        self.assertNotIn('.chown(',script.replace('os.chown(',''))
 
     def test_health_checks_fail_closed_without_modifying_database(self):
         path=IMAGE/"usr/local/bin/enfoque-paygo-tef-health"

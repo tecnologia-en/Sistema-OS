@@ -16,6 +16,8 @@ Environment=HOME=/var/lib/paygo-tef
 Environment=DISPLAY=:0
 Environment=WINEPREFIX=/var/lib/paygo-tef/runtime
 UMask=0077
+ExecStartPre=/usr/local/bin/enfoque-tef-display-wait
+TimeoutStartSec=95
 ExecStart=/usr/local/bin/enfoque-paygo-tef-run
 Restart=on-failure
 RestartSec=12
