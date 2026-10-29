@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - feat/paygo-wine-os-027
+      - feat/lowram-kiosk-028
     paths:
       - 'config/**'
       - 'scripts/build-iso.sh'

@@ -1,0 +1,6 @@
+// Managed Enfoque kiosks: no unscheduled network downloads, upgrades or reboots.
+// TI must schedule security maintenance; disabling automatic updates is not a patch policy.
+APT::Periodic::Update-Package-Lists "0";
+APT::Periodic::Download-Upgradeable-Packages "0";
+APT::Periodic::Unattended-Upgrade "0";
+Unattended-Upgrade::Automatic-Reboot "false";

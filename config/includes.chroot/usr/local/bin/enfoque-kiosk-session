@@ -1,0 +1,56 @@
+#!/bin/sh
+# Enfoque OS: restricted XFCE kiosk session, separate TEF service.
+set -eu
+if [ "$(id -un)" != "enfoque-kiosk" ]; then
+    echo "Somente a conta do quiosque pode iniciar esta sessao." >&2
+    exit 1
+fi
+umask 077
+export XDG_CURRENT_DESKTOP=XFCE
+export XDG_SESSION_DESKTOP=enfoque-kiosk
+export NO_AT_BRIDGE=1
+
+# XFCE window manager only: no desktop icons, menu, panel or terminal hotkeys.
+if command -v xset >/dev/null 2>&1; then
+    xset s off -dpms >/dev/null 2>&1 || :
+fi
+if command -v xfsettingsd >/dev/null 2>&1; then
+    xfsettingsd >/dev/null 2>&1 &
+fi
+xfwm4 --compositor=off >/dev/null 2>&1 &
+
+# Permit only the separate, unprivileged TEF account to display required
+# payment prompts. The browser account cannot read the TEF database.
+if command -v xhost >/dev/null 2>&1; then
+    xhost +SI:localuser:enfoque-tef >/dev/null 2>&1 || :
+fi
+
+URL_FILE=/etc/enfoque-os/kiosk-url
+URL=https://intranet.enfoquepapelaria.com.br/
+if [ -r "$URL_FILE" ]; then
+    IFS= read -r URL < "$URL_FILE" || :
+fi
+case "$URL" in
+    https://intranet.enfoquepapelaria.com.br/*|https://app.enfoquepapelaria.com.br/*) ;;
+    *) echo "URL de quiosque nao autorizada" >&2; exit 2 ;;
+esac
+BROWSER=$(command -v google-chrome-stable || command -v chromium || :)
+if [ -z "$BROWSER" ]; then
+    echo "Navegador do quiosque nao instalado" >&2
+    exit 2
+fi
+if [ -n "$XDG_RUNTIME_DIR" ]; then
+    CACHE="$XDG_RUNTIME_DIR/enfoque-kiosk-chrome"
+else
+    CACHE="$HOME/.cache/enfoque-kiosk-chrome"
+fi
+mkdir -p "$CACHE"
+chmod 700 "$CACHE"
+# Guest profile is ephemeral: kiosk must not retain plaintext browser passwords.
+while :; do
+    "$BROWSER" --kiosk --guest --no-first-run --no-default-browser-check \
+        --disable-background-mode --disable-session-crashed-bubble \
+        --disable-features=MediaRouter,Translate --disable-pinch \
+        --disk-cache-size=16777216 --user-data-dir="$CACHE" "$URL" || :
+    sleep 3
+done

@@ -1,0 +1,8 @@
+# Enfoque OS - minimal Plymouth script reusing bundled company artwork.
+wallpaper = Image("wallpaper.png");
+background = Sprite(wallpaper.Scale(Window.GetWidth(), Window.GetHeight()));
+background.SetZ(-100);
+logo = Image("logo.png");
+brand = Sprite(logo);
+brand.SetPosition((Window.GetWidth() - logo.GetWidth()) / 2,
+                  Window.GetHeight() * 0.68, 1);

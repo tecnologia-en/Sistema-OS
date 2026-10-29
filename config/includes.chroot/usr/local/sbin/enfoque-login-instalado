@@ -3,6 +3,7 @@
 set -eu
 [ ! -d /run/live/medium ] || exit 0
 if grep -Eq '(^| )boot=live( |$)' /proc/cmdline; then exit 0; fi
+[ ! -e /etc/enfoque-os/kiosk.enabled ] || exit 0
 mkdir -p /etc/lightdm/lightdm.conf.d
 target=/etc/lightdm/lightdm.conf.d/99-enfoque-login.conf
 if [ ! -e "$target" ]; then

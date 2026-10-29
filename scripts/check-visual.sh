@@ -29,8 +29,8 @@ do
   need "$path"
 done
 sh -n "$ROOT/config/includes.chroot/usr/local/bin/enfoque-aplicar-visual"
-grep -Eq '^timeout 50$' "$ROOT/config/bootloaders/isolinux/isolinux.cfg" || fail 'timeout BIOS'
-grep -Eq '^set timeout=5$' "$ROOT/config/bootloaders/grub-pc/config.cfg" || fail 'timeout EFI'
+grep -q '^menu hidden$' "$ROOT/config/bootloaders/syslinux_common/menu.cfg" || fail 'menu BIOS nao oculto'\ngrep -Eq '^timeout 20$' "$ROOT/config/bootloaders/isolinux/isolinux.cfg" || fail 'timeout BIOS'
+grep -Eq '^set timeout=2$' "$ROOT/config/bootloaders/grub-pc/config.cfg" || fail 'timeout EFI'
 grep -Fq 'menu default' "$ROOT/config/bootloaders/syslinux_common/live.cfg.in" || fail 'Live padrao ausente'
 grep -Fq 'Exec=/usr/local/bin/enfoque-aplicar-visual' "$ROOT/config/includes.chroot/etc/xdg/autostart/enfoque-visual.desktop" || fail 'autostart sem execucao'
 grep -Eq '^arc-theme$' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'tema Arc nao instalado'

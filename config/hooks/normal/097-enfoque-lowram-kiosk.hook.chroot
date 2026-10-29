@@ -1,0 +1,37 @@
+#!/bin/sh
+# Runs only while assembling the ISO chroot, never on customers' terminals.
+set -eu
+export DEBIAN_FRONTEND=noninteractive
+echo "Enfoque OS: configurando imagem leve e suporte ao quiosque"
+# Do not disable CUPS itself: Enfoque stores still need local printers.
+for service in avahi-daemon.service avahi-daemon.socket cups-browsed.service \
+               NetworkManager-wait-online.service unattended-upgrades.service; do
+    systemctl disable "$service" >/dev/null 2>&1 || :
+done
+for timer in apt-daily.timer apt-daily-upgrade.timer; do
+    systemctl disable "$timer" >/dev/null 2>&1 || :
+done
+systemctl enable zramswap.service >/dev/null
+# No TEF account is auto-logged-in on the Live ISO. TI enables kiosk after
+# an installed administrator performs onboarding and device-specific activation.
+# Keep the ordinary installation login / support path intact.
+mkdir -p /usr/share/plymouth/themes/enfoque-os
+cp -f /usr/share/backgrounds/enfoque-os/wallpaper.png \
+  /usr/share/plymouth/themes/enfoque-os/wallpaper.png
+cp -f /usr/share/icons/hicolor/256x256/apps/enfoque-os.png \
+  /usr/share/plymouth/themes/enfoque-os/logo.png
+if command -v plymouth-set-default-theme >/dev/null 2>&1; then
+    plymouth-set-default-theme enfoque-os
+    update-initramfs -u -k all
+fi
+for program in /usr/local/bin/enfoque-kiosk-session \
+               /usr/local/bin/enfoque-paygo-tef-run \
+               /usr/local/bin/enfoque-paygo-tef-health \
+               /usr/local/sbin/enfoque-kiosk-control \
+               /usr/local/sbin/enfoque-paygo-provision; do
+    chmod 0755 "$program"
+done
+# Only desktop launchers shipped by our ISO build (never user-downloaded files).
+find /etc/skel/Desktop /usr/share/applications -maxdepth 1 \
+  -type f -name '*.desktop' -exec chmod 0755 {} +
+echo "Enfoque OS: imagem preparada; quiosque exige provisionamento da TI"

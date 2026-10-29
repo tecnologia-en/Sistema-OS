@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Enfoque OS - Quiosque
+Comment=Sessao restrita de atendimento da Enfoque
+Type=Application
+Exec=/usr/local/bin/enfoque-kiosk-session
+TryExec=/usr/local/bin/enfoque-kiosk-session
+DesktopNames=XFCE

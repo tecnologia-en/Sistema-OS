@@ -1,0 +1,33 @@
+[Unit]
+Description=Enfoque OS - PayGo TEF isolado (somente em computadores provisionados)
+After=lightdm.service NetworkManager.service
+Wants=network.target
+ConditionPathExists=/etc/enfoque-os/kiosk.enabled
+ConditionPathExists=/var/lib/paygo-tef/provisioned
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=enfoque-tef
+Group=enfoque-tef
+SupplementaryGroups=dialout
+WorkingDirectory=/var/lib/paygo-tef
+Environment=HOME=/var/lib/paygo-tef
+Environment=DISPLAY=:0
+Environment=WINEPREFIX=/var/lib/paygo-tef/runtime
+UMask=0077
+ExecStart=/usr/local/bin/enfoque-paygo-tef-run
+Restart=on-failure
+RestartSec=12
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/paygo-tef /var/log/paygo-tef
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=false
+
+[Install]
+WantedBy=graphical.target

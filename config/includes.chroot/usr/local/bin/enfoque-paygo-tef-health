@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+"""Fail closed on corrupt PayGo data; do not overwrite financial transaction data."""
+from contextlib import closing
+import os
+from pathlib import Path
+import sqlite3
+import sys
+
+BASE = Path("/var/lib/paygo-tef")
+PREFIX = BASE / "runtime"
+DATABASE = PREFIX / "drive_c/ProgramData/PayGo/Data/PayGo.db"
+PINPAD = PREFIX / "dosdevices/com8"
+WRITE_DIRS = (
+    "drive_c/ProgramData/PayGo/Data",
+    "drive_c/ProgramData/PayGo/Log",
+    "drive_c/ProgramData/PayGo/PGWebLib/Data",
+    "drive_c/ProgramData/PayGo/PGWebLib/Log",
+)
+def check():
+    if not (BASE / "provisioned").is_file():
+        raise RuntimeError("TEF nao provisionado")
+    if not DATABASE.is_file():
+        raise RuntimeError("Banco TEF ausente")
+    with closing(sqlite3.connect(f"file:{DATABASE}?mode=ro", uri=True, timeout=5)) as db:
+        if db.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+            raise RuntimeError("Banco TEF nao passou na verificacao de integridade")
+        row = db.execute("SELECT TER_Id,TER_TERF_Id FROM PAY_Terminal LIMIT 1").fetchone()
+        if not row or not all(row):
+            raise RuntimeError("Terminal TEF nao configurado")
+    for directory in WRITE_DIRS:
+        p = PREFIX / directory
+        if not p.is_dir() or not os.access(p, os.R_OK | os.W_OK | os.X_OK):
+            raise RuntimeError("Diretorio TEF sem escrita: " + directory)
+    if PINPAD.is_symlink() and not PINPAD.resolve().exists():
+        raise RuntimeError("COM8 aponta para dispositivo ausente")
+    if not (PREFIX / "drive_c/Program Files/PayGo/PayGo.exe").is_file():
+        raise RuntimeError("Executavel PayGo ausente")
+    return row
+
+def main():
+    try:
+        terminal = check()
+        if "--quiet" not in sys.argv:
+            print(f"TEF integro; terminal {terminal[0]}; nenhum dado de pagamento exibido")
+        return 0
+    except (OSError, sqlite3.Error, RuntimeError) as error:
+        print("Falha na integridade do TEF: " + str(error), file=sys.stderr)
+        return 1
+
+if __name__ == "__main__":
+    sys.exit(main())

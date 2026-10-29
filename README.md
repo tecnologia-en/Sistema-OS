@@ -51,3 +51,6 @@ QA 0.2.3: [dois boots e navegador padrao no laboratorio](docs/TESTE_2026-10-16_0
 - 0.2.5: login persistente com usuario e senha no instalador Debian (Calamares) e seletor de empresa no primeiro login, tela LightDM exigindo senha nos proximos acessos; correcoes finais de data e contraste na interface.
 
 - 0.2.7 (piloto): Wine 32/64 bits e PayGo Windows sem Warsaw incorporados; atalhos PayGo e Compatibilidade Windows na area de trabalho. Compatibilidade efetiva ainda nao foi testada. [Documentacao](docs/PAYGO_WINE_PILOTO.md).
+
+## Enfoque OS 0.2.8 ? baixo consumo / quiosque
+\n- Configuracao XFCE para 2 GiB, com ZRAM LZ4, Plymouth e menos servicos autom?ticos.\n- Quiosque opt-in com contas separadas para navegador e PayGo; nunca inclui ativacoes no Git.\n- Documentacao de configuracao, recuperacao, logs e testes: [QUIOSQUE_BAIXA_RAM_028.md](docs/QUIOSQUE_BAIXA_RAM_028.md).\n- **TEF:** debito DEMO homologado no terminal Linux; credito e instalacao persistente ainda exigem QA antes de producao.\n

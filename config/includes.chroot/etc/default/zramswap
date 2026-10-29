@@ -1,0 +1,6 @@
+# Enfoque OS: compressed memory for 2 GiB terminals.
+# PERCENT is virtual swap capacity, not a preallocation of physical RAM.
+ALGO=lz4
+PERCENT=100
+SIZE=512
+PRIORITY=100

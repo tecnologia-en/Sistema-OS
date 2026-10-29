@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+"""Provision opt-in kiosk on an installed Enfoque OS, preserving IT recovery."""
+import argparse
+import os
+from pathlib import Path
+import pwd
+import shutil
+import subprocess
+import sys
+import tempfile
+from urllib.parse import urlparse
+
+FLAG = Path("/etc/enfoque-os/kiosk.enabled")
+URL_FILE = Path("/etc/enfoque-os/kiosk-url")
+LIGHTDM = Path("/etc/lightdm/lightdm.conf.d/zz-enfoque-kiosk.conf")
+POLKIT = Path("/etc/polkit-1/rules.d/90-enfoque-kiosk.rules")
+SSHD = Path("/etc/ssh/sshd_config.d/90-enfoque-kiosk.conf")
+ALLOWED_HOSTS = {"intranet.enfoquepapelaria.com.br", "app.enfoquepapelaria.com.br"}
+
+def run(*cmd):
+    subprocess.run(cmd, check=True)
+
+def atomic(path, content, mode=0o644):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".enfoque-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, mode)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+def check_root():
+    if os.geteuid() != 0:
+        raise RuntimeError("Somente a TI (root) pode alterar o modo quiosque")
+
+def live_mode():
+    return Path("/run/live/medium").exists() or "boot=live" in Path("/proc/cmdline").read_text(errors="replace")
+
+def ensure_user(name, home, groups, system=False, shell="/bin/bash"):
+    try:
+        p = pwd.getpwnam(name)
+    except KeyError:
+        args = ["useradd"]
+        if system:
+            args += ["--system"]
+        args += ["--create-home", "--user-group", "--home-dir", str(home), "--shell", shell,
+                 "--groups", groups, name]
+        run(*args)
+        p = pwd.getpwnam(name)
+    if p.pw_dir != str(home):
+        raise RuntimeError("Conta preexistente com home inesperado: " + name)
+    if p.pw_uid == 0:
+        raise RuntimeError("Conta do quiosque nao pode ser root")
+    home.mkdir(parents=True, exist_ok=True)
+    os.chown(home, p.pw_uid, p.pw_gid)
+    os.chmod(home, 0o700)
+    # No password-based console or SSH logins. LightDM autologin uses its own PAM service.
+    run("usermod", "--lock", name)
+    return p
+
+def ensure_access_policy():
+    atomic(POLKIT, """// Never grant administrative Polkit actions to a kiosk or TEF process.
+polkit.addRule(function(action, subject) {
+    if (subject.user == "enfoque-kiosk" || subject.user == "enfoque-tef")
+        return polkit.Result.NO;
+});
+""")
+    atomic(SSHD, "DenyUsers enfoque-kiosk enfoque-tef\n")
+    if shutil.which("sshd"):
+        run("sshd", "-t")
+
+def prepare():
+    check_root()
+    run("groupadd", "-f", "nopasswdlogin")
+    ensure_user("enfoque-kiosk", Path("/var/lib/enfoque-kiosk"),
+                "audio,video,nopasswdlogin", system=False, shell="/bin/bash")
+    ensure_user("enfoque-tef", Path("/var/lib/paygo-tef"),
+                "dialout", system=True, shell="/usr/sbin/nologin")
+    ensure_access_policy()
+    print("Contas separadas criadas: navegador e TEF sem sudo; acesso SSH negado")
+
+def validate_admin_recovery():
+    groups = subprocess.run(["getent", "group", "sudo"], capture_output=True, text=True, check=True).stdout
+    users = groups.strip().split(":")[-1].split(",")
+    if not any(u and u not in ("enfoque-kiosk", "enfoque-tef") for u in users):
+        raise RuntimeError("Sem administrador sudo separado: quiosque nao habilitado")
+
+def enable(url):
+    check_root()
+    if live_mode():
+        raise RuntimeError("Live ISO: nao habilitar autologin; instale e provisione antes")
+    p = urlparse(url)
+    if p.scheme != "https" or p.hostname not in ALLOWED_HOSTS or p.username or p.password:
+        raise RuntimeError("Endereco HTTPS nao permitido para o quiosque")
+    validate_admin_recovery()
+    prepare()
+    if FLAG.exists():
+        print("Quiosque ja habilitado; verificando parametros")
+    atomic(URL_FILE, url.rstrip("/") + "/")
+    # This sorts after 99-enfoque-login.conf. The installed login recovery stays available.
+    atomic(LIGHTDM, """[Seat:*]
+greeter-session=lightdm-gtk-greeter
+user-session=enfoque-kiosk
+allow-guest=false
+autologin-user=enfoque-kiosk
+autologin-user-timeout=0
+""")
+    atomic(FLAG, "Provisao autorizada pela TI. Desative com enfoque-kiosk-control disable.\n", 0o600)
+    run("systemctl", "daemon-reload")
+    run("systemctl", "enable", "enfoque-paygo-tef.service")
+    print("Modo quiosque configurado para o proximo login/reboot, sem interromper a TI")
+
+def disable():
+    check_root()
+    # Never remove accounts, Wine, TEF ledgers or admin access.
+    LIGHTDM.unlink(missing_ok=True)
+    FLAG.unlink(missing_ok=True)
+    if shutil.which("systemctl"):
+        run("systemctl", "disable", "enfoque-paygo-tef.service")
+    print("Autologin desabilitado. Login administrativo com senha sera retomado no boot")
+
+def status():
+    print("KIOSK_ENABLED=" + ("yes" if FLAG.exists() else "no"))
+    for name in ("enfoque-kiosk", "enfoque-tef"):
+        try:
+            p = pwd.getpwnam(name)
+            print(f"{name}: uid={p.pw_uid} home={p.pw_dir} shell={p.pw_shell}")
+        except KeyError:
+            print(name + ": not provisioned")
+    print("PAYGO_PROVISIONED=" + ("yes" if Path("/var/lib/paygo-tef/provisioned").exists() else "no"))
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("action", choices=["prepare", "enable", "disable", "status"])
+    parser.add_argument("--url", default="https://intranet.enfoquepapelaria.com.br/")
+    args = parser.parse_args()
+    try:
+        if args.action == "prepare":
+            prepare()
+        elif args.action == "enable":
+            enable(args.url)
+        elif args.action == "disable":
+            disable()
+        else:
+            status()
+    except (OSError, subprocess.CalledProcessError, RuntimeError) as exc:
+        print("ERRO: " + str(exc), file=sys.stderr)
+        return 1
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,23 @@
+#!/bin/sh
+# Launch only the provisioned PayGo using the dedicated TEF account.
+set -eu
+umask 077
+if [ "$(id -un)" != "enfoque-tef" ]; then
+    echo "Execucao permitida somente ao usuario enfoque-tef" >&2
+    exit 2
+fi
+BASE=/var/lib/paygo-tef
+WINE=/opt/paygo-tef/wine/bin/wine
+PREFIX="$BASE/runtime"
+EXE="$PREFIX/drive_c/Program Files/PayGo/PayGo.exe"
+[ -e "$BASE/provisioned" ] && [ -x "$WINE" ] && [ -r "$EXE" ] || exit 2
+/usr/local/bin/enfoque-paygo-tef-health --quiet || exit 3
+export HOME="$BASE"
+export WINEPREFIX="$PREFIX"
+export WINEARCH=win32
+export WINEDEBUG=-all
+export DOTNET_gcServer=0
+export DOTNET_EnableWriteXorExecute=0
+unset WINEDLLOVERRIDES || :
+cd "$HOME"
+exec /usr/bin/nice -n 5 "$WINE" "$EXE"

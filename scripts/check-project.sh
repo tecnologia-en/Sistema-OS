@@ -57,5 +57,23 @@ for app in PayGo Compatibilidade-Windows; do
   grep -q '^Exec=enfoque-paygo ' "$f"
 done
 
+# Kiosk 0.2.8: no hardcoded TEF credentials or untested scripts in ISO.
+for f in "$ROOT/config/hooks/normal/097-enfoque-lowram-kiosk.hook.chroot" \
+         "$ROOT/config/includes.chroot/usr/local/bin/enfoque-kiosk-session" \
+         "$ROOT/config/includes.chroot/usr/local/bin/enfoque-paygo-tef-run"; do
+    test -x "$f" || { echo "Executavel de quiosque ausente: $f" >&2; exit 1; }
+    sh -n "$f"
+done
+for f in "$ROOT/config/includes.chroot/usr/local/bin/enfoque-paygo-tef-health" \
+         "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-kiosk-control" \
+         "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-paygo-provision"; do
+    test -x "$f" || { echo "Script protegido ausente: $f" >&2; exit 1; }
+    python3 -c 'import ast,sys; ast.parse(open(sys.argv[1],encoding="utf-8").read())' "$f"
+done
+grep -q '^ALGO=lz4' "$ROOT/config/includes.chroot/etc/default/zramswap"
+grep -q '^PERCENT=100' "$ROOT/config/includes.chroot/etc/default/zramswap"
+test -s "$ROOT/config/includes.chroot/usr/share/plymouth/themes/enfoque-os/enfoque-os.plymouth"
+test -s "$ROOT/config/includes.chroot/etc/systemd/system/enfoque-paygo-tef.service"
+python3 -m unittest discover -s "$ROOT/test" -p 'test_kiosk_lowram.py'
 bash "$ROOT/scripts/check-visual.sh"
 echo 'Estrutura valida. A ISO deve ser compilada e testada em VM.'

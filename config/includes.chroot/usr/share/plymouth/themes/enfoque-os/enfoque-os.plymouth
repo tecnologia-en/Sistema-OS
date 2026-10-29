@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Enfoque OS
+Description=Boot visual da Enfoque Papelaria
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/enfoque-os
+ScriptFile=/usr/share/plymouth/themes/enfoque-os/enfoque-os.script

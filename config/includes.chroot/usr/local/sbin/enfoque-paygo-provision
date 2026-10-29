@@ -1,0 +1,151 @@
+#!/usr/bin/env python3
+"""Per-device TEF provisioning after activation; NEVER embed credentials into an ISO."""
+import argparse
+import hashlib
+import os
+from pathlib import Path
+import pwd
+import shutil
+import sqlite3
+import subprocess
+import sys
+
+OPT = Path("/opt/paygo-tef")
+STATE = Path("/var/lib/paygo-tef")
+# Hash of patched Wine 11.20 PE wbemprox.dll validated in Enfoque lab.
+WBEMPROX_PATCH_SHA256 = "d409ef81a5b57ab8cbf713db980a42715fd39ef3e8d22018da10adedf322edd7"
+
+def safe_copy(src, target):
+    if target.exists() or target.is_symlink():
+        raise RuntimeError("Destino ja existe; nao sobrescrever dados de TEF: " + str(target))
+    if not src.is_dir():
+        raise RuntimeError("Diretorio de origem ausente: " + str(src))
+    target.parent.mkdir(parents=True, exist_ok=True)
+    partial = target.with_name(target.name + ".installing")
+    if partial.exists() or partial.is_symlink():
+        raise RuntimeError("Instalacao parcial detectada; acao da TI necessaria: " + str(partial))
+    try:
+        shutil.copytree(src, partial, symlinks=True)
+        os.replace(partial, target)
+    except Exception:
+        # Do not delete partial state blindly: preserve for TI investigation.
+        raise
+
+def secure_tree(path, uid, gid, mode_dir=0o700, mode_file=0o600):
+    # Never traverse symlinks: Wine dosdevices/com* must retain device mappings.
+    for current, dirs, files in os.walk(path, followlinks=False):
+        for node in [Path(current)] + [Path(current)/n for n in dirs + files]:
+            if node.is_symlink():
+                continue
+            os.chown(node, uid, gid)
+            if node.is_dir():
+                os.chmod(node,mode_dir)
+            elif mode_file is None:
+                os.chmod(node,0o755 if node.stat().st_mode & 0o111 else 0o644)
+            else:
+                os.chmod(node,mode_file)
+
+def db_profile(prefix):
+    p=prefix/"drive_c/ProgramData/PayGo/Data/PayGo.db"
+    if not p.is_file():
+        raise RuntimeError("Banco de ativacao ausente")
+    with sqlite3.connect(f"file:{p}?mode=ro",uri=True,timeout=10) as db:
+        if db.execute("PRAGMA quick_check").fetchone()[0]!="ok":
+            raise RuntimeError("Banco de ativacao corrompido; reprovisionamento recusado")
+        row=db.execute("SELECT TER_Id,TER_TERF_Id FROM PAY_Terminal LIMIT 1").fetchone()
+        mode=db.execute("SELECT PAR_Valor FROM PAY_Parametro WHERE PAR_Nome='ControlPayAmbiente'").fetchone()
+        if not row or not all(row) or not mode:
+            raise RuntimeError("Ativacao PayGo incompleta")
+        return tuple(map(int,row)),mode[0]
+
+def check_wine(wine):
+    app=wine/"bin/wine"
+    patch=wine/"lib/wine/i386-windows/wbemprox.dll"
+    if not app.is_file() or not patch.is_file():
+        raise RuntimeError("Runtime Wine 11.20 preparado incompleto")
+    result=subprocess.run([str(app),"--version"],capture_output=True,text=True,timeout=12,check=True)
+    if result.stdout.strip()!="wine-11.20":
+        raise RuntimeError("Somente runtime Wine 11.20 testado pode ser provisionado")
+    if hashlib.sha256(patch.read_bytes()).hexdigest()!=WBEMPROX_PATCH_SHA256:
+        raise RuntimeError("Biblioteca WMI nao corresponde ao patch homologado")
+
+def main():
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--source-prefix",type=Path,required=True)
+    ap.add_argument("--wine-dir",type=Path,required=True)
+    ap.add_argument("--terminal",type=int,required=True)
+    ap.add_argument("--lab",action="store_true",help="permite testes em Debian Live; NUNCA habilita producao")
+    ap.add_argument("--confirm-same-device",action="store_true",help="confirma ativacao na mesma maquina")
+    args=ap.parse_args()
+    if os.geteuid()!=0:
+        raise RuntimeError("Somente a TI (root) pode provisionar o TEF")
+    if not args.confirm_same_device:
+        raise RuntimeError("A ativacao e vinculada ao hardware; confirme --confirm-same-device")
+    if not args.lab and (Path("/run/live/medium").exists() or "boot=live" in Path("/proc/cmdline").read_text(errors="replace")):
+        raise RuntimeError("Instale o sistema em disco antes de provisionar")
+    tef=pwd.getpwnam("enfoque-tef")
+    source=args.source_prefix.resolve(strict=True)
+    wine=args.wine_dir.resolve(strict=True)
+    if source==STATE/"runtime" or str(source).startswith(str(OPT)+"/"):
+        raise RuntimeError("Origem do TEF nao pode ser o proprio destino")
+    profile,mode=db_profile(source)
+    if profile[0]!=args.terminal:
+        raise RuntimeError("Terminal de origem inesperado; copia interrompida")
+    if mode!="Demonstracao":
+        raise RuntimeError("Somente DEMO homologado; producao requer aprovacao da adquirente")
+    check_wine(wine)
+    if (STATE/"provisioned").exists():
+        raise RuntimeError("TEF existente: NUNCA substituir banco ou ativacao")
+    if (OPT/"reference").exists() or (OPT/"wine").exists() or (STATE/"runtime").exists():
+        raise RuntimeError("Diretorios TEF existentes; intervencao da TI necessaria")
+    # Preserve device-specific activation. Nothing below is tracked by Git.
+    safe_copy(wine,OPT/"wine")
+    secure_tree(OPT/"wine",0,0,0o755,None)
+    for n in ("bin/wine","bin/wineserver"):
+        p=OPT/"wine"/n
+        if p.exists():p.chmod(0o755)
+    safe_copy(source,OPT/"reference")
+    secure_tree(OPT/"reference",0,0)
+    safe_copy(source,STATE/"runtime")
+    secure_tree(STATE/"runtime",tef.pw_uid,tef.pw_gid)
+    # Immutable to the unprivileged TEF process: application EXEs and DLLs.
+    executable_dir=STATE/"runtime/drive_c/Program Files/PayGo"
+    if not executable_dir.is_dir():
+        raise RuntimeError("Diretorio da aplicacao nao encontrado")
+    secure_tree(executable_dir,0,tef.pw_gid,0o750,0o640)
+    for path in executable_dir.rglob("*"):
+        if path.is_file() and path.suffix.lower() in (".exe",".com"):
+            path.chmod(0o750)
+    for rel in (
+        "drive_c/ProgramData/PayGo/Data",
+        "drive_c/ProgramData/PayGo/Log",
+        "drive_c/ProgramData/PayGo/PGWebLib/Data",
+        "drive_c/ProgramData/PayGo/PGWebLib/Log",
+    ):
+        p=STATE/"runtime"/rel
+        p.mkdir(parents=True,exist_ok=True)
+        p.chown(tef.pw_uid,tef.pw_gid)
+        p.chmod(0o700)
+    STATE.chown(tef.pw_uid,tef.pw_gid)
+    STATE.chmod(0o700)
+    OPT.chown(0,0)
+    OPT.chmod(0o711)
+    (OPT/"reference").chmod(0o700)
+    (OPT/"wine").chmod(0o755)
+    (STATE/"provisioned").write_text(
+        "DEMO: copia por dispositivo; TI deve revalidar no pinpad.\n",encoding="utf-8")
+    (STATE/"provisioned").chown(0,tef.pw_gid)
+    (STATE/"provisioned").chmod(0o640)
+    log=Path("/var/log/paygo-tef")
+    log.mkdir(parents=True,exist_ok=True)
+    log.chown(tef.pw_uid,tef.pw_gid)
+    log.chmod(0o700)
+    print(f"TEF DEMO provisionado: terminal {args.terminal}. Referencia protegida; sem dados enviados ao Git.")
+    print("Nunca restaure o banco de transacoes automaticamente; examine antes de recuperar.")
+
+if __name__=="__main__":
+    try:
+        main()
+    except (OSError,RuntimeError,sqlite3.Error,subprocess.CalledProcessError) as exc:
+        print("PROVISIONAMENTO RECUSADO: "+str(exc),file=sys.stderr)
+        sys.exit(1)
