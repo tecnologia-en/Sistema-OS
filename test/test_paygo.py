@@ -36,7 +36,7 @@ class PayGoImageTests(unittest.TestCase):
             self.assertIn(cmd, path.read_text())
             self.assertTrue((CFG / "includes.chroot/usr/share/icons/hicolor/scalable/apps" /
                              (icon + ".svg")).is_file())
-        self.assertIn('VERSION="0.2.7"', (CFG / "includes.chroot/etc/enfoque-os-release").read_text())
+        self.assertIn('VERSION="0.2.8"', (CFG / "includes.chroot/etc/enfoque-os-release").read_text())
 
     def test_launcher_valid_python(self):
         self.assertTrue(LAUNCHER.stat().st_mode & stat.S_IXUSR)
