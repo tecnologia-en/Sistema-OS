@@ -155,7 +155,9 @@ def dialog():
         body.pack_start(Gtk.Label(label="Previa LIVE: novo ID apos reiniciar."), False, False, 2)
     win.show_all()
     while win.run() == Gtk.ResponseType.APPLY:
-        Gdk.Display.get_default().get_clipboard(Gdk.SELECTION_CLIPBOARD).set_text(d["id"], -1)
+        clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+        clipboard.set_text(d["id"], -1)
+        clipboard.store()
     win.destroy()
     return 0
 

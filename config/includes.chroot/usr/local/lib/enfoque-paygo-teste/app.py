@@ -64,7 +64,10 @@ def backend(payload, timeout=110):
     client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
         client.settimeout(timeout)
-        client.connect(SOCKET)
+        try:
+            client.connect(SOCKET)
+        except (FileNotFoundError, ConnectionRefusedError) as error:
+            raise RuntimeError("PayGo DEMO nao provisionado neste computador.") from error
         client.sendall(wire)
         data = bytearray()
         while len(data) < 10000:

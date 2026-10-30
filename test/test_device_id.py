@@ -65,6 +65,11 @@ class TestDeviceId(unittest.TestCase):
                     result = identity.describe(home, Path(folder) / "not-found.json")
                     self.assertTrue(result["id"].endswith("-9"))
                     self.assertEqual(result["unit"], "Papel & Arte")
+    def test_gtk3_clipboard_copy_uses_supported_api(self):
+        source = SOURCE.read_text(encoding="utf-8")
+        self.assertIn("Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)", source)
+        self.assertNotIn("Gdk.Display.get_default().get_clipboard", source)
+
     def test_invalid_identity_is_rejected(self):
         with tempfile.TemporaryDirectory() as folder:
             p = Path(folder) / "id.json"

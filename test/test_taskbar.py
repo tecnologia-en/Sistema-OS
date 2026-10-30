@@ -60,6 +60,15 @@ class TaskbarTests(unittest.TestCase):
         self.assertEqual(p.get("value"), "launcher")
         self.assertEqual(p.find("./property[@name='items']/value").get("value"), "enfoque-id.desktop")
 
+    def test_id_button_is_persistent_and_payment_tool_is_search_only(self):
+        xml = PANEL.read_text(encoding="utf-8")
+        self.assertIn("enfoque-id.desktop", xml)
+        self.assertNotIn("enfoque-paygo-teste.desktop", xml)
+        launcher = ROOT / "config/includes.chroot/etc/skel/.config/xfce4/panel/launcher-12/enfoque-id.desktop"
+        self.assertIn("Exec=/usr/local/bin/enfoque-id --dialog", launcher.read_text(encoding="utf-8"))
+        self.assertTrue((APPS / "enfoque-paygo-teste.desktop").is_file())
+        self.assertFalse((ROOT / "config/includes.chroot/etc/skel/Desktop/Teste PayGo.desktop").exists())
+
     def test_launchers_retain_site_and_real_icons(self):
         for name, icon, host in [
             ("enfoque-sige.desktop", "enfoque-sige", "enfoquepapelaria.meusige.com.br/sistema"),
