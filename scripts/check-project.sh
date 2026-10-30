@@ -51,10 +51,21 @@ for hook in 080-instalar-wine 091-incorporar-paygo; do
 done
 test -x "$ROOT/config/includes.chroot/usr/local/bin/enfoque-paygo" || exit 1
 python3 -c 'import ast,sys; ast.parse(open(sys.argv[1]).read())' "$ROOT/config/includes.chroot/usr/local/bin/enfoque-paygo"
-for app in PayGo Compatibilidade-Windows; do
-  f="$ROOT/config/includes.chroot/etc/skel/Desktop/$app.desktop"
-  test -x "$f" || { echo "Atalho nao executavel: $f" >&2; exit 1; }
-  grep -q '^Exec=enfoque-paygo ' "$f"
+# Legacy PayGo and Wine tools stay searchable in the menu, not on the desktop.
+for app in enfoque-paygo enfoque-wincompat enfoque-central enfoque-instalar; do
+  f="$ROOT/config/includes.chroot/usr/share/applications/$app.desktop"
+  test -s "$f" || { echo "Menu nao tem aplicacao: $f" >&2; exit 1; }
+done
+desktop="$ROOT/config/includes.chroot/etc/skel/Desktop"
+for app in SIGE Intranet; do
+  test -s "$desktop/$app.desktop" || { echo "Atalho empresarial ausente: $app" >&2; exit 1; }
+done
+if find "$desktop" -mindepth 1 -maxdepth 1 -type f ! -name 'SIGE.desktop' ! -name 'Intranet.desktop' | grep -q .; then
+  echo 'ERRO: ISO colocou atalhos extras na area de trabalho' >&2
+  exit 1
+fi
+for pkg in libreoffice libreoffice-gtk3 libreoffice-l10n-pt-br libreoffice-help-pt-br hunspell-pt-br hyphen-pt-br; do
+  grep -Fxq "$pkg" "$ROOT/config/package-lists/enfoque-base.list.chroot" || { echo "LibreOffice incompleto: $pkg" >&2; exit 1; }
 done
 
 # Kiosk 0.2.8: no hardcoded TEF credentials or untested scripts in ISO.
@@ -79,6 +90,7 @@ python3 -m unittest discover -s "$ROOT/test" -p 'test_paygo_sandbox_monitor.py'
 python3 -m unittest discover -s "$ROOT/test" -p 'test_pinpad_identity.py'
 python3 -m unittest discover -s "$ROOT/test" -p 'test_device_id.py'
 python3 -m unittest discover -s "$ROOT/test" -p 'test_paygo_bridge.py'
+python3 -m unittest discover -s "$ROOT/test" -p 'test_office_desktop.py'
 test -s "$ROOT/config/includes.chroot/etc/systemd/system/enfoque-device-id.service"
 test -s "$ROOT/config/includes.chroot/usr/share/applications/enfoque-id.desktop"
 test -s "$ROOT/config/includes.chroot/usr/share/applications/enfoque-paygo-teste.desktop"

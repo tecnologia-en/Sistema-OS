@@ -66,8 +66,10 @@ class USBInventoryTests(unittest.TestCase):
         root=Path(__file__).resolve().parents[1]
         visual=(root/"config/includes.chroot/usr/local/bin/enfoque-aplicar-visual").read_text()
         self.assertIn("calamares-install-debian.desktop",visual)
-        self.assertIn("grep -q '^Exec=calamares-install-debian$'",visual)
-        self.assertIn("Instalar-Enfoque-OS.desktop",visual)
+        self.assertIn("remove_os_shortcut " + chr(39) + "calamares-install-debian.desktop" + chr(39), visual)
+        self.assertIn("remove_os_shortcut 'Instalar-Enfoque-OS.desktop'", visual)
+        self.assertNotIn('cp /usr/share/applications/enfoque-instalar.desktop "$DESKTOP/', visual)
+        self.assertTrue((root/"config/includes.chroot/usr/share/applications/enfoque-instalar.desktop").exists())
         app=(root/"config/includes.chroot/usr/local/lib/enfoque-hub/app.py").read_text()
         self.assertIn('self.show_empty_ports.set_active(False)',app)
         self.assertIn('visible_ports(data, self.show_empty_ports.get_active())',app)

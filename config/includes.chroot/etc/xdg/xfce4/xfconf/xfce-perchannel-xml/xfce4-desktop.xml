@@ -3,6 +3,20 @@
      Administradores root podem atualizar a política na imagem/gerenciamento.
      Xfconf permite unlocked=root em configuração de sistema. -->
 <channel name="xfce4-desktop" version="1.0">
+  <!-- Policy for fresh desktop sessions: Lixeira plus two business shortcuts only. -->
+  <property name="desktop-icons" type="empty">
+    <property name="style" type="int" value="2"/>
+    <property name="file-icons" type="empty">
+      <property name="show-trash" type="bool" value="true"/>
+      <property name="show-home" type="bool" value="false"/>
+      <property name="show-filesystem" type="bool" value="false"/>
+      <property name="show-removable" type="bool" value="false"/>
+      <property name="show-device-fixed" type="bool" value="false"/>
+      <property name="show-device-removable" type="bool" value="false"/>
+      <property name="show-network-removable" type="bool" value="false"/>
+      <property name="show-unknown-removable" type="bool" value="false"/>
+    </property>
+  </property>
   <property name="backdrop" type="empty" unlocked="root">
     <property name="single-workspace-mode" type="bool" value="true"/>
     <property name="single-workspace-number" type="int" value="0"/>

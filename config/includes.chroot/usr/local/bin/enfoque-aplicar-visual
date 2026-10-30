@@ -2,7 +2,7 @@
 # Personalizacao da sessao XFCE: visual estilo Windows sem componentes proprietarios.
 set -eu
 WALLPAPER=/usr/share/backgrounds/enfoque-os/wallpaper.jpg
-MARKER="${HOME}/.cache/enfoque-os-visual-v025"
+MARKER="${HOME}/.cache/enfoque-os-visual-v0210"
 if [ ! -f "$WALLPAPER" ] || ! command -v xfconf-query >/dev/null 2>&1; then
   exit 0
 fi
@@ -22,6 +22,11 @@ set_xfconf xfwm4 /general/theme string Arc
 set_xfconf xfwm4 /general/title_alignment string left
 set_xfconf xfce4-desktop /desktop-icons/style int 2
 set_xfconf xfce4-desktop /desktop-icons/icon-size int 48
+# The recycle bin is a virtual XFCE icon. Keep business shortcuts on disk.
+set_xfconf xfce4-desktop /desktop-icons/file-icons/show-trash bool true
+for icon in home filesystem removable device-fixed device-removable network-removable unknown-removable; do
+  set_xfconf xfce4-desktop "/desktop-icons/file-icons/show-$icon" bool false
+done
 
 # No modo Live a barra deve ocupar toda a borda inferior, sem auto-ocultar.
 # Respeite personalizacoes de equipamentos instalados fora do modo Live.
@@ -40,17 +45,23 @@ if command -v xdg-user-dir >/dev/null 2>&1; then
   [ -z "$configured" ] || DESKTOP="$configured"
 fi
 mkdir -p "$DESKTOP"
-# Debian Calamares adds an English shortcut during Live boot. The Enfoque
-# branded launcher invokes the exact same installer, so keep only that entry.
-if [ -d /run/live/medium ] && [ -f "$DESKTOP/calamares-install-debian.desktop" ]; then
-    if grep -q '^Exec=calamares-install-debian$' "$DESKTOP/calamares-install-debian.desktop"; then
-        rm -f -- "$DESKTOP/calamares-install-debian.desktop"
-    fi
-fi
-# Installer shortcut exists only in a temporary Live session, never in installed user homes.
-if [ -d /run/live/medium ] && [ -f /usr/share/applications/enfoque-instalar.desktop ]; then
-  cp /usr/share/applications/enfoque-instalar.desktop "$DESKTOP/Instalar-Enfoque-OS.desktop"
-  chmod u+x "$DESKTOP/Instalar-Enfoque-OS.desktop"
+# Remove only official, known legacy launchers. Never purge arbitrary files
+# from an existing employee's Desktop: documents and personal shortcuts are
+# preserved; the new ISO ships exactly two Desktop launchers.
+remove_os_shortcut() {
+  file="$1"; expected_exec="$2"
+  if [ -f "$DESKTOP/$file" ] && grep -Fxq "Exec=$expected_exec" "$DESKTOP/$file"; then
+    rm -f -- "$DESKTOP/$file"
+  fi
+}
+remove_os_shortcut 'Compatibilidade-Windows.desktop' 'enfoque-paygo configurar'
+remove_os_shortcut 'PayGo.desktop' 'enfoque-paygo abrir'
+remove_os_shortcut 'Enfoque-Central.desktop' 'enfoque-central'
+remove_os_shortcut 'Instalar-Enfoque-OS.desktop' '/usr/local/bin/enfoque-instalar'
+# Calamares adds a second, generic desktop launcher on Live systems.
+# Installation remains available through the application menu.
+if [ -d /run/live/medium ]; then
+  remove_os_shortcut 'calamares-install-debian.desktop' 'calamares-install-debian'
 fi
 for item in SIGE.desktop Intranet.desktop; do
   if [ -f "/etc/skel/Desktop/$item" ]; then

@@ -27,16 +27,19 @@ class PayGoImageTests(unittest.TestCase):
         self.assertIn("SetupPayGo.exe", data)
 
     def test_launchers_and_icons(self):
+        # PayGo and Wine stay in the app menu, not on the employee Desktop.
         for name, cmd, icon in (
-            ("PayGo", "Exec=enfoque-paygo abrir", "enfoque-paygo"),
-            ("Compatibilidade-Windows", "Exec=enfoque-paygo configurar", "enfoque-wincompat")
+            ("enfoque-paygo", "Exec=enfoque-paygo abrir", "enfoque-paygo"),
+            ("enfoque-wincompat", "Exec=enfoque-paygo configurar", "enfoque-wincompat")
         ):
-            path = CFG / "includes.chroot/etc/skel/Desktop" / (name + ".desktop")
-            self.assertTrue(path.stat().st_mode & stat.S_IXUSR)
+            path = CFG / "includes.chroot/usr/share/applications" / (name + ".desktop")
             self.assertIn(cmd, path.read_text())
             self.assertTrue((CFG / "includes.chroot/usr/share/icons/hicolor/scalable/apps" /
                              (icon + ".svg")).is_file())
-        self.assertIn('VERSION="0.2.9"', (CFG / "includes.chroot/etc/enfoque-os-release").read_text())
+        desktop = CFG / "includes.chroot/etc/skel/Desktop"
+        self.assertFalse((desktop / "PayGo.desktop").exists())
+        self.assertFalse((desktop / "Compatibilidade-Windows.desktop").exists())
+        self.assertIn('VERSION="0.2.10"', (CFG / "includes.chroot/etc/enfoque-os-release").read_text())
 
     def test_launcher_valid_python(self):
         self.assertTrue(LAUNCHER.stat().st_mode & stat.S_IXUSR)

@@ -1,7 +1,7 @@
 desktop-image: "../splash.png"
 title-color: "#ffffff"
 title-font: "Unifont Regular 16"
-title-text: "Enfoque OS 0.2.9 - Modo Live"
+title-text: "Enfoque OS 0.2.10 - Modo Live"
 message-font: "Unifont Regular 16"
 terminal-font: "Unifont Regular 16"
 + boot_menu {

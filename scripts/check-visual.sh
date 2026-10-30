@@ -23,6 +23,7 @@ for path in \
   config/includes.chroot/usr/share/icons/hicolor/scalable/apps/enfoque-intranet.svg \
   config/includes.chroot/etc/skel/Desktop/SIGE.desktop \
   config/includes.chroot/etc/skel/Desktop/Intranet.desktop \
+  config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml \
   config/includes.chroot/usr/share/applications/enfoque-sige.desktop \
   config/includes.chroot/usr/share/applications/enfoque-intranet.desktop
 do
@@ -53,6 +54,12 @@ grep -Fq 'value="whiskermenu"' "$ROOT/config/includes.chroot/etc/skel/.config/xf
 grep -Fq 'p=10;' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'barra inferior ausente'
 grep -Fq 'https://enfoquepapelaria.meusige.com.br/' "$ROOT/config/includes.chroot/etc/skel/Desktop/SIGE.desktop" || fail 'atalho SIGE errado'
 grep -Fq 'https://intranet.enfoquepapelaria.com.br/' "$ROOT/config/includes.chroot/etc/skel/Desktop/Intranet.desktop" || fail 'atalho Intranet errado'
+if find "$ROOT/config/includes.chroot/etc/skel/Desktop" -maxdepth 1 -type f ! -name 'SIGE.desktop' ! -name 'Intranet.desktop' | grep -q .; then
+  fail 'Mais de dois atalhos no Desktop da ISO'
+fi
+for package in libreoffice libreoffice-gtk3 libreoffice-l10n-pt-br libreoffice-help-pt-br hunspell-pt-br hyphen-pt-br; do
+  grep -Fxq "$package" "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail "pacote LibreOffice faltando: $package"
+done
 grep -Eq '^xfce4-whiskermenu-plugin$' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'whiskermenu ausente'
 grep -Eq '^papirus-icon-theme$' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'papirus ausente'
 for f in \

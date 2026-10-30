@@ -49,7 +49,7 @@ class KioskImageTests(unittest.TestCase):
         packages=(ROOT/"config/package-lists/enfoque-base.list.chroot").read_text()
         for pkg in ("xfce4","zram-tools","plymouth","logrotate","cups"):
             self.assertIn("\n"+pkg+"\n",packages)
-        self.assertIn("0.2.9",(IMAGE/"etc/enfoque-os-release").read_text())
+        self.assertIn("0.2.10",(IMAGE/"etc/enfoque-os-release").read_text())
 
     def test_separate_user_borders(self):
         admin=(IMAGE/"usr/local/sbin/enfoque-kiosk-control").read_text()
