@@ -17,6 +17,11 @@ SOCKET = "/run/enfoque-paygo-teste/bridge.sock"
 HASH = "b81e204c757a6c385e18323cae863dbca68e58a9dbfb359ef3c79ce031784f6c"
 CSS = b"""
 window {background: #111923; color: #f5f8fc}
+dialog, messagedialog {background: #192738; color: #edf4fd}
+dialog label, messagedialog label {color: #edf4fd}
+dialog entry {background: #24364b; color: #fff; border: 1px solid #58708c; padding: 8px}
+dialog button, messagedialog button {background: #293d54; color: #f3f7ff; border: 1px solid #5a7690; border-radius: 7px; padding: 8px}
+dialog button:hover, messagedialog button:hover {background: #38618a}
 #content {background: #111923}
 label {color: #e8effa}
 .muted {color: #a6b6cb}

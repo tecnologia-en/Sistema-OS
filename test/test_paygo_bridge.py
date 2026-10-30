@@ -37,6 +37,17 @@ class TestPaygoBridge(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 api.profile()
 
+    def test_pinpad_health_failure_blocks_sale(self):
+        with mock.patch.object(api, "profile", return_value={"terminal": 7057}) as prof, \
+             mock.patch.object(api.subprocess, "run", return_value=mock.Mock(returncode=1)) as check, \
+             mock.patch.object(api, "request") as remote:
+            with self.assertRaisesRegex(RuntimeError, "Integridade TEF/PIN-pad"):
+                api.sale("debit", 100)
+            prof.assert_called_once()
+            check.assert_called_once()
+            self.assertIn("enfoque-paygo-tef-health", check.call_args.args[0][0])
+            remote.assert_not_called()
+
     def test_no_production_endpoint(self):
         self.assertEqual(api.BASE, "https://sandbox.controlpay.com.br/webapi")
         self.assertEqual(set(api.FINAL), {10, 15, 20, 25})

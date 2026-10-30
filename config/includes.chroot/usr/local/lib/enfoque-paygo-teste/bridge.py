@@ -61,6 +61,12 @@ def profile():
                 "key": urllib.parse.unquote(key_row[0])}
 
 def verify_device():
+    # Reuse the existing strict PIN-pad check (sysfs vendor/product must
+    # belong to the same ACM device actually mapped as Wine COM8).
+    health = subprocess.run(["/usr/local/bin/enfoque-paygo-tef-health", "--quiet"],
+                            capture_output=True, text=True, timeout=12)
+    if health.returncode != 0:
+        raise RuntimeError("Integridade TEF/PIN-pad recusada; envio bloqueado")
     com = PREFIX / "dosdevices/com8"
     if not com.is_symlink() or not os.path.realpath(com).startswith("/dev/ttyACM"):
         raise RuntimeError("COM8 ainda nao esta vinculada ao PIN-pad")
