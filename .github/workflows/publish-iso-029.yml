@@ -1,0 +1,53 @@
+name: Publicar Enfoque OS 0.2.9 - laboratorio
+on:
+  push:
+    branches:
+      - feat/lowram-kiosk-028
+    paths:
+      - '.github/workflows/publish-iso-029.yml'
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Aguardar compilacao aprovada
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run watch 41107232587 --repo "$GITHUB_REPOSITORY" --exit-status --interval 15
+      - name: Baixar artefato exato da versao
+        uses: actions/download-artifact@v4
+        with:
+          name: enfoque-os-iso-41
+          path: dist
+          repository: tecnologia-en/Sistema-OS
+          run-id: 41107232587
+          github-token: ${{ github.token }}
+      - name: Validar checksum antes de publicar
+        run: |
+          set -euo pipefail
+          test -s dist/enfoque-os-0.2.9-piloto-amd64.iso
+          test -s dist/SHA256SUMS
+          (cd dist && sha256sum -c SHA256SUMS)
+      - name: Separar ISO em partes verificaveis
+        run: |
+          set -euo pipefail
+          mkdir -p parts
+          split --bytes=750m --numeric-suffixes=0 --suffix-length=2 dist/enfoque-os-0.2.9-piloto-amd64.iso parts/chunk-
+          test "$(find parts -maxdepth 1 -type f -name 'chunk-*' | wc -l)" -ge 2
+          (cd parts && sha256sum chunk-* > SHA256_PARTS && sha256sum -c SHA256_PARTS)
+          cp dist/SHA256SUMS parts/SHA256SUMS
+      - name: Publicar prerelease QA sem dados financeiros
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create v0.2.9-piloto \
+            --repo "$GITHUB_REPOSITORY" \
+            --target c511cb52b714660f341078430bd0be6450060640 \
+            --title 'Enfoque OS 0.2.9 - IDs e Teste PayGo (piloto)' \
+            --notes 'ISO experimental Debian 13 XFCE: ID unico por computador, botao ID do computador no rodape, Teste PayGo pesquisavel com senha local, somente DEMO. Nenhuma credencial ou ativacao TEF incluida. Juntar chunk-00, chunk-01, etc. nessa ordem e verificar SHA256SUMS. Nao homologada para uso financeiro em lojas.' \
+            --prerelease \
+            parts/chunk-* parts/SHA256SUMS parts/SHA256_PARTS
