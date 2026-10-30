@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Teste PayGo
+Comment=Ferramenta interna de teste de credito e debito em modo demonstracao
+Exec=/usr/local/bin/enfoque-paygo-teste
+Icon=security-low
+Terminal=false
+Categories=Utility;
+Keywords=paygo;teste;pagamento;credito;debito;maquininha;tef;
+StartupNotify=true

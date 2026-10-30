@@ -75,5 +75,13 @@ grep -q '^PERCENT=100' "$ROOT/config/includes.chroot/etc/default/zramswap"
 test -s "$ROOT/config/includes.chroot/usr/share/plymouth/themes/enfoque-os/enfoque-os.plymouth"
 test -s "$ROOT/config/includes.chroot/etc/systemd/system/enfoque-paygo-tef.service"
 python3 -m unittest discover -s "$ROOT/test" -p 'test_kiosk_lowram.py'
+python3 -m unittest discover -s "$ROOT/test" -p 'test_paygo_sandbox_monitor.py'
+python3 -m unittest discover -s "$ROOT/test" -p 'test_pinpad_identity.py'
+python3 -m unittest discover -s "$ROOT/test" -p 'test_device_id.py'
+python3 -m unittest discover -s "$ROOT/test" -p 'test_paygo_bridge.py'
+test -s "$ROOT/config/includes.chroot/etc/systemd/system/enfoque-device-id.service"
+test -s "$ROOT/config/includes.chroot/usr/share/applications/enfoque-id.desktop"
+test -s "$ROOT/config/includes.chroot/usr/share/applications/enfoque-paygo-teste.desktop"
+test -s "$ROOT/config/includes.chroot/usr/local/lib/enfoque-paygo-teste/app.py"
 bash "$ROOT/scripts/check-visual.sh"
 echo 'Estrutura valida. A ISO deve ser compilada e testada em VM.'

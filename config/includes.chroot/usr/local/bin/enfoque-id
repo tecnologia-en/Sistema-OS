@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""Per-installation ID: UUID generated at boot, store suffix resolved locally."""
+import argparse
+import hashlib
+import ipaddress
+import json
+import os
+from pathlib import Path
+import secrets
+import subprocess
+import sys
+from datetime import datetime, timezone
+import uuid
+
+INSTALLED = Path("/var/lib/enfoque-os/device-identity.json")
+LIVE = Path("/run/enfoque-os/device-identity.json")
+NETWORKS = Path("/etc/enfoque-os/lojas-ip.json")
+UNITS = {
+    "ilha-plaza": ("1", "Ilha Plaza"), "copacabana": ("2", "Copacabana"),
+    "itaipu": ("3", "Itaipu"), "icarai": ("4", "Icarai"),
+    "sao-goncalo": ("5", "Sao Goncalo"), "centro": ("6", "Centro"),
+    "deposito": ("7", "Deposito"), "administracao": ("8", "Administracao"),
+    "papel-arte": ("9", "Papel & Arte")
+}
+
+def is_live():
+    return Path("/run/live/medium").exists() or "boot=live" in Path("/proc/cmdline").read_text(errors="replace")
+
+def path():
+    return Path(os.environ["ENFOQUE_ID_STATE"]) if os.environ.get("ENFOQUE_ID_STATE") else (LIVE if is_live() else INSTALLED)
+
+def read_id(p=None):
+    d = json.loads((p or path()).read_text(encoding="utf-8"))
+    canonical = uuid.UUID(d["uuid"])
+    if d.get("shortId") != f"{canonical.int % 1000000000000:012d}":
+        raise ValueError("Identificador local inconsistente")
+    return d
+
+def initialize():
+    if os.geteuid() != 0 and not os.environ.get("ENFOQUE_ID_STATE"):
+        raise PermissionError("Somente o servico de inicializacao pode gerar ID.")
+    p = path()
+    if p.exists():
+        return read_id(p)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    os.chmod(p.parent, 0o755)
+    val = uuid.uuid4()
+    d = {"schema": 1, "uuid": str(val), "shortId": f"{val.int % 1000000000000:012d}",
+         "createdAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+         "mode": "live-preview" if is_live() else "installed"}
+    fd = os.open(p, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(d, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+        f.flush()
+        os.fsync(f.fileno())
+    return d
+
+def ipv4s():
+    try:
+        raw = subprocess.run(["ip", "-j", "-4", "addr", "show", "up"], capture_output=True,
+                             text=True, timeout=3, check=True).stdout
+        out = []
+        for iface in json.loads(raw):
+            name = str(iface.get("ifname", ""))
+            if name == "lo" or name.startswith(("docker", "veth", "virbr", "wg", "tun", "tailscale")):
+                continue
+            for addr in iface.get("addr_info", []):
+                if addr.get("family") == "inet" and addr.get("scope") == "global":
+                    ip = ipaddress.IPv4Address(addr["local"])
+                    if not (ip.is_loopback or ip.is_link_local):
+                        out.append(str(ip))
+        return out
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return []
+
+def mapped_unit(ips, filename=NETWORKS):
+    try:
+        rules = json.loads(Path(filename).read_text(encoding="utf-8"))
+        if not isinstance(rules, dict):
+            return None
+        choices = []
+        for network, unit in rules.items():
+            if unit not in UNITS:
+                continue
+            net = ipaddress.IPv4Network(network, strict=False)
+            if any(ipaddress.IPv4Address(ip) in net for ip in ips):
+                choices.append((net.prefixlen, unit))
+        return max(choices)[1] if choices else None
+    except (OSError, ValueError, TypeError):
+        return None
+
+def selected_unit(home=None):
+    p = (Path(home) if home else Path.home()) / ".config/enfoque-os/identity.json"
+    try:
+        unit = json.loads(p.read_text(encoding="utf-8")).get("unitId")
+        return unit if unit in UNITS else None
+    except (OSError, ValueError):
+        return None
+
+def describe(home=None, mapping=NETWORKS):
+    record = read_id()
+    ips = ipv4s()
+    from_network = mapped_unit(ips, mapping)
+    from_user = selected_unit(home)
+    unit = from_network or from_user
+    code, store = UNITS.get(unit, ("0", "Unidade nao cadastrada"))
+    if ips:
+        subnet = ipaddress.IPv4Network(ips[0] + "/24", strict=False)
+        tag = 10 + int.from_bytes(hashlib.blake2s(str(subnet).encode(), digest_size=2).digest(), "big") % 90
+        group = f"G{tag} - {subnet}"
+    else:
+        group = "Sem rede"
+    return {"id": record["shortId"] + "-" + code, "uuid": record["uuid"],
+            "unit": store, "suffix": code, "ip": ips[0] if ips else "Nao conectado",
+            "group": group, "source": "CIDR cadastrado" if from_network else "Primeiro acesso" if from_user else "Nao atribuido",
+            "live": record.get("mode") == "live-preview"}
+
+def dialog():
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk, Gdk
+    try:
+        d = describe()
+    except (OSError, ValueError, KeyError) as error:
+        box = Gtk.MessageDialog(message_type=Gtk.MessageType.ERROR, buttons=Gtk.ButtonsType.OK,
+                                text="ID do computador indisponivel")
+        box.format_secondary_text(str(error))
+        box.run()
+        box.destroy()
+        return 1
+    win = Gtk.Dialog(title="Identificacao do computador", flags=0)
+    win.set_default_size(480, 310)
+    win.set_position(Gtk.WindowPosition.CENTER)
+    win.add_button("Fechar", Gtk.ResponseType.CLOSE)
+    win.add_button("Copiar ID", Gtk.ResponseType.APPLY)
+    body = win.get_content_area()
+    body.set_border_width(20)
+    body.set_spacing(12)
+    title = Gtk.Label()
+    title.set_markup('<span size="xx-large" weight="bold">' + d["id"] + '</span>')
+    title.set_selectable(True)
+    body.pack_start(title, False, False, 6)
+    for label, value in (("Loja", d["unit"]), ("Identificacao", d["source"]),
+                         ("Faixa de rede", d["group"]), ("IP", d["ip"]), ("UUID", d["uuid"])):
+        row = Gtk.Box(spacing=8)
+        a = Gtk.Label(label=label + ":")
+        a.set_xalign(0)
+        b = Gtk.Label(label=value)
+        b.set_selectable(True)
+        row.pack_start(a, False, False, 0)
+        row.pack_end(b, False, False, 0)
+        body.pack_start(row, False, False, 1)
+    if d["live"]:
+        body.pack_start(Gtk.Label(label="Previa LIVE: novo ID apos reiniciar."), False, False, 2)
+    win.show_all()
+    while win.run() == Gtk.ResponseType.APPLY:
+        Gdk.Display.get_default().get_clipboard(Gdk.SELECTION_CLIPBOARD).set_text(d["id"], -1)
+    win.destroy()
+    return 0
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--init", action="store_true")
+    parser.add_argument("--dialog", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args()
+    if args.init:
+        print(initialize()["shortId"])
+    elif args.dialog:
+        sys.exit(dialog())
+    else:
+        data = describe()
+        print(json.dumps(data, ensure_ascii=False) if args.json else data["id"])

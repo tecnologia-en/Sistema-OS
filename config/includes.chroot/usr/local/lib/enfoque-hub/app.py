@@ -11,7 +11,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, Gdk, GLib, Gio
 
 sys.path.insert(0, "/usr/local/lib/enfoque-hub")
-from devices import ports, printer_queues  # noqa: E402
+from devices import ports, printer_queues, visible_ports  # noqa: E402
 
 CSS = b"""
 window { background: #f4f7fc; color: #1b2a42; }
@@ -71,6 +71,7 @@ class EnfoqueHub(Gtk.Window):
         self.set_position(Gtk.WindowPosition.CENTER)
         self.connect("destroy", Gtk.main_quit)
         self.last_devices = None
+        self.current_devices = []
         self.last_printers = None
         self.cpu_sample = read_cpu()
         self.tabs = Gtk.Notebook()
@@ -138,7 +139,11 @@ class EnfoqueHub(Gtk.Window):
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         outer.set_border_width(12)
         outer.pack_start(label("Mapa automático das portas USB", "section-title"), False, False, 0)
-        outer.pack_start(label("Portas vazias aparecem em cinza. Teclados, mouses, leitores, impressoras e qualquer USB novo surgem sem cadastro manual.", "enfoque-muted"), False, False, 0)
+        outer.pack_start(label("Por padrão, somente dispositivos conectados aparecem. Marque a opção abaixo para ver todas as portas USB.", "enfoque-muted"), False, False, 0)
+        self.show_empty_ports = Gtk.CheckButton(label="Mostrar tambem portas vazias")
+        self.show_empty_ports.set_active(False)
+        self.show_empty_ports.connect("toggled", lambda *_: self._render_ports(self.current_devices))
+        outer.pack_start(self.show_empty_ports, False, False, 0)
         outer.pack_start(self._scroll(self.flow), True, True, 0)
         return outer
 
@@ -223,9 +228,12 @@ class EnfoqueHub(Gtk.Window):
     def _render_ports(self, data):
         for child in self.flow.get_children():
             self.flow.remove(child)
+        filtered = visible_ports(data, self.show_empty_ports.get_active())
+        if data and not filtered:
+            self.flow.add(label("Nenhum dispositivo USB conectado. Marque 'Mostrar tambem portas vazias' para consultar o mapa completo.", "enfoque-muted"))
         if not data:
             self.flow.add(label("Nenhuma controladora USB exposta. Em máquinas virtuais, ative o controlador USB nas configurações da VM.", "enfoque-muted"))
-        for item in data:
+        for item in filtered:
             frame = Gtk.Frame()
             frame.set_size_request(215, 116)
             frame.get_style_context().add_class("tile")
@@ -265,6 +273,7 @@ class EnfoqueHub(Gtk.Window):
     def _tick(self):
         try:
             devs = ports()
+            self.current_devices = devs
             current = repr(devs)
             if current != self.last_devices:
                 self.last_devices = current

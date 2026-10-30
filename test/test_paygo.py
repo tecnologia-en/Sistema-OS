@@ -36,11 +36,42 @@ class PayGoImageTests(unittest.TestCase):
             self.assertIn(cmd, path.read_text())
             self.assertTrue((CFG / "includes.chroot/usr/share/icons/hicolor/scalable/apps" /
                              (icon + ".svg")).is_file())
-        self.assertIn('VERSION="0.2.8"', (CFG / "includes.chroot/etc/enfoque-os-release").read_text())
+        self.assertIn('VERSION="0.2.9"', (CFG / "includes.chroot/etc/enfoque-os-release").read_text())
 
     def test_launcher_valid_python(self):
         self.assertTrue(LAUNCHER.stat().st_mode & stat.S_IXUSR)
         compile(LAUNCHER.read_text(), str(LAUNCHER), "exec")
+
+    def test_prevent_insufficient_space_before_wineboot(self):
+        loader = importlib.machinery.SourceFileLoader("paygo_space_test", str(LAUNCHER))
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        module = importlib.util.module_from_spec(spec)
+        loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as tmp:
+            prefix = Path(tmp) / "wine-prefix"
+            with mock.patch.object(module, "PREFIX", prefix), \
+                 mock.patch.object(module.shutil, "which", return_value="/usr/bin/true"), \
+                 mock.patch.object(module.shutil, "disk_usage", return_value=mock.Mock(free=950_000_000)), \
+                 mock.patch.object(module, "aviso") as aviso, \
+                 mock.patch.object(module.subprocess, "call") as wineboot:
+                self.assertFalse(module.wine_pronto())
+                wineboot.assert_not_called()
+                self.assertIn("2 GiB", aviso.call_args.args[0])
+
+    def test_nonzero_installer_exit_code_is_reported(self):
+        loader = importlib.machinery.SourceFileLoader("paygo_exit_code_test", str(LAUNCHER))
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        module = importlib.util.module_from_spec(spec)
+        loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as tmp:
+            exe = Path(tmp) / "SetupPayGo.exe"
+            exe.write_bytes(b"MZ")
+            with mock.patch.object(module, "SETUP", exe), \
+                 mock.patch.object(module, "aviso") as aviso, \
+                 mock.patch.object(module.subprocess, "call", return_value=53) as child:
+                self.assertFalse(module.instalar())
+                child.assert_called_once_with(["wine", str(exe)])
+                self.assertIn("53", aviso.call_args.args[0])
 
     def test_executable_search_prefers_application(self):
         loader = importlib.machinery.SourceFileLoader("paygo_launcher_test", str(LAUNCHER))

@@ -34,6 +34,7 @@
         <value type="int" value="9"/>
         <value type="int" value="10"/>
         <value type="int" value="11"/>
+        <value type="int" value="12"/>
       </property>
     </property>
   </property>
@@ -86,5 +87,10 @@
       <property name="tooltip-format" type="string" value="%A, %d/%m/%Y"/>
     </property>
     <property name="plugin-11" type="string" value="showdesktop"/>
+    <property name="plugin-12" type="string" value="launcher">
+      <property name="items" type="array">
+        <value type="string" value="enfoque-id.desktop"/>
+      </property>
+    </property>
   </property>
 </channel>

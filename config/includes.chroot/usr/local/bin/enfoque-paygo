@@ -28,7 +28,19 @@ def wine_pronto():
         return False
     PREFIX.mkdir(parents=True, exist_ok=True, mode=0o700)
     PREFIX.chmod(0o700)
+    # A Live ISO may have a 1 GiB writable overlay even with a large VDI.
+    # Wine creates >1 GiB of files. Check the real resolved target filesystem.
     if not (PREFIX / "drive_c").is_dir():
+        try:
+            free_bytes = shutil.disk_usage(PREFIX.resolve()).free
+        except OSError:
+            aviso("Nao foi possivel medir espaco livre para o Wine.", True)
+            return False
+        if free_bytes < 2 * 1024 ** 3:
+            aviso("Espaco insuficiente para criar o Wine do PayGo: "
+                  "sao necessarios pelo menos 2 GiB livres no volume do prefixo. "
+                  "Instale o Enfoque OS no disco antes de configurar o PayGo.", True)
+            return False
         if subprocess.call(["wineboot", "--init"]):
             aviso("Falha ao iniciar o ambiente Windows do PayGo.", True)
             return False
@@ -68,8 +80,15 @@ def instalar():
         return False
     aviso("Instalacao experimental do PayGo no Wine. Este assistente nao ativa "
           "o ponto de captura nem executa vendas. Nao utilize dados de producao no piloto.")
-    if subprocess.call(["wine", str(SETUP)]):
-        aviso("Instalador retornou erro. O PayGo nao esta pronto para uso.", True)
+    try:
+        exit_code = subprocess.call(["wine", str(SETUP)])
+    except OSError:
+        aviso("Falha ao iniciar o processo do instalador Wine/PayGo.", True)
+        return False
+    if exit_code:
+        aviso("Instalador PayGo retornou codigo " + str(exit_code) +
+              ". Verifique as dependencias do Wine e os logs locais. "
+              "O PayGo NAO esta pronto para uso.", True)
         return False
     return True
 

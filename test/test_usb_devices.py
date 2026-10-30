@@ -50,6 +50,28 @@ class USBInventoryTests(unittest.TestCase):
                 (new / k).write_text(v)
             self.assertEqual(devices.ports(root)[3]["device"]["product"], "Futuro dispositivo")
 
+    def test_visible_ports_defaults_to_connected_and_diagnostics_can_show_all(self):
+        entries=[
+            {"slot":"1-1","occupied":False},
+            {"slot":"1-2","occupied":True,"device":{"product":"GERTEC PPC930"}},
+            {"slot":"1-3","occupied":False},
+        ]
+        self.assertEqual([x["slot"] for x in devices.visible_ports(entries)],["1-2"])
+        self.assertEqual([x["slot"] for x in devices.visible_ports(entries,True)],["1-1","1-2","1-3"])
+        self.assertEqual(devices.visible_ports(entries[:1]),[])
+        self.assertEqual(devices.visible_ports([],True),[])
+        self.assertEqual(len(entries),3)  # source inventory is not mutated
+
+    def test_ux_shortcut_uses_only_branded_installer(self):
+        root=Path(__file__).resolve().parents[1]
+        visual=(root/"config/includes.chroot/usr/local/bin/enfoque-aplicar-visual").read_text()
+        self.assertIn("calamares-install-debian.desktop",visual)
+        self.assertIn("grep -q '^Exec=calamares-install-debian$'",visual)
+        self.assertIn("Instalar-Enfoque-OS.desktop",visual)
+        app=(root/"config/includes.chroot/usr/local/lib/enfoque-hub/app.py").read_text()
+        self.assertIn('self.show_empty_ports.set_active(False)',app)
+        self.assertIn('visible_ports(data, self.show_empty_ports.get_active())',app)
+
     def test_hub_children_and_safety_limit(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

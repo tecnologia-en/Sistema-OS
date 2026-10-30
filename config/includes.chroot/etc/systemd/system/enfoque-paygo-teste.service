@@ -1,0 +1,29 @@
+[Unit]
+Description=Enfoque OS - broker isolado de teste PayGo DEMO
+After=network-online.target enfoque-paygo-tef.service
+Wants=network-online.target
+ConditionPathExists=/var/lib/paygo-tef/provisioned
+
+[Service]
+Type=simple
+User=enfoque-tef
+Group=enfoque-tef
+SupplementaryGroups=dialout
+RuntimeDirectory=enfoque-paygo-teste
+RuntimeDirectoryMode=0755
+WorkingDirectory=/var/lib/paygo-tef
+ExecStart=/usr/bin/python3 /usr/local/lib/enfoque-paygo-teste/bridge.py
+Restart=on-failure
+RestartSec=8
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/paygo-tef /run/enfoque-paygo-teste
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

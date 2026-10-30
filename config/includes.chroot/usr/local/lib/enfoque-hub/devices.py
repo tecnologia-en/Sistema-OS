@@ -96,6 +96,14 @@ def ports(root: Path = USB_ROOT):
     return output
 
 
+
+def visible_ports(entries, show_empty=False):
+    """Keep occupied USB slots visible by default; diagnostics can show all."""
+    if show_empty:
+        return list(entries)
+    return [item for item in entries if item.get("occupied")]
+
+
 def printer_queues():
     try:
         run = subprocess.run(["lpstat", "-p"], capture_output=True, text=True, timeout=3, check=False)

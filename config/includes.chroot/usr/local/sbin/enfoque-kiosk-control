@@ -113,6 +113,8 @@ autologin-user-timeout=0
     atomic(FLAG, "Provisao autorizada pela TI. Desative com enfoque-kiosk-control disable.\n", 0o600)
     run("systemctl", "daemon-reload")
     run("systemctl", "enable", "enfoque-paygo-tef.service")
+    if Path("/var/lib/paygo-tef/provisioned").exists():
+        run("systemctl", "enable", "--now", "enfoque-paygo-teste.service")
     print("Modo quiosque configurado para o proximo login/reboot, sem interromper a TI")
 
 def disable():

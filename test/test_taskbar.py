@@ -41,7 +41,7 @@ class TaskbarTests(unittest.TestCase):
 
     def test_ordered_independent_launchers_and_tasklist(self):
         ids = [int(x.get("value")) for x in self.panel.find("./property[@name='plugin-ids']")]
-        self.assertEqual(ids, list(range(1, 12)))
+        self.assertEqual(ids, list(range(1, 13)))
         self.assertIsNotNone(self.plugins)
         self.assertEqual(self.plugins.find("./property[@name='plugin-1']").get("value"), "whiskermenu")
         for plugin_id, desktop in [(2,"google-chrome.desktop"), (3,"enfoque-sige.desktop"),
@@ -56,6 +56,9 @@ class TaskbarTests(unittest.TestCase):
         self.assertEqual(self.plugins.find("./property[@name='plugin-9']").get("value"), "pulseaudio")
         self.assertEqual(self.plugins.find("./property[@name='plugin-10']").get("value"), "clock")
         self.assertEqual(self.plugins.find("./property[@name='plugin-11']").get("value"), "showdesktop")
+        p = self.plugins.find("./property[@name='plugin-12']")
+        self.assertEqual(p.get("value"), "launcher")
+        self.assertEqual(p.find("./property[@name='items']/value").get("value"), "enfoque-id.desktop")
 
     def test_launchers_retain_site_and_real_icons(self):
         for name, icon, host in [

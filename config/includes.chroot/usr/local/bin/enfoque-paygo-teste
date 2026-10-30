@@ -1,0 +1,4 @@
+#!/bin/sh
+# Searchable internal tool, never autostarted/pinned. Password is checked in GUI and TEF broker.
+set -eu
+exec /usr/bin/python3 /usr/local/lib/enfoque-paygo-teste/app.py "$@"

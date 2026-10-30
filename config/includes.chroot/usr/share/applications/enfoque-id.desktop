@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=ID do computador
+Comment=Identificacao unica, loja e faixa de rede
+Exec=/usr/local/bin/enfoque-id --dialog
+Icon=computer
+Terminal=false
+Categories=System;Utility;
+Keywords=identificacao;id;computador;loja;rede;ip;enfoque;
+StartupNotify=true

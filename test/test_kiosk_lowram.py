@@ -7,6 +7,7 @@ import sqlite3
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 IMAGE = ROOT / "config/includes.chroot"
@@ -48,7 +49,7 @@ class KioskImageTests(unittest.TestCase):
         packages=(ROOT/"config/package-lists/enfoque-base.list.chroot").read_text()
         for pkg in ("xfce4","zram-tools","plymouth","logrotate","cups"):
             self.assertIn("\n"+pkg+"\n",packages)
-        self.assertIn("0.2.8",(IMAGE/"etc/enfoque-os-release").read_text())
+        self.assertIn("0.2.9",(IMAGE/"etc/enfoque-os-release").read_text())
 
     def test_separate_user_borders(self):
         admin=(IMAGE/"usr/local/sbin/enfoque-kiosk-control").read_text()
@@ -126,10 +127,14 @@ class KioskImageTests(unittest.TestCase):
             module.PREFIX=prefix
             module.DATABASE=dbpath
             module.PINPAD=prefix/"dosdevices/com8"
-            self.assertEqual((7057,7636),module.check())
-            dbpath.unlink()
-            with self.assertRaises(RuntimeError):
-                module.check()
+            # The USB/COM8 checks have their own fake-sysfs suite. This
+            # fixture specifically verifies the SQLite fail-closed behavior.
+            with mock.patch.object(module, "validate_pinpad_alias", return_value=Path("/dev/ttyACM0")) as pinpad:
+                self.assertEqual((7057,7636),module.check())
+                pinpad.assert_called_once_with()
+                dbpath.unlink()
+                with self.assertRaises(RuntimeError):
+                    module.check()
             self.assertFalse(dbpath.exists(), "Integrity checking must never replace ledgers")
 
 if __name__=="__main__":

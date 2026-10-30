@@ -40,6 +40,13 @@ if command -v xdg-user-dir >/dev/null 2>&1; then
   [ -z "$configured" ] || DESKTOP="$configured"
 fi
 mkdir -p "$DESKTOP"
+# Debian Calamares adds an English shortcut during Live boot. The Enfoque
+# branded launcher invokes the exact same installer, so keep only that entry.
+if [ -d /run/live/medium ] && [ -f "$DESKTOP/calamares-install-debian.desktop" ]; then
+    if grep -q '^Exec=calamares-install-debian$' "$DESKTOP/calamares-install-debian.desktop"; then
+        rm -f -- "$DESKTOP/calamares-install-debian.desktop"
+    fi
+fi
 # Installer shortcut exists only in a temporary Live session, never in installed user homes.
 if [ -d /run/live/medium ] && [ -f /usr/share/applications/enfoque-instalar.desktop ]; then
   cp /usr/share/applications/enfoque-instalar.desktop "$DESKTOP/Instalar-Enfoque-OS.desktop"

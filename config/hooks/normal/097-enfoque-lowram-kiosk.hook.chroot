@@ -12,6 +12,7 @@ for timer in apt-daily.timer apt-daily-upgrade.timer; do
     systemctl disable "$timer" >/dev/null 2>&1 || :
 done
 systemctl enable zramswap.service >/dev/null
+systemctl enable enfoque-device-id.service >/dev/null
 # No TEF account is auto-logged-in on the Live ISO. TI enables kiosk after
 # an installed administrator performs onboarding and device-specific activation.
 # Keep the ordinary installation login / support path intact.
