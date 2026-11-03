@@ -17,14 +17,14 @@ jobs:
       - name: Aguardar build exato da versao
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh run watch 41686147564 --repo "$GITHUB_REPOSITORY" --exit-status --interval 20
+        run: gh run watch 41687278149 --repo "$GITHUB_REPOSITORY" --exit-status --interval 20
       - name: Baixar ISO do build verificado
         uses: actions/download-artifact@v4
         with:
-          name: enfoque-os-iso-52
+          name: enfoque-os-iso-53
           path: dist
           repository: tecnologia-en/Sistema-OS
-          run-id: 41686147564
+          run-id: 41687278149
           github-token: ${{ github.token }}
       - name: Validar a ISO e criar partes transportaveis
         run: |
@@ -42,8 +42,8 @@ jobs:
         run: |
           gh release create v0.2.16-piloto \
             --repo "$GITHUB_REPOSITORY" \
-            --target 1d352d96ee0f4840f4bc4b40ecb58bca59cbdd1e \
+            --target 3a7ab1d06a37fd581cfaced06c29d5316240f6c1 \
             --title 'Enfoque OS 0.2.16 - primeiro acesso, idioma e agente remoto (QA)' \
-            --notes 'Candidato de QA, NAO homologado para pagamentos. Instalador Enfoque com login inicial enfoque/123456 que exige troca no primeiro uso, ID unico persistido no disco e cadastro de computador e loja. 0.2.16 persiste fuso America/Sao_Paulo e locale pt_BR.UTF-8; coloca o cadastro em primeiro plano e condiciona o registro remoto a primeira configuracao instalada, sem registro de Live. Aprovacao remota individual da TI, sem token na ISO. Boot BIOS testado na 0.2.15; 0.2.16 requer nova QA de instalacao, UEFI e PayGo com pinpad real antes de producao. Juntar partes em ordem e verificar SHA256SUMS.' \
+            --notes 'Candidato de QA, NAO homologado para pagamentos. Instalador Enfoque com login inicial enfoque/123456 que exige troca no primeiro uso, ID unico persistido no disco e cadastro de computador e loja. 0.2.16 persiste fuso America/Sao_Paulo e locale pt_BR.UTF-8; coloca o cadastro em primeiro plano e condiciona o registro remoto a primeira configuracao instalada, sem registro de Live. Aprovacao remota individual da TI, sem token na ISO. Discos com LVM montado ou swap ativo sao bloqueados no instalador. Boot BIOS testado na 0.2.15; 0.2.16 requer nova QA de instalacao, UEFI e PayGo com pinpad real antes de producao. Juntar partes em ordem e verificar SHA256SUMS.' \
             --prerelease \
             parts/chunk-* parts/SHA256SUMS parts/SHA256_PARTS
