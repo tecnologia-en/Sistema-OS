@@ -55,16 +55,18 @@ class FirstAccessTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 mod.load_identity(p)
 
-    def test_debian_calamares_creates_password_account_during_install(self):
+    def test_enfoque_offline_installer_not_debian_calamares(self):
         packages=(CONFIG/"../package-lists/enfoque-base.list.chroot").resolve().read_text(encoding="utf-8").splitlines()
-        self.assertIn("calamares-settings-debian",packages)
-        self.assertIn("pkexec",packages)
+        self.assertNotIn("calamares-settings-debian",packages)
+        self.assertIn("parted",packages)
+        self.assertIn("grub-efi-amd64-bin",packages)
         app=(CONFIG/"usr/share/applications/enfoque-instalar.desktop").read_text(encoding="utf-8")
         self.assertIn("Exec=/usr/local/bin/enfoque-instalar",app)
+        self.assertNotIn("calamares",app.lower())
         script=(CONFIG/"usr/local/bin/enfoque-instalar").read_text(encoding="utf-8")
         self.assertIn("/run/live/medium",script)
-        self.assertIn("exec calamares-install-debian",script)
-        self.assertIn("TryExec=calamares-install-debian",app)
+        self.assertNotIn("calamares-install-debian",script.lower())
+        self.assertIn("APAGAR",script)
 
     def test_password_login_installed_only(self):
         binary=(CONFIG/"usr/local/sbin/enfoque-login-instalado").read_text(encoding="utf-8")

@@ -129,11 +129,13 @@ for name in enfoque-start enfoque-central enfoque-suporte enfoque-diagnostico en
   need "config/includes.chroot/usr/share/icons/hicolor/scalable/apps/$name.svg"
 done
 # Installer + non-automatic login for persistent installed OS only.
-for name in calamares-settings-debian pkexec; do
+for name in pkexec parted squashfs-tools dosfstools e2fsprogs grub2-common grub-pc-bin grub-efi-amd64-bin; do
   grep -Fxq "$name" "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail "instalador ausente: $name"
 done
 need config/includes.chroot/usr/share/applications/enfoque-instalar.desktop
 need config/includes.chroot/usr/local/bin/enfoque-instalar
+need config/includes.chroot/usr/local/sbin/enfoque-install-system
+need config/includes.chroot/etc/xdg/autostart/enfoque-instalar-live.desktop
 need config/includes.chroot/usr/local/sbin/enfoque-login-instalado
 need config/includes.chroot/etc/systemd/system/enfoque-login-instalado.service
 need config/includes.chroot/usr/local/lib/enfoque-onboarding/identity.py
@@ -141,10 +143,13 @@ need config/includes.chroot/usr/local/bin/enfoque-primeiro-acesso
 need config/includes.chroot/etc/xdg/autostart/enfoque-primeiro-acesso.desktop
 need config/hooks/normal/098-enable-installed-login.hook.chroot
 need config/includes.chroot/etc/lightdm/lightdm-gtk-greeter.conf.d/50-enfoque-theme.conf
-for f in config/includes.chroot/usr/local/bin/enfoque-instalar config/includes.chroot/usr/local/sbin/enfoque-login-instalado config/hooks/normal/098-enable-installed-login.hook.chroot; do
+for f in config/includes.chroot/usr/local/sbin/enfoque-login-instalado config/hooks/normal/098-enable-installed-login.hook.chroot; do
   sh -n "$ROOT/$f"
 done
-grep -Fq 'calamares-settings-debian' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'instalador de disco ausente'
+python3 -m py_compile "$ROOT/config/includes.chroot/usr/local/bin/enfoque-instalar" "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-install-system"
+if grep -Fxq 'calamares-settings-debian' "$ROOT/config/package-lists/enfoque-base.list.chroot"; then
+  fail 'Instalador Debian aparece na imagem'
+fi
 grep -Fq 'greeter-hide-users=false' "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-login-instalado" || fail 'login de usuario nao aparece'
 grep -Fq 'autologin-user=' "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-login-instalado" || fail 'login automatico nao desabilitado'
 grep -Fq 'digital-date-format' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'data deve aparecer no relogio'

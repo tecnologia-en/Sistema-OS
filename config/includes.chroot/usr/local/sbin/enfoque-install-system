@@ -1,0 +1,209 @@
+#!/usr/bin/env python3
+"""Installer offline for Enfoque OS. Wipes only an explicitly confirmed disk.
+
+This is a *disk installer*, never a USB/live persistence mechanism. It must
+be started from the live ISO, by a local operator who chose the target disk.
+"""
+import argparse
+import json
+import os
+from pathlib import Path
+import re
+import stat
+import subprocess
+import sys
+import time
+
+MIN_BYTES = 24 * 1024 ** 3
+LIVE = Path("/run/live/medium")
+SQUASH = LIVE / "live/filesystem.squashfs"
+TARGET = Path("/mnt/enfoque-install")
+REQUIRED = (
+    "parted", "partprobe", "udevadm", "mkfs.vfat", "mkfs.ext4",
+    "unsquashfs", "mount", "umount", "blkid", "chroot", "findmnt",
+)
+
+
+def run(args, *, timeout=180, input=None, quiet=False):
+    if not quiet:
+        print("Enfoque OS: " + " ".join(map(str, args)), flush=True)
+    return subprocess.run(args, check=True, timeout=timeout, text=True,
+                          input=input, stdout=subprocess.PIPE if quiet else None)
+
+
+def live_media_disk():
+    # The running ISO and its writable USB medium are never valid targets.
+    source = run(["findmnt", "-n", "-o", "SOURCE", "--target", str(LIVE)],
+                 quiet=True).stdout.strip().splitlines()[0]
+    if not source.startswith("/dev/"):
+        return None
+    base = run(["lsblk", "-n", "-o", "PKNAME", source], quiet=True).stdout.strip()
+    return "/dev/" + base if base else source
+
+
+def available_disks():
+    data = json.loads(run(["lsblk", "--json", "--tree", "--bytes", "--output",
+                           "PATH,TYPE,SIZE,RM,RO,TRAN,MODEL,MOUNTPOINTS"],
+                          quiet=True).stdout)
+    excluded = live_media_disk()
+    disks = []
+    for obj in data.get("blockdevices", []):
+        if obj.get("type") != "disk" or obj.get("rm") or obj.get("ro"):
+            continue
+        if obj.get("tran") == "usb" or obj.get("path") == excluded:
+            continue
+        path = obj.get("path", "")
+        size = obj.get("size", 0)
+        if not isinstance(size, int) or size < MIN_BYTES:
+            continue
+        children = [obj] + obj.get("children", [])
+        if any(child.get("mountpoints") and any(child["mountpoints"]) for child in children):
+            continue
+        if not re.fullmatch(r"/dev/[a-zA-Z0-9_+.-]+", path):
+            continue
+        try:
+            actual = Path(path).resolve(strict=True)
+            if not stat.S_ISBLK(actual.stat().st_mode):
+                continue
+        except OSError:
+            continue
+        disks.append({"path": path, "size": size, "model": obj.get("model") or "Disco interno"})
+    return disks
+
+
+def partitions(disk):
+    separator = "p" if disk[-1].isdigit() else ""
+    return [disk + separator + str(i) for i in (1, 2, 3)]
+
+
+def prepare_target(disk):
+    run(["parted", "-s", "-a", "optimal", disk, "mklabel", "gpt",
+         "mkpart", "BIOS", "1MiB", "5MiB", "set", "1", "bios_grub", "on",
+         "mkpart", "ESP", "fat32", "5MiB", "517MiB", "set", "2", "esp", "on",
+         "mkpart", "ROOT", "ext4", "517MiB", "100%"])
+    run(["partprobe", disk])
+    run(["udevadm", "settle"], timeout=35)
+    bios, esp, root = partitions(disk)
+    for _ in range(25):
+        if all(Path(p).exists() for p in (bios, esp, root)):
+            break
+        time.sleep(0.4)
+    else:
+        raise RuntimeError("O kernel nao reconheceu as particoes.")
+    run(["mkfs.vfat", "-F", "32", "-n", "ENFOQUE_EFI", esp], timeout=120)
+    run(["mkfs.ext4", "-F", "-L", "ENFOQUE_ROOT", root], timeout=180)
+    return esp, root
+
+
+def mount_system(root, esp):
+    TARGET.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if any(TARGET.iterdir()):
+        raise RuntimeError("Area temporaria de instalacao ocupada: nao sera apagada.")
+    run(["mount", root, str(TARGET)])
+    (TARGET / "boot/efi").mkdir(parents=True, exist_ok=True)
+    run(["mount", esp, str(TARGET / "boot/efi")])
+
+
+def bind_chroot():
+    for name in ("dev", "proc", "sys", "run"):
+        dest = TARGET / name
+        dest.mkdir(parents=True, exist_ok=True)
+        run(["mount", "--rbind", "/" + name, str(dest)])
+        run(["mount", "--make-rslave", str(dest)])
+
+
+def configure_system(disk, esp, root):
+    for path in ("var/lib/enfoque-os/device-identity.json",
+                 "var/lib/enfoque-os/firstboot.json", "etc/enfoque-os/agent.json",
+                 "var/lib/enfoque-os/mesh-bootstrap.json"):
+        (TARGET / path).unlink(missing_ok=True)
+    # New host secrets are generated only after this installation boots.
+    for path in (TARGET / "etc").glob("ssh/ssh_host_*"):
+        path.unlink()
+    (TARGET / "etc/machine-id").write_text("")
+    (TARGET / "var/lib/dbus/machine-id").unlink(missing_ok=True)
+    root_id = run(["blkid", "-s", "UUID", "-o", "value", root], quiet=True).stdout.strip()
+    esp_id = run(["blkid", "-s", "UUID", "-o", "value", esp], quiet=True).stdout.strip()
+    if not re.fullmatch(r"[0-9a-fA-F-]{20,40}", root_id) or not esp_id:
+        raise RuntimeError("UUID do sistema de arquivos indisponivel.")
+    (TARGET / "etc/fstab").write_text(
+        f"UUID={root_id} / ext4 errors=remount-ro 0 1\n"
+        f"UUID={esp_id} /boot/efi vfat umask=0077,nofail 0 1\n")
+    (TARGET / "etc/hostname").write_text("enfoque-novo\n")
+    hosts = TARGET / "etc/hosts"
+    hosts.write_text("127.0.0.1 localhost\n127.0.1.1 enfoque-novo\n"
+                     "::1 localhost ip6-localhost ip6-loopback\n")
+    bind_chroot()
+    run(["chroot", str(TARGET), "/usr/sbin/useradd", "-m", "-s", "/bin/bash",
+         "-G", "sudo,audio,video,plugdev,netdev,dialout,lp", "enfoque"], timeout=60)
+    # The universal initial code is intentionally short-lived: PAM requires
+    # changing it on the first installed login (never for remote control).
+    run(["chroot", str(TARGET), "/usr/sbin/chpasswd"], input="enfoque:123456\n")
+    run(["chroot", str(TARGET), "/usr/bin/chage", "-d", "0", "enfoque"])
+    run(["chroot", str(TARGET), "/usr/bin/passwd", "-l", "root"])
+    run(["chroot", str(TARGET), "/usr/sbin/update-initramfs", "-u", "-k", "all"], timeout=900)
+    run(["chroot", str(TARGET), "/usr/sbin/grub-install", "--target=i386-pc",
+         "--recheck", disk], timeout=150)
+    run(["chroot", str(TARGET), "/usr/sbin/grub-install", "--target=x86_64-efi",
+         "--efi-directory=/boot/efi", "--bootloader-id=EnfoqueOS",
+         "--removable", "--no-nvram"], timeout=150)
+    run(["chroot", str(TARGET), "/usr/sbin/grub-mkconfig",
+         "-o", "/boot/grub/grub.cfg"], timeout=150)
+    # Verify the installed system really has its boot files before success.
+    for required in (TARGET / "boot/grub/grub.cfg",
+                     TARGET / "boot/efi/EFI/BOOT/BOOTX64.EFI",
+                     TARGET / "etc/fstab"):
+        if not required.is_file() or required.stat().st_size == 0:
+            raise RuntimeError("Imagem incompleta; arquivo de boot ausente.")
+    run(["sync"], timeout=90)
+
+
+def install(disk, confirmation):
+    if os.geteuid() != 0 or not LIVE.is_dir() or not SQUASH.is_file():
+        raise PermissionError("Instalador apenas na ISO Live, com permissao administrativa.")
+    if confirmation != "APAGAR":
+        raise ValueError("Confirmacao de apagamento ausente.")
+    if not all(Path("/usr/bin/" + name).exists() or
+               Path("/usr/sbin/" + name).exists() or
+               Path("/sbin/" + name).exists() for name in REQUIRED):
+        raise RuntimeError("Dependencias de instalacao incompletas.")
+    candidates = {item["path"] for item in available_disks()}
+    if disk not in candidates:
+        raise ValueError("Disco nao elegivel, montado, removivel ou pequeno demais.")
+    if TARGET.is_mount():
+        raise RuntimeError("Instalacao anterior ainda montada.")
+    print(f"INSTALANDO Enfoque OS em {disk}; apagamento irreversivel.", flush=True)
+    try:
+        esp, root = prepare_target(disk)
+        mount_system(root, esp)
+        print("Enfoque OS: extraindo o sistema...", flush=True)
+        run(["unsquashfs", "-f", "-d", str(TARGET), str(SQUASH)], timeout=2400)
+        configure_system(disk, esp, root)
+        print("ENFOQUE_INSTALL_OK", flush=True)
+    finally:
+        # Release mounts before a reboot, including recursively mounted /dev.
+        if TARGET.is_mount():
+            subprocess.run(["umount", "-R", str(TARGET)], timeout=100, check=False)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--list-disks", action="store_true")
+    parser.add_argument("--disk")
+    parser.add_argument("--confirm")
+    args = parser.parse_args()
+    try:
+        if args.list_disks:
+            print(json.dumps(available_disks()))
+        else:
+            if not args.disk:
+                parser.error("--disk e obrigatorio")
+            install(args.disk, args.confirm)
+        return 0
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+        print("ENFOQUE_INSTALL_ERROR: " + str(error)[:350], file=sys.stderr, flush=True)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

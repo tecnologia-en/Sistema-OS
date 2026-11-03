@@ -2,9 +2,9 @@
 Version=1.0
 Type=Application
 Name=Instalar Enfoque OS
-Comment=Instalar no disco e criar usuario/senha persistentes
+Comment=Instalar no disco interno e preparar o primeiro acesso da Enfoque
 Exec=/usr/local/bin/enfoque-instalar
-TryExec=calamares-install-debian
+TryExec=/usr/local/bin/enfoque-instalar
 Icon=drive-harddisk
 Terminal=false
 StartupNotify=true

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Instalacao Enfoque OS (somente Live)
+Exec=/usr/local/bin/enfoque-instalar
+TryExec=/usr/local/bin/enfoque-instalar
+OnlyShowIn=XFCE;
+NoDisplay=true
+Terminal=false
+X-GNOME-Autostart-enabled=true
