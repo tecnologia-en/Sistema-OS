@@ -1,0 +1,49 @@
+name: Publicar Enfoque OS 0.2.15 - candidato QA
+on:
+  push:
+    branches:
+      - feat/lowram-kiosk-028
+    paths:
+      - '.github/workflows/publish-iso-0215.yml'
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    steps:
+      - name: Aguardar build exato da versao
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run watch 41674824576 --repo "$GITHUB_REPOSITORY" --exit-status --interval 20
+      - name: Baixar ISO do build verificado
+        uses: actions/download-artifact@v4
+        with:
+          name: enfoque-os-iso-50
+          path: dist
+          repository: tecnologia-en/Sistema-OS
+          run-id: 41674824576
+          github-token: ${{ github.token }}
+      - name: Validar a ISO e criar partes transportaveis
+        run: |
+          set -euo pipefail
+          test -s dist/enfoque-os-0.2.15-piloto-amd64.iso
+          (cd dist && sha256sum -c SHA256SUMS)
+          mkdir -p parts
+          split --bytes=750m --numeric-suffixes=0 --suffix-length=2 \
+            dist/enfoque-os-0.2.15-piloto-amd64.iso parts/chunk-
+          (cd parts && sha256sum chunk-* > SHA256_PARTS && sha256sum -c SHA256_PARTS)
+          cp dist/SHA256SUMS parts/SHA256SUMS
+      - name: Publicar prerelease (nao homologada para lojas)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v0.2.15-piloto \
+            --repo "$GITHUB_REPOSITORY" \
+            --target 0eca587 \
+            --title 'Enfoque OS 0.2.15 - instalacao propria e ID persistente (candidato QA)' \
+            --notes 'Candidato de QA, NAO HOMOLOGADO para pagamentos reais. Removido o assistente Calamares. Instalador grafico do Enfoque OS apaga apenas o disco escolhido apos confirmacao explicita APAGAR; boot BIOS/UEFI e usuario inicial enfoque/123456 com troca obrigatoria no primeiro login. Depois disso, o usuario associa nome do computador, empresa e loja; UUID e ID ficam no disco instalado. No modo Live sem instalar, o ID nao e persistente. Acesso remoto continua condicionado a aprovacao e credenciais individuais da TI. Requer teste de instalacao, reboot e TEF em hardware real antes de producao. Juntar chunk-00 em ordem, verificar SHA256SUMS.' \
+            --prerelease \
+            parts/chunk-* parts/SHA256SUMS parts/SHA256_PARTS
