@@ -85,19 +85,28 @@ def main():
         print("Token individual invalido.")
         return 1
 
+    # Vincule a credencial emitida pela TI ao UUID persistente desta instalacao.
+    local_path = Path("/run/enfoque-os/device-identity.json") if Path("/run/live/medium").exists() else Path("/var/lib/enfoque-os/device-identity.json")
+    try:
+        local_uuid = str(uuid.UUID(json.loads(local_path.read_text(encoding="utf-8"))["uuid"]))
+        if uuid.UUID(local_uuid).version != 4:
+            raise ValueError
+    except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        print("ID local indisponivel; execute enfoque-id --init antes de inscrever.")
+        return 1
     CONFIG.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(CONFIG.parent, 0o700)
     staging = CONFIG.with_suffix(".tmp")
     with open(staging, "x", encoding="utf-8") as file:
-        json.dump({"id": device_id, "token": token}, file)
+        json.dump({"id": device_id, "token": token, "localUuid": local_uuid}, file)
         file.write("\n")
     os.chmod(staging, 0o600)
     os.replace(staging, CONFIG)
     for service in ("enfoque-telemetria.service", "enfoque-captura-tela.service"):
         subprocess.run(["systemctl", "enable", "--now", service], check=True)
     try:
-        if install_mesh(device_id, token):
-            print("MeshAgent instalado, com identidade unica deste equipamento.")
+        subprocess.run([sys.executable, "/usr/local/bin/enfoque-mesh-autoprovision"], timeout=180, check=True)
+        print("MeshAgent instalado, com identidade unica deste equipamento.")
     except Exception as error:
         print("O cadastro foi salvo, mas o MeshAgent ainda precisa de revisao:", type(error).__name__)
         print("Verifique internet e entre em contato com a TI; a telemetria permanece ativa.")

@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""Activate the existing MeshCentral service only after explicit TI enrollment.
+
+Every installed PC receives unique server credentials by approved onboarding.
+The public ISO has no MeshCentral key or device-specific configuration.
+"""
+import hashlib
+import importlib.machinery
+import importlib.util
+import json
+import os
+from pathlib import Path
+import re
+import stat
+import sys
+import uuid
+
+CONFIG = Path("/etc/enfoque-os/agent.json")
+ID_PATH = Path("/var/lib/enfoque-os/device-identity.json")
+LIVE_ID = Path("/run/enfoque-os/device-identity.json")
+MARKER = Path("/var/lib/enfoque-os/mesh-bootstrap.json")
+INSTALLER = "/usr/local/bin/enfoque-inscrever-computador"
+
+
+def enrollment_info():
+    if CONFIG.is_symlink():
+        raise PermissionError("Configuracao de MeshCentral nao pode ser symlink")
+    stats = CONFIG.stat()
+    if stats.st_uid != 0 or stat.S_IMODE(stats.st_mode) != 0o600:
+        raise PermissionError("Credencial MeshCentral exige root:root 0600")
+    config = json.loads(CONFIG.read_text(encoding="utf8"))
+    device_id, token = config.get("id", ""), config.get("token", "")
+    if not isinstance(device_id, str) or str(uuid.UUID(device_id)) != device_id or uuid.UUID(device_id).version != 4:
+        raise ValueError("UUID do cadastro invalido")
+    if not isinstance(token, str) or not re.fullmatch(r"[A-Za-z0-9_-]{40,150}", token):
+        raise ValueError("Credencial por dispositivo invalida")
+    own = json.loads((LIVE_ID if Path("/run/live/medium").exists() else ID_PATH).read_text(encoding="utf8"))["uuid"]
+    local_uuid = str(uuid.UUID(own))
+    # A nova inscrever-computador grava localUuid e impede token copiado entre PCs.
+    if config.get("localUuid") != local_uuid:
+        raise PermissionError("Cadastro do agente nao corresponde a este computador")
+    return device_id, token, local_uuid
+
+
+def run_once():
+    if os.geteuid() != 0:
+        raise PermissionError("A instalacao de MeshCentral requer usuario administrador")
+    if not CONFIG.exists():
+        return False
+    device_id, token, local_uuid = enrollment_info()
+    fingerprint = hashlib.sha256((device_id + ":" + local_uuid).encode()).hexdigest()
+    if MARKER.exists():
+        if MARKER.is_symlink() or MARKER.stat().st_uid != 0:
+            raise PermissionError("Marcador de instalacao alterado")
+        marker = json.loads(MARKER.read_text(encoding="utf8"))
+        if marker.get("identity") == fingerprint:
+            return True
+    loader = importlib.machinery.SourceFileLoader("enfoque_mesh_installer", INSTALLER)
+    module = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+    loader.exec_module(module)
+    if module.install_mesh(device_id, token):
+        MARKER.parent.mkdir(parents=True, exist_ok=True)
+        os.chmod(MARKER.parent, 0o755)
+        temp = MARKER.with_suffix(".tmp")
+        with open(temp, "w", encoding="utf8") as output:
+            json.dump({"identity": fingerprint, "schema": 1}, output)
+        os.chmod(temp, 0o600)
+        os.replace(temp, MARKER)
+        return True
+    return False
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(0 if run_once() else 2)
+    except Exception as exc:
+        print("MeshCentral: aguardando credenciais individuais validas: " +
+              type(exc).__name__, file=sys.stderr)
+        sys.exit(1)

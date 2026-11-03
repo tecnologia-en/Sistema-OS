@@ -1,0 +1,227 @@
+#!/usr/bin/env python3
+"""Enfoque OS Root MCP agent: per-installation keys, explicit admin approval.
+
+Never ship credentials in the ISO; never execute arbitrary shell or root code.
+Full remote graphical control is provided by individually enrolled MeshCentral.
+"""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import platform
+import re
+import secrets
+import shlex
+import socket
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+import uuid
+
+SERVER = "https://mcp.enfoquepapelaria.com.br/mcp/pc-agent"
+STATE = Path("/var/lib/enfoque-agent")
+DEVICE = Path("/var/lib/enfoque-os/device-identity.json")
+LIVE_DEVICE = Path("/run/enfoque-os/device-identity.json")
+AGENT_VERSION = "0.2.12-linux-limited"
+SAFE_READ = frozenset(("/etc/enfoque-os-release", "/etc/os-release", "/proc/meminfo", "/proc/uptime"))
+SAFE_DIR = frozenset(("/usr/share/applications", "/usr/local/bin", "/etc/xdg"))
+SAFE_UNITS = frozenset((
+    "enfoque-device-id.service", "enfoque-remote-agent.service",
+    "enfoque-telemetria.service", "enfoque-captura-tela.service",
+    "anydesk.service", "NetworkManager.service", "cups.service",
+    "lightdm.service", "meshagent.service",
+))
+METACHARS = frozenset(";|&<>$\\\n\r" + chr(96))
+
+
+def machine_identity():
+    path = LIVE_DEVICE if Path("/run/live/medium").exists() else DEVICE
+    record = json.loads(path.read_text(encoding="utf8"))
+    canonical = uuid.UUID(record["uuid"])
+    if canonical.version != 4 or str(canonical) != record["uuid"]:
+        raise ValueError("UUID local invalido")
+    if record["shortId"] != f"{canonical.int % 1000000000000:012d}":
+        raise ValueError("Codigo local inconsistente")
+    return record
+
+
+def local_state(folder=STATE):
+    record = machine_identity()
+    folder = Path(folder)
+    folder.mkdir(parents=True, mode=0o700, exist_ok=True)
+    if folder.is_symlink() or folder.stat().st_mode & 0o077:
+        raise PermissionError("Pasta de credenciais insegura")
+    filename = folder / "identity.json"
+    name = "enfoqueos-" + record["uuid"]
+    if filename.exists():
+        if filename.is_symlink() or filename.stat().st_mode & 0o077:
+            raise PermissionError("Credencial do agente sem protecao")
+        data = json.loads(filename.read_text(encoding="utf8"))
+        if data.get("deviceId") != name or not re.fullmatch(r"[0-9a-f]{64}", str(data.get("token", ""))):
+            raise ValueError("ID alterado ou estado do agente invalido")
+        return data
+    data = {"schema": 1, "deviceId": name, "token": secrets.token_hex(32)}
+    fd = os.open(filename, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "w", encoding="utf8") as output:
+        json.dump(data, output)
+        output.write("\n")
+        output.flush()
+        os.fsync(output.fileno())
+    return data
+
+
+def display_identity():
+    code = machine_identity()["shortId"] + "-0"
+    store = "Loja ainda nao vinculada"
+    try:
+        result = subprocess.run(["/usr/local/bin/enfoque-id", "--json"],
+                                capture_output=True, text=True, timeout=4, check=True)
+        record = json.loads(result.stdout)
+        if re.fullmatch(r"[0-9]{12}-[0-9]", record.get("id", "")):
+            code = record["id"]
+        if isinstance(record.get("unit"), str):
+            store = record["unit"][:40]
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+        pass
+    return code, store
+
+
+def command_argv(program, args):
+    """Only audited read-only diagnostics; no shell, interpreter, write, or sudo."""
+    if not isinstance(program, str) or not isinstance(args, list) or len(args) > 8:
+        raise PermissionError("Formato de comando nao permitido")
+    if any(not isinstance(x, str) or len(x) > 75 for x in args):
+        raise PermissionError("Argumentos nao permitidos")
+    name = os.path.basename(program)
+    allowed = (
+        (name == "free" and args in ([], ["-h"], ["-m"]))
+        or (name == "df" and args in ([], ["-h"], ["-h", "/"]))
+        or (name == "uptime" and args in ([], ["-p"]))
+        or (name == "uname" and args in ([], ["-a"], ["-r"]))
+        or (name == "hostname" and args == [])
+        or (name == "lsusb" and args == [])
+        or (name == "id" and args == [])
+        or (name == "ps" and args in (["-ef"], ["-eo", "pid,comm,%cpu,%mem"]))
+        or (name == "systemctl" and len(args) == 2
+            and args[0] in ("status", "is-active", "is-enabled")
+            and args[1] in SAFE_UNITS)
+    )
+    if not allowed:
+        raise PermissionError("Operacao bloqueada pela politica de TI")
+    return ["/usr/bin/" + name, *args]
+
+
+def command_result(program, args):
+    try:
+        completed = subprocess.run(command_argv(program, args), timeout=8,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   text=True, stdin=subprocess.DEVNULL,
+                                   env={"PATH": "/usr/bin:/bin", "LANG": "C"})
+        return {"ok": completed.returncode == 0, "exitCode": completed.returncode,
+                "stdout": completed.stdout[:12000], "stderr": completed.stderr[:1500]}
+    except (PermissionError, ValueError, OSError, subprocess.SubprocessError) as error:
+        return {"ok": False, "error": type(error).__name__ + ": " + str(error)[:120]}
+
+
+def exact_path(value, permitted):
+    if not isinstance(value, str) or value not in permitted:
+        raise PermissionError("Caminho nao autorizado")
+    source = Path(value)
+    if source.is_symlink() or str(source.resolve(strict=True)) != value:
+        raise PermissionError("Caminho modificado")
+    return source
+
+
+def handle_action(action, args):
+    args = args if isinstance(args, dict) else {}
+    if action == "shell":
+        script = args.get("command")
+        if not isinstance(script, str) or len(script) > 200 or any(ch in METACHARS for ch in script):
+            return {"ok": False, "error": "Shell livre nao autorizado"}
+        try:
+            tokens = shlex.split(script)
+        except ValueError:
+            return {"ok": False, "error": "Sintaxe invalida"}
+        return command_result(tokens[0], tokens[1:]) if tokens else {"ok": False, "error": "Comando vazio"}
+    if action == "run":
+        return command_result(args.get("program"), args.get("args", []))
+    if action == "process" and args.get("op") == "list":
+        return command_result("ps", ["-eo", "pid,comm,%cpu,%mem"])
+    if action == "read_file":
+        try:
+            file = exact_path(args.get("path"), SAFE_READ)
+            return {"ok": True, "path": str(file),
+                    "content": file.read_text(encoding="utf8", errors="replace")[:8000]}
+        except (OSError, PermissionError) as e:
+            return {"ok": False, "error": type(e).__name__}
+    if action == "list_directory":
+        try:
+            folder = exact_path(args.get("path"), SAFE_DIR)
+            entries = [{"name": p.name[:100], "isDir": p.is_dir()}
+                       for p in list(folder.iterdir())[:150] if not p.is_symlink()]
+            return {"ok": True, "path": str(folder), "entries": entries}
+        except (OSError, PermissionError) as e:
+            return {"ok": False, "error": type(e).__name__}
+    return {"ok": False, "error": "Apenas leitura; use MeshCentral autorizado para controle interativo"}
+
+
+def request(suffix, payload, token=None, base=SERVER):
+    headers = {"Content-Type": "application/json"}
+    if token is not None:
+        headers["Authorization"] = "Bearer " + token
+    encoded = json.dumps(payload, separators=(",", ":")).encode("utf8")
+    req = urllib.request.Request(base + suffix, encoded, headers=headers, method="POST")
+    with urllib.request.urlopen(req, timeout=10) as response:
+        if response.status != 200:
+            raise RuntimeError("Resposta remota inesperada")
+        answer = response.read(100001)
+    if len(answer) > 100000:
+        raise RuntimeError("Resposta remota excessiva")
+    return json.loads(answer)
+
+
+def send_register(state, base=SERVER):
+    short, store = display_identity()
+    return request("/register", {"deviceId": state["deviceId"],
+       "tokenHash": hashlib.sha256(state["token"].encode("ascii")).hexdigest(),
+       "hostname": ("Enfoque OS " + short + " " + store)[:100],
+       "username": "enfoque-agent",
+       "platform": "Linux Enfoque OS 0.2.12 XFCE"}, base=base)
+
+
+def run_cycle(state, base=SERVER):
+    registered = send_register(state, base)
+    if registered.get("approved") is not True:
+        return False
+    pending = request("/poll", {"hostname": socket.gethostname(),
+        "username": "enfoque-agent", "platform": platform.platform(),
+        "agentVersion": AGENT_VERSION}, state["token"], base)
+    cmd = pending.get("command")
+    if isinstance(cmd, dict) and isinstance(cmd.get("id"), str):
+        request("/result", {"id": cmd["id"],
+          "result": handle_action(cmd.get("action"), cmd.get("args"))}, state["token"], base)
+    return True
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--once", action="store_true", help="Apenas um ciclo de verificacao")
+    options = parser.parse_args()
+    while True:
+        try:
+            state = local_state()
+            approved = run_cycle(state)
+            if options.once:
+                return 0 if approved else 2
+            time.sleep(4 if approved else 25)
+        except (OSError, ValueError, RuntimeError, urllib.error.URLError, json.JSONDecodeError) as error:
+            print("Enfoque agente remoto: " + type(error).__name__, file=sys.stderr)
+            if options.once:
+                return 1
+            time.sleep(20)
+
+if __name__ == "__main__":
+    sys.exit(main())

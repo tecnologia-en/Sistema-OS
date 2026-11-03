@@ -1,0 +1,33 @@
+[Unit]
+Description=Enfoque OS - agente remoto de diagnostico autenticado (aguarda aprovacao TI)
+Documentation=https://github.com/tecnologia-en/Sistema-OS
+Wants=network-online.target
+After=network-online.target enfoque-device-id.service
+Requires=enfoque-device-id.service
+ConditionPathExists=/usr/local/bin/enfoque-id
+
+[Service]
+Type=simple
+DynamicUser=yes
+StateDirectory=enfoque-agent
+StateDirectoryMode=0700
+ExecStart=/usr/bin/python3 /usr/local/bin/enfoque-remote-agent
+Restart=always
+RestartSec=15
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=96M
+CPUQuota=15%
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

@@ -77,6 +77,23 @@ grep -Fq 'systemctl enable anydesk.service' "$anydesk_hook"
 grep -Fq 'rm -rf -- /etc/anydesk /root/.anydesk /var/lib/anydesk' "$anydesk_hook"
 python3 -m unittest discover -s "$ROOT/test" -p 'test_anydesk_image.py'
 
+# Enfoque OS 0.2.12: no embedded tokens, explicit agent approval, scoped trust.
+for path in \
+  "$ROOT/config/includes.chroot/usr/local/bin/enfoque-remote-agent" \
+  "$ROOT/config/includes.chroot/usr/local/bin/enfoque-mesh-autoprovision" \
+  "$ROOT/config/hooks/normal/099-enfoque-remote-agent.hook.chroot"; do
+  test -x "$path" || { echo "Agente Linux ausente: $path" >&2; exit 1; }
+done
+for unit in enfoque-remote-agent enfoque-mesh-autoprovision; do
+  test -s "$ROOT/config/includes.chroot/etc/systemd/system/$unit.service"
+  grep -Fq "systemctl enable $unit.service" "$ROOT/config/hooks/normal/099-enfoque-remote-agent.hook.chroot"
+done
+test ! -e "$ROOT/config/includes.chroot/etc/enfoque-os/agent.json"
+test ! -e "$ROOT/config/includes.chroot/var/lib/enfoque-agent/identity.json"
+python3 -m unittest discover -s "$ROOT/test" -p 'test_agent_0212.py'
+python3 -c 'import ast,sys; ast.parse(open(sys.argv[1],encoding="utf8").read())' "$ROOT/config/includes.chroot/usr/local/bin/enfoque-mesh-autoprovision"
+sh -n "$ROOT/config/hooks/normal/099-enfoque-remote-agent.hook.chroot"
+
 # Kiosk 0.2.8: no hardcoded TEF credentials or untested scripts in ISO.
 for f in "$ROOT/config/hooks/normal/097-enfoque-lowram-kiosk.hook.chroot" \
          "$ROOT/config/includes.chroot/usr/local/bin/enfoque-kiosk-session" \

@@ -46,7 +46,13 @@ for program in /usr/local/bin/enfoque-kiosk-session \
     chown root:root "$program"
     chmod 0755 "$program"
 done
-# Only desktop launchers shipped by our ISO build (never user-downloaded files).
-find /etc/skel/Desktop /usr/share/applications -maxdepth 1 \
-  -type f -name '*.desktop' -exec chmod 0755 {} +
+# Only the two root-owned company Desktop launchers need execute bits in XFCE.
+# Menu launchers are parsed by XDG; executable bits are unnecessary there.
+for file in /etc/skel/Desktop/SIGE.desktop /etc/skel/Desktop/Intranet.desktop; do
+    test -f "$file" && test ! -L "$file"
+    chown root:root "$file"
+    chmod 0755 "$file"
+done
+find /usr/share/applications -maxdepth 1 -type f -name '*.desktop' \
+    -exec chmod 0644 {} +
 echo "Enfoque OS: imagem preparada; quiosque exige provisionamento da TI"
