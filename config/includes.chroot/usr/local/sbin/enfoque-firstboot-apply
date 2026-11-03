@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+import json
+import os
+import sys
+from pathlib import Path
+import subprocess
+import re
+sys.path.insert(0, '/usr/local/lib/enfoque-onboarding')
+import firstboot
+
+def save(name, company, unit):
+    if os.geteuid() != 0 or Path('/run/live/medium').exists():
+        raise PermissionError('Configuracao disponivel apenas no sistema instalado e para administrador')
+    if firstboot.PROFILE.exists() or firstboot.PROFILE.is_symlink():
+        raise FileExistsError('Cadastro inicial ja concluido')
+    data = json.loads(firstboot.DEVICE.read_text(encoding='utf8'))
+    anydesk_id = ''
+    try:
+        result = subprocess.run(['/usr/bin/anydesk', '--get-id'], capture_output=True,
+                                text=True, timeout=4)
+        if result.returncode == 0 and re.fullmatch(r'[0-9]{6,16}', result.stdout.strip()):
+            anydesk_id = result.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    record = firstboot.build_profile(name, company, unit, data, anydesk_id)
+    subprocess.run(['/usr/bin/hostnamectl', 'set-hostname', record['hostname']], check=True, timeout=10)
+    firstboot.atomic_first_write(record)
+    try:
+        subprocess.run(['/usr/bin/systemctl', '--no-block', 'try-restart',
+                        'enfoque-remote-agent.service'], check=False, timeout=8)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return record
+
+if __name__ == '__main__':
+    try:
+        if len(sys.argv) != 4: raise ValueError('Parametros invalidos')
+        record = save(*sys.argv[1:])
+        print(json.dumps({'ok': True, 'id': record['displayId'], 'unit': record['unitName']}))
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        print(str(error)[:150], file=sys.stderr)
+        sys.exit(1)

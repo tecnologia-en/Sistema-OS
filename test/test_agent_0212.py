@@ -1,4 +1,4 @@
-"""Enfoque OS 0.2.12: safe Linux Root MCP enrollment and desktop trust."""
+"""Enfoque OS 0.2.13: safe Linux Root MCP enrollment and desktop trust."""
 import importlib.machinery
 import importlib.util
 import hashlib
@@ -99,6 +99,8 @@ class AgentAndTrustTests(unittest.TestCase):
                     self.assertTrue(agent.run_cycle(state, base))
             self.assertEqual([r[0] for r in EnrollmentHandler.records[-3:]],
                              ["/register", "/poll", "/result"])
+            self.assertIn("123456789012-3 Itaipu",
+                          EnrollmentHandler.records[-2][1]["hostname"])
             self.assertTrue(EnrollmentHandler.records[-1][1]["result"]["ok"])
             self.assertEqual(EnrollmentHandler.records[-1][1]["id"], "safe-1")
             self.assertEqual(EnrollmentHandler.records[-1][2]["Authorization"], "Bearer " + "a"*64)
@@ -131,6 +133,9 @@ class AgentAndTrustTests(unittest.TestCase):
             self.assertIn(value, service)
         self.assertIn("After=network-online.target enfoque-device-id.service", service)
         self.assertIn("systemctl enable enfoque-remote-agent.service", text)
+        self.assertNotIn("install -o root -g root -m 0755 /usr/local/bin/enfoque-remote-agent /usr/local/bin/enfoque-remote-agent", text)
+        self.assertIn('chown root:root "$app"', text)
+        self.assertIn('chmod 0755 "$app"', text)
         self.assertIn("rm -rf -- /var/lib/enfoque-agent", text)
         self.assertTrue(hook.stat().st_mode & stat.S_IXUSR)
         self.assertTrue(FILE.stat().st_mode & stat.S_IXUSR)

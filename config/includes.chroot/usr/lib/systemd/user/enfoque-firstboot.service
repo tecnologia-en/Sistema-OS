@@ -1,0 +1,8 @@
+[Unit]
+Description=Enfoque OS first-login setup
+ConditionPathExists=!/var/lib/enfoque-os/firstboot.json
+[Service]
+Type=exec
+ExecStart=/usr/local/bin/enfoque-primeiro-acesso
+Restart=on-failure
+RestartSec=5

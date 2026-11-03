@@ -1,0 +1,15 @@
+#!/bin/sh
+# Launched by XFCE after the graphical login session is available.
+set -eu
+[ ! -d /run/live/medium ] || exit 0
+[ ! -e /var/lib/enfoque-os/firstboot.json ] || exit 0
+if [ -n "${XDG_RUNTIME_DIR:-}" ] && command -v systemctl >/dev/null 2>&1; then
+  systemctl --user import-environment DISPLAY XAUTHORITY DBUS_SESSION_BUS_ADDRESS XDG_CURRENT_DESKTOP >/dev/null 2>&1 || :
+  if systemctl --user start --no-block enfoque-firstboot.service >/dev/null 2>&1; then
+    sleep 2
+    if systemctl --user is-active --quiet enfoque-firstboot.service; then
+      exit 0
+    fi
+  fi
+fi
+exec /usr/local/bin/enfoque-primeiro-acesso

@@ -15,6 +15,7 @@ import uuid
 INSTALLED = Path("/var/lib/enfoque-os/device-identity.json")
 LIVE = Path("/run/enfoque-os/device-identity.json")
 NETWORKS = Path("/etc/enfoque-os/lojas-ip.json")
+FIRSTBOOT = Path("/var/lib/enfoque-os/firstboot.json")
 UNITS = {
     "ilha-plaza": ("1", "Ilha Plaza"), "copacabana": ("2", "Copacabana"),
     "itaipu": ("3", "Itaipu"), "icarai": ("4", "Icarai"),
@@ -90,6 +91,24 @@ def mapped_unit(ips, filename=NETWORKS):
     except (OSError, ValueError, TypeError):
         return None
 
+def installed_machine_profile(record, filename=FIRSTBOOT):
+    if is_live():
+        return None
+    p = Path(filename)
+    try:
+        if p.is_symlink() or p.stat().st_uid != 0 or (p.stat().st_mode & 0o022):
+            return None
+        data = json.loads(p.read_text(encoding="utf-8"))
+        unit = data.get("unitId")
+        if (unit not in UNITS or data.get("uuid") != record["uuid"] or
+            data.get("shortId") != record["shortId"] or
+            data.get("displayId") != record["shortId"] + "-" + UNITS[unit][0]):
+            return None
+        return data
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def selected_unit(home=None):
     p = (Path(home) if home else Path.home()) / ".config/enfoque-os/identity.json"
     try:
@@ -98,12 +117,13 @@ def selected_unit(home=None):
     except (OSError, ValueError):
         return None
 
-def describe(home=None, mapping=NETWORKS):
+def describe(home=None, mapping=NETWORKS, machine_file=FIRSTBOOT):
     record = read_id()
     ips = ipv4s()
     from_network = mapped_unit(ips, mapping)
     from_user = selected_unit(home)
-    unit = from_network or from_user
+    from_machine = installed_machine_profile(record, machine_file)
+    unit = (from_machine or {}).get("unitId") or from_network or from_user
     code, store = UNITS.get(unit, ("0", "Unidade nao cadastrada"))
     if ips:
         subnet = ipaddress.IPv4Network(ips[0] + "/24", strict=False)
@@ -113,7 +133,8 @@ def describe(home=None, mapping=NETWORKS):
         group = "Sem rede"
     return {"id": record["shortId"] + "-" + code, "uuid": record["uuid"],
             "unit": store, "suffix": code, "ip": ips[0] if ips else "Nao conectado",
-            "group": group, "source": "CIDR cadastrado" if from_network else "Primeiro acesso" if from_user else "Nao atribuido",
+            "pcName": (from_machine or {}).get("pcName", ""), "anydeskId": (from_machine or {}).get("anydeskId"),
+            "group": group, "source": "Cadastro do computador" if from_machine else "CIDR cadastrado" if from_network else "Primeiro acesso" if from_user else "Nao atribuido",
             "live": record.get("mode") == "live-preview"}
 
 def dialog():

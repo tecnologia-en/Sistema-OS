@@ -25,7 +25,7 @@ SERVER = "https://mcp.enfoquepapelaria.com.br/mcp/pc-agent"
 STATE = Path("/var/lib/enfoque-agent")
 DEVICE = Path("/var/lib/enfoque-os/device-identity.json")
 LIVE_DEVICE = Path("/run/enfoque-os/device-identity.json")
-AGENT_VERSION = "0.2.12-linux-limited"
+AGENT_VERSION = "0.2.13-linux-limited"
 SAFE_READ = frozenset(("/etc/enfoque-os-release", "/etc/os-release", "/proc/meminfo", "/proc/uptime"))
 SAFE_DIR = frozenset(("/usr/share/applications", "/usr/local/bin", "/etc/xdg"))
 SAFE_UNITS = frozenset((
@@ -84,6 +84,10 @@ def display_identity():
             code = record["id"]
         if isinstance(record.get("unit"), str):
             store = record["unit"][:40]
+        if isinstance(record.get("pcName"), str) and record["pcName"]:
+            store = record["pcName"][:32] + " / " + store
+        if isinstance(record.get("anydeskId"), str) and re.fullmatch(r"[0-9]{6,16}", record["anydeskId"]):
+            store = store + " / AnyDesk " + record["anydeskId"]
     except (OSError, ValueError, KeyError, subprocess.SubprocessError):
         pass
     return code, store
@@ -189,14 +193,16 @@ def send_register(state, base=SERVER):
        "tokenHash": hashlib.sha256(state["token"].encode("ascii")).hexdigest(),
        "hostname": ("Enfoque OS " + short + " " + store)[:100],
        "username": "enfoque-agent",
-       "platform": "Linux Enfoque OS 0.2.12 XFCE"}, base=base)
+       "platform": "Linux Enfoque OS 0.2.13 XFCE"}, base=base)
 
 
 def run_cycle(state, base=SERVER):
     registered = send_register(state, base)
     if registered.get("approved") is not True:
         return False
-    pending = request("/poll", {"hostname": socket.gethostname(),
+    short, store = display_identity()
+    inventory_name = ("Enfoque OS " + short + " " + store)[:100]
+    pending = request("/poll", {"hostname": inventory_name,
         "username": "enfoque-agent", "platform": platform.platform(),
         "agentVersion": AGENT_VERSION}, state["token"], base)
     cmd = pending.get("command")

@@ -86,7 +86,7 @@ class FirstAccessTests(unittest.TestCase):
         self.assertIn("Gtk.ComboBoxText()",script)
         self.assertNotIn("chpasswd",script)
         launcher=(CONFIG/"etc/xdg/autostart/enfoque-primeiro-acesso.desktop").read_text(encoding="utf-8")
-        self.assertIn("Exec=/usr/local/bin/enfoque-primeiro-acesso",launcher)
+        self.assertIn("Exec=/usr/local/bin/enfoque-firstboot-launch",launcher)
 
     def test_date_separate_formats_and_no_intrusive_hub_autostart(self):
         panel=ET.parse(CONFIG/"etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml").getroot()

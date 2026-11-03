@@ -2,8 +2,8 @@
 Version=1.0
 Type=Application
 Name=Enfoque OS - Primeiro acesso
-Comment=Solicitar empresa e unidade no primeiro login local apos a instalacao
-Exec=/usr/local/bin/enfoque-primeiro-acesso
+Comment=Identificar nome e loja do computador apenas na primeira inicializacao instalada
+Exec=/usr/local/bin/enfoque-firstboot-launch
 OnlyShowIn=XFCE;
 NoDisplay=true
 Terminal=false

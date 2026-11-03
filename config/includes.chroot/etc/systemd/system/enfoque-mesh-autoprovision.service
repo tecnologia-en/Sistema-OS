@@ -3,6 +3,7 @@ Description=Enfoque OS - provisionar MeshCentral somente apos aprovacao da TI
 Wants=network-online.target
 After=network-online.target enfoque-device-id.service
 Requires=enfoque-device-id.service
+StartLimitIntervalSec=0
 ConditionPathExists=/etc/enfoque-os/agent.json
 
 [Service]
@@ -11,7 +12,6 @@ User=root
 ExecStart=/usr/bin/python3 /usr/local/bin/enfoque-mesh-autoprovision
 Restart=on-failure
 RestartSec=90
-StartLimitIntervalSec=0
 TimeoutStartSec=240
 PrivateTmp=true
 ProtectHome=true

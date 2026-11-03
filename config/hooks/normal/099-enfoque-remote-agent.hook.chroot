@@ -1,10 +1,16 @@
 #!/bin/sh
 # No shared device identifier, token or administrator credentials in the ISO.
 set -eu
-install -o root -g root -m 0755 /usr/local/bin/enfoque-remote-agent /usr/local/bin/enfoque-remote-agent
-install -o root -g root -m 0644 /etc/systemd/system/enfoque-remote-agent.service /etc/systemd/system/enfoque-remote-agent.service
-install -o root -g root -m 0755 /usr/local/bin/enfoque-mesh-autoprovision /usr/local/bin/enfoque-mesh-autoprovision
-install -o root -g root -m 0644 /etc/systemd/system/enfoque-mesh-autoprovision.service /etc/systemd/system/enfoque-mesh-autoprovision.service
+for app in /usr/local/bin/enfoque-remote-agent /usr/local/bin/enfoque-mesh-autoprovision; do
+  test -f "$app" && test ! -L "$app"
+  chown root:root "$app"
+  chmod 0755 "$app"
+done
+for unit in /etc/systemd/system/enfoque-remote-agent.service /etc/systemd/system/enfoque-mesh-autoprovision.service; do
+  test -f "$unit" && test ! -L "$unit"
+  chown root:root "$unit"
+  chmod 0644 "$unit"
+done
 systemctl enable enfoque-remote-agent.service
 systemctl enable enfoque-mesh-autoprovision.service
 rm -rf -- /var/lib/enfoque-agent /root/.config/enfoque-agent
