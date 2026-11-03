@@ -11,6 +11,7 @@ Teste real da **ISO 0.2.15**, hash SHA-256 `e4c15a908bd5813e6bc48c2d17891e37b68e
 - XFCE instalou e iniciou. O primeiro acesso foi concluído com `CAIXA ILHA QA15`, Enfoque Papelaria, loja `Ilha Plaza`. O nome de host no sistema passou a `caixa-ilha-qa15`. O ID exibido evoluiu de `733197357073-0` para **`733197357073-1`** ao selecionar a unidade.
 - O arquivo de cadastro `/var/lib/enfoque-os/firstboot.json` foi criado em disco com proprietário root, e `enfoque-id --json` retornou `live:false`, a unidade e o nome corretos; não alterou o UUID. Hashes dos dois arquivos de identidade foram gravados em `/home/enfoque/qa-identity-before.sha` para comparação pós-reboot.
 - O segundo boot ocorreu e a tela de login conservou o hostname `caixa-ilha-qa15`.
+- Testei depois o **mesmo VDI em firmware UEFI**, sem ISO e sem reinstalação. O GRUB UEFI carregou Linux 6.12 e initramfs e chegou ao LightDM com o mesmo hostname, comprovando boot no disco pelo modo EFI também.
 
 ## Falhas residuais observadas na 0.2.15
 
@@ -18,7 +19,7 @@ Teste real da **ISO 0.2.15**, hash SHA-256 `e4c15a908bd5813e6bc48c2d17891e37b68e
 2. A janela de identificação era executada em um serviço de usuário e podia ficar **atrás** do Enfoque Central aberto no início da sessão.
 3. A comparação de hashes de identidade após o segundo login **não foi concluída**: a ferramenta de acesso remoto bloqueou a inserção da senha de QA; nenhuma tentativa alternativa foi feita.
 4. O pinpad GERTEC PPC930 não estava conectado à VM; testes de transação PayGo em terminal físico não foram realizados.
-5. Boot UEFI, redes de lojas, impressoras reais, AnyDesk unattended e MeshCentral autenticado ainda exigem validação operacional separada.
+5. O boot UEFI do mesmo VDI foi validado até o LightDM; redes das lojas, impressoras reais, AnyDesk unattended e MeshCentral autenticado ainda exigem validação operacional separada.
 
 ## Correções de código propostas para a ISO 0.2.16
 
@@ -31,6 +32,6 @@ Teste real da **ISO 0.2.15**, hash SHA-256 `e4c15a908bd5813e6bc48c2d17891e37b68e
 
 ## Bloqueios para liberação em toda a rede
 
-A ISO 0.2.15 foi testada em VM BIOS, mas **não deve ser tratada como homologada para pagamentos reais**. A 0.2.16 só estará pronta como piloto físico após compilar, validar checksum, reinstalar em VM, verificar fuso/idioma, confirmar firstboot em foreground, comparar IDs após reboot, testar instalação UEFI e executar PayGo/pinpad com periféricos reais. Controle remoto de cada máquina deve requerer autorização da TI com tokens próprios por dispositivo. Senha `123456` só é aceitável como código temporário de inicialização com troca obrigatória, nunca como senha remota global.
+A ISO 0.2.15 foi testada em VM BIOS, mas **não deve ser tratada como homologada para pagamentos reais**. A 0.2.16 só estará pronta como piloto físico após compilar, validar checksum, reinstalar em VM, verificar fuso/idioma, confirmar firstboot em foreground, comparar IDs após reboot, repetir instalação UEFI na nova imagem e executar PayGo/pinpad com periféricos reais. Controle remoto de cada máquina deve requerer autorização da TI com tokens próprios por dispositivo. Senha `123456` só é aceitável como código temporário de inicialização com troca obrigatória, nunca como senha remota global.
 
 O status de produção **não é "zero brechas"**: esta alegação exige revisão e testes de segurança adicionais, além do teste em hardware de loja.
