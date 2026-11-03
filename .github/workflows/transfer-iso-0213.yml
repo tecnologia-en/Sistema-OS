@@ -1,0 +1,99 @@
+name: Enfoque OS 0.2.13 - transferir artefato verificado
+on:
+  push:
+    branches:
+      - feat/lowram-kiosk-028
+    paths:
+      - '.github/workflows/transfer-iso-0213.yml'
+permissions:
+  actions: read
+  contents: read
+jobs:
+  transfer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - name: Baixar ISO aprovada do build 47
+        uses: actions/download-artifact@v4
+        with:
+          name: enfoque-os-iso-47
+          repository: tecnologia-en/Sistema-OS
+          run-id: 41653437240
+          github-token: ${{ github.token }}
+          path: dist
+      - name: Verificar integridade e dividir em partes transportaveis
+        run: |
+          set -euo pipefail
+          test -s dist/enfoque-os-0.2.13-piloto-amd64.iso
+          (cd dist && sha256sum -c SHA256SUMS)
+          mkdir -p parts
+          split --bytes=350m --numeric-suffixes=0 --suffix-length=2 dist/enfoque-os-0.2.13-piloto-amd64.iso parts/chunk-
+          test "$(find parts -maxdepth 1 -type f -name 'chunk-*' | wc -l)" -eq 7
+          (cd parts && sha256sum chunk-* > SHA256_PARTS && sha256sum -c SHA256_PARTS)
+          cp dist/SHA256SUMS parts/SHA256SUMS
+      - name: Manifestos
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-os-0213-sha256
+          path: |
+            parts/SHA256SUMS
+            parts/SHA256_PARTS
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - name: Parte 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-os-0213-chunk-00
+          path: parts/chunk-00
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - name: Parte 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-os-0213-chunk-01
+          path: parts/chunk-01
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - name: Parte 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-os-0213-chunk-02
+          path: parts/chunk-02
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - name: Parte 03
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-os-0213-chunk-03
+          path: parts/chunk-03
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - name: Parte 04
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-os-0213-chunk-04
+          path: parts/chunk-04
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - name: Parte 05
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-os-0213-chunk-05
+          path: parts/chunk-05
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - name: Parte 06
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-os-0213-chunk-06
+          path: parts/chunk-06
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
