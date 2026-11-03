@@ -61,6 +61,19 @@ class InstallSafetyTests(unittest.TestCase):
                 installer.install("/dev/sda", "APAGAR")
             partition.assert_not_called()
 
+    def test_nested_logical_volumes_and_active_swap_block_disk(self):
+        stack={"path":"/dev/sda","type":"disk","mountpoints":[None],
+               "children":[{"path":"/dev/sda1","mountpoints":[None],
+                            "children":[{"path":"/dev/mapper/vg-system","mountpoints":["/"]}]}]}
+        self.assertTrue(installer.disk_tree_busy(stack, set()))
+        stack["children"][0]["children"][0]["mountpoints"]=[None]
+        self.assertFalse(installer.disk_tree_busy(stack, set()))
+        self.assertTrue(installer.disk_tree_busy(stack, {"/dev/mapper/vg-system"}))
+        stack["children"][0]["children"][0]["path"]="/dev/mapper/vg-home"
+        self.assertFalse(installer.disk_tree_busy(stack, {"/dev/mapper/vg-system"}))
+        stack["mountpoints"]=["/mnt/backup"]
+        self.assertTrue(installer.disk_tree_busy(stack, set()))
+
     def test_partition_paths_nvme_and_sata(self):
         self.assertEqual(installer.partitions("/dev/nvme0n1"),
                          ["/dev/nvme0n1p1", "/dev/nvme0n1p2", "/dev/nvme0n1p3"])
@@ -83,7 +96,7 @@ class InstallSafetyTests(unittest.TestCase):
         self.assertIn('obj.get("tran") == "usb"', src)
         self.assertIn('"lsblk", "--json", "--tree"', src)
         self.assertIn('obj.get("path") == excluded', src)
-        self.assertIn('if any(child.get("mountpoints")', src)
+        self.assertIn('if disk_tree_busy(obj, swaps):', src)
 
 
 if __name__ == "__main__":

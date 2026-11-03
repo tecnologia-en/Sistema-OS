@@ -41,11 +41,39 @@ def live_media_disk():
     return "/dev/" + base if base else source
 
 
+def active_swap_devices():
+    """Guard mounted/active swap descendants before erasing a candidate disk."""
+    swaps = set()
+    try:
+        lines = Path("/proc/swaps").read_text(encoding="utf-8").splitlines()
+        for line in lines[1:]:
+            source = line.split()[0]
+            if source.startswith("/dev/"):
+                swaps.add(str(Path(source).resolve()))
+    except (OSError, IndexError):
+        pass
+    return swaps
+
+
+def disk_tree_busy(node, swaps):
+    """lsblk device-mapper/LVM stacks can be deeper than one partition."""
+    mountpoints = node.get("mountpoints") or []
+    if isinstance(mountpoints, str):
+        mountpoints = [mountpoints]
+    if any(p and str(p).strip() for p in mountpoints):
+        return True
+    path = node.get("path") or ""
+    if path in swaps or (path.startswith("/dev/") and str(Path(path).resolve()) in swaps):
+        return True
+    return any(disk_tree_busy(child, swaps) for child in (node.get("children") or []))
+
+
 def available_disks():
     data = json.loads(run(["lsblk", "--json", "--tree", "--bytes", "--output",
                            "PATH,TYPE,SIZE,RM,RO,TRAN,MODEL,MOUNTPOINTS"],
                           quiet=True).stdout)
     excluded = live_media_disk()
+    swaps = active_swap_devices()
     disks = []
     for obj in data.get("blockdevices", []):
         if obj.get("type") != "disk" or obj.get("rm") or obj.get("ro"):
@@ -56,8 +84,7 @@ def available_disks():
         size = obj.get("size", 0)
         if not isinstance(size, int) or size < MIN_BYTES:
             continue
-        children = [obj] + obj.get("children", [])
-        if any(child.get("mountpoints") and any(child["mountpoints"]) for child in children):
+        if disk_tree_busy(obj, swaps):
             continue
         if not re.fullmatch(r"/dev/[a-zA-Z0-9_+.-]+", path):
             continue
