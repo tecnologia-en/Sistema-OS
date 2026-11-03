@@ -93,6 +93,11 @@ test ! -e "$ROOT/config/includes.chroot/var/lib/enfoque-agent/identity.json"
 python3 -m unittest discover -s "$ROOT/test" -p 'test_agent_0212.py'
 python3 -c 'import ast,sys; ast.parse(open(sys.argv[1],encoding="utf8").read())' "$ROOT/config/includes.chroot/usr/local/bin/enfoque-mesh-autoprovision"
 sh -n "$ROOT/config/hooks/normal/099-enfoque-remote-agent.hook.chroot"
+sh -n "$ROOT/config/includes.chroot/usr/local/bin/enfoque-aplicar-visual"
+grep -Fq 'DynamicUser=yes' "$ROOT/config/includes.chroot/etc/systemd/system/enfoque-remote-agent.service"
+grep -Fq 'NoNewPrivileges=yes' "$ROOT/config/includes.chroot/etc/systemd/system/enfoque-remote-agent.service"
+grep -Fq '"localUuid": local_uuid' "$ROOT/config/includes.chroot/usr/local/bin/enfoque-inscrever-computador"
+grep -Fq 'config.get("localUuid") != local_uuid' "$ROOT/config/includes.chroot/usr/local/bin/enfoque-mesh-autoprovision"
 
 # Kiosk 0.2.8: no hardcoded TEF credentials or untested scripts in ISO.
 for f in "$ROOT/config/hooks/normal/097-enfoque-lowram-kiosk.hook.chroot" \
