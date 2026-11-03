@@ -25,8 +25,9 @@ Teste real da **ISO 0.2.15**, hash SHA-256 `e4c15a908bd5813e6bc48c2d17891e37b68e
 - O instalador aplica de forma persistente `America/Sao_Paulo`, `/etc/localtime` e `pt_BR.UTF-8` no **sistema instalado**, gerando a locale no chroot.
 - Enfoque Central continua disponível no menu, mas o seu autostart está explicitamente desabilitado (`Hidden=true`).
 - O assistente do primeiro acesso roda na própria sessão XFCE e se apresenta uma vez após o início da sessão.
+- O agente remoto só inicia em um sistema instalado após o cadastro do PC/loja; lê o perfil root-owned diretamente (não depende de processos gráficos nem de contexto HOME), e permanece condicionado a aprovação individual da TI. Isto evita registros pendentes com lojas desatualizadas e IDs efêmeros do modo Live.
 - Versão de release, interface de boot e identificação do agente alinhadas à 0.2.16.
-- 144 testes automatizados de regressão e `scripts/check-project.sh` aprovados **no código-fonte**.
+- 146 testes automatizados de regressão e `scripts/check-project.sh` aprovados **no código-fonte**.
 
 ## Bloqueios para liberação em toda a rede
 

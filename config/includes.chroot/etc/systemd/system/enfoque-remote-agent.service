@@ -4,7 +4,8 @@ Documentation=https://github.com/tecnologia-en/Sistema-OS
 Wants=network-online.target
 After=network-online.target enfoque-device-id.service
 Requires=enfoque-device-id.service
-ConditionPathExists=/usr/local/bin/enfoque-id
+ConditionPathExists=!/run/live/medium
+ConditionPathExists=/var/lib/enfoque-os/firstboot.json
 
 [Service]
 Type=simple

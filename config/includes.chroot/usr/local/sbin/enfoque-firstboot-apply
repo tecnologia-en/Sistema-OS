@@ -26,7 +26,7 @@ def save(name, company, unit):
     subprocess.run(['/usr/bin/hostnamectl', 'set-hostname', record['hostname']], check=True, timeout=10)
     firstboot.atomic_first_write(record)
     try:
-        subprocess.run(['/usr/bin/systemctl', '--no-block', 'try-restart',
+        subprocess.run(['/usr/bin/systemctl', '--no-block', 'start',
                         'enfoque-remote-agent.service'], check=False, timeout=8)
     except (OSError, subprocess.SubprocessError):
         pass

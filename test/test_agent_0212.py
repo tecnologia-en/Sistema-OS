@@ -109,6 +109,49 @@ class AgentAndTrustTests(unittest.TestCase):
             thread.join(timeout=2)
             server.server_close()
 
+    def test_persistent_store_is_used_for_inventory_without_subprocess(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        uid = uuid4()
+        short = f"{uid.int % 1000000000000:012d}"
+        machine = {"uuid": str(uid), "shortId": short}
+        profile = {"uuid": str(uid), "shortId": short, "displayId": short+"-1",
+                   "unitId": "ilha-plaza", "unitName": "Ilha Plaza",
+                   "pcName": "Caixa Ilha QA", "anydeskId": "123456789"}
+        fake = Mock()
+        fake.is_symlink.return_value = False
+        fake.stat.return_value = SimpleNamespace(st_uid=0, st_mode=0o100644)
+        fake.read_text.return_value = json.dumps(profile)
+        with patch.object(agent, "machine_identity", return_value=machine), \
+             patch.object(agent, "PROFILE", fake), \
+             patch.object(agent.subprocess, "run") as command:
+            code, store = agent.display_identity()
+            self.assertEqual(code, short + "-1")
+            self.assertIn("Caixa Ilha QA / Ilha Plaza", store)
+            self.assertIn("AnyDesk 123456789", store)
+            command.assert_not_called()
+
+            profile["uuid"] = str(uuid4())
+            fake.read_text.return_value = json.dumps(profile)
+            self.assertEqual(agent.display_identity(), (short+"-0", "Loja ainda nao vinculada"))
+            profile["uuid"] = str(uid)
+            fake.read_text.return_value = json.dumps(profile)
+            fake.is_symlink.return_value = True
+            self.assertEqual(agent.display_identity(), (short+"-0", "Loja ainda nao vinculada"))
+            fake.is_symlink.return_value = False
+            fake.stat.return_value = SimpleNamespace(st_uid=0, st_mode=0o100666)
+            self.assertEqual(agent.display_identity(), (short+"-0", "Loja ainda nao vinculada"))
+
+    def test_agent_waits_for_installed_and_identified_machine(self):
+        service = (ROOT/"config/includes.chroot/etc/systemd/system/enfoque-remote-agent.service").read_text()
+        self.assertIn("ConditionPathExists=!/run/live/medium", service)
+        self.assertIn("ConditionPathExists=/var/lib/enfoque-os/firstboot.json", service)
+        helper = (ROOT/"config/includes.chroot/usr/local/sbin/enfoque-firstboot-apply").read_text()
+        self.assertIn("firstboot.atomic_first_write(record)", helper)
+        self.assertIn("'start',", helper)
+        self.assertIn("'enfoque-remote-agent.service'", helper)
+        self.assertNotIn("'try-restart'", helper)
+
     def test_readonly_commands_and_unknown_apps_are_blocked(self):
         self.assertEqual(agent.command_argv("free", ["-m"]), ["/usr/bin/free", "-m"])
         with patch.object(agent, "command_result", return_value={"ok": True}):

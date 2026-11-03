@@ -25,6 +25,8 @@ SERVER = "https://mcp.enfoquepapelaria.com.br/mcp/pc-agent"
 STATE = Path(os.environ.get("STATE_DIRECTORY", "/var/lib/enfoque-agent"))
 DEVICE = Path("/var/lib/enfoque-os/device-identity.json")
 LIVE_DEVICE = Path("/run/enfoque-os/device-identity.json")
+PROFILE = Path("/var/lib/enfoque-os/firstboot.json")
+STORE_SUFFIX = {"ilha-plaza":"1","copacabana":"2","itaipu":"3","icarai":"4","sao-goncalo":"5","centro":"6","deposito":"7","administracao":"8","papel-arte":"9"}
 AGENT_VERSION = "0.2.16-linux-limited"
 SAFE_READ = frozenset(("/etc/enfoque-os-release", "/etc/os-release", "/proc/meminfo", "/proc/uptime"))
 SAFE_DIR = frozenset(("/usr/share/applications", "/usr/local/bin", "/etc/xdg"))
@@ -76,21 +78,44 @@ def local_state(folder=STATE):
 
 
 def display_identity():
-    code = machine_identity()["shortId"] + "-0"
+    """Inventory name comes from the validated, root-owned on-disk setup.
+
+    Never depend on an XDG user profile or a subprocess from DynamicUser.
+    No machine can register before its first installed setup is complete.
+    """
+    record = machine_identity()
+    code = record["shortId"] + "-0"
     store = "Loja ainda nao vinculada"
+    if Path("/run/live/medium").exists():
+        return code, store
     try:
-        result = subprocess.run(["/usr/local/bin/enfoque-id", "--json"],
-                                capture_output=True, text=True, timeout=4, check=True)
-        record = json.loads(result.stdout)
-        if re.fullmatch(r"[0-9]{12}-[0-9]", record.get("id", "")):
-            code = record["id"]
-        if isinstance(record.get("unit"), str):
-            store = record["unit"][:40]
-        if isinstance(record.get("pcName"), str) and record["pcName"]:
-            store = record["pcName"][:32] + " / " + store
-        if isinstance(record.get("anydeskId"), str) and re.fullmatch(r"[0-9]{6,16}", record["anydeskId"]):
-            store = store + " / AnyDesk " + record["anydeskId"]
-    except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+        if PROFILE.is_symlink():
+            return code, store
+        meta = PROFILE.stat()
+        if meta.st_uid != 0 or meta.st_mode & 0o022:
+            return code, store
+        data = json.loads(PROFILE.read_text(encoding="utf-8"))
+        suffix = STORE_SUFFIX.get(data.get("unitId"))
+        if not suffix or data.get("uuid") != record["uuid"] or data.get("shortId") != record["shortId"]:
+            return code, store
+        expected = record["shortId"] + "-" + suffix
+        if data.get("displayId") != expected:
+            return code, store
+        name, unit = data.get("pcName"), data.get("unitName")
+        if not isinstance(name, str) or not 3 <= len(name) <= 48:
+            return code, store
+        if not isinstance(unit, str) or not 3 <= len(unit) <= 45:
+            return code, store
+        if not re.fullmatch(r"[A-Za-zÀ-ÿ0-9 _.-]{3,48}", name):
+            return code, store
+        if any(c in "\r\n\0" for c in unit):
+            return code, store
+        code = expected
+        store = name + " / " + unit
+        anydesk = data.get("anydeskId")
+        if isinstance(anydesk, str) and re.fullmatch(r"[0-9]{6,16}", anydesk):
+            store += " / AnyDesk " + anydesk
+    except (OSError, TypeError, ValueError, KeyError):
         pass
     return code, store
 
