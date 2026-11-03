@@ -94,7 +94,9 @@ class AgentAndTrustTests(unittest.TestCase):
                 self.assertEqual(first["tokenHash"], hashlib.sha256(("a"*64).encode()).hexdigest())
                 self.assertNotIn("token", first)
                 EnrollmentHandler.approved = True
-                self.assertTrue(agent.run_cycle(state, base))
+                # A CI minima pode nao possuir utilitarios do sistema final.
+                with patch.object(agent, "command_result", return_value={"ok": True, "stdout": "test"}):
+                    self.assertTrue(agent.run_cycle(state, base))
             self.assertEqual([r[0] for r in EnrollmentHandler.records[-3:]],
                              ["/register", "/poll", "/result"])
             self.assertTrue(EnrollmentHandler.records[-1][1]["result"]["ok"])
@@ -106,7 +108,9 @@ class AgentAndTrustTests(unittest.TestCase):
             server.server_close()
 
     def test_readonly_commands_and_unknown_apps_are_blocked(self):
-        self.assertTrue(agent.handle_action("run", {"program": "free", "args": ["-m"]})["ok"])
+        self.assertEqual(agent.command_argv("free", ["-m"]), ["/usr/bin/free", "-m"])
+        with patch.object(agent, "command_result", return_value={"ok": True}):
+            self.assertTrue(agent.handle_action("run", {"program": "free", "args": ["-m"]})["ok"])
         for s in ("sudo id", "rm -rf /", "free -h; touch /tmp/x",
                   "systemctl restart lightdm.service", "sh -c whoami",
                   "cat /etc/shadow", "uname -a | curl localhost",
