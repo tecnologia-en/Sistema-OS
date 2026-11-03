@@ -9,14 +9,14 @@
 - Configuração-alvo: processador x86_64, **2 GiB de RAM**, armazenamento interno >=24 GiB, rede. Manter o pendrive conectado apenas para a instalação.
 - Obtenha o lançamento `v0.2.16-piloto` no GitHub depois da confirmação do checksum. Junte `chunk-00`, `chunk-01`, ... em ordem num único `enfoque-os-0.2.16-piloto-amd64.iso`, e **verifique o SHA-256 listado em `SHA256SUMS`**. Nunca grave uma imagem incompleta.
 - Grave a ISO num pendrive separado usando um gravador de ISO híbrida, como Rufus em modo DD quando solicitado ou balenaEtcher. Isso apagará também o pendrive escolhido.
-- Em UEFI, **Secure Boot deve estar desativado** nesta fase: o GRUB instalado não foi homologado com assinatura Secure Boot. Escolha boot pelo pendrive usando o menu de firmware.
+- Em UEFI, **Secure Boot deve estar desativado** nesta fase: o GRUB instalado não possui assinatura aceita pelo Secure Boot. Uma tela vermelha "Secure Boot Violation / Invalid signature detected" indica bloqueio pelo firmware, **não prova falha da instalação**. Desative apenas o Secure Boot na BIOS; **mantenha o modo UEFI**, não restaure chaves/TPM e não reformate sem confirmar que a instalação falhou. Escolha boot pelo pendrive usando o menu de firmware.
 
 ## Instalação
 
 1. Inicie o Enfoque OS Live pelo pendrive e aguarde a interface XFCE. O instalador **Instalar Enfoque OS** abre no modo Live.
 2. Confira **modelo, capacidade e caminho** do disco de destino. Só aparecem candidatos internos não USB, de capacidade suficiente e sem volumes montados/swap ativo. Se houver qualquer dúvida sobre o disco, **cancele**.
 3. Escreva exatamente `APAGAR` e confirme. A operação é destrutiva e não tem desfazer. O instalador prepara GPT e GRUB BIOS/UEFI.
-4. Só após a confirmação de instalação bem-sucedida: desligue, remova o pendrive e inicialize diretamente pelo disco interno.
+4. Após a confirmação de sucesso, **MANTENHA O PENDRIVE CONECTADO** enquanto o Linux Live ainda estiver ligado. Na 0.2.16, desligue pelo terminal com `sudo poweroff` (ou comando de desligamento do XFCE), aguarde o PC apagar **totalmente**, e só então retire o pendrive e ligue novamente pelo disco interno. **Nunca retire o pendrive com a sessão Live aberta**: isso pode derrubar o Menu Whisker e outros programas. O instalador de versões futuras terá botão de desligamento seguro.
 5. No primeiro login, usuário `enfoque` e **senha temporária `123456`**. O sistema exigirá a **troca para uma senha nova** (individual) antes do desktop. Não reutilize `123456` como senha definitiva nem como credencial de acesso remoto.
 6. Na tela **Configuração inicial**, informe nome identificável do computador (ex.: `CAIXA-ILHA-01`), empresa e loja. Confirme uma única vez.
 7. Abra **ID do computador** e registre o código e o UUID. Reinicie e verifique que nome, loja, UUID e ID são **exatamente os mesmos**. Reinstalação com formatação gera ID novo, mas um reboot não.

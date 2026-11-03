@@ -140,10 +140,43 @@ class Installer(Gtk.Window):
         self.submit.set_sensitive(not success)
         self.refresh.set_sensitive(not success)
         if success:
-            self.status.set_text("Enfoque OS instalado. Remova o pendrive e reinicie o PC.")
-            self.message("Instalacao concluida! Remova o pendrive para iniciar pelo disco.\n"
-                         "Login inicial: enfoque / 123456.\n"
-                         "No primeiro login, troque a senha e identifique o PC e a loja.")
+            # The live desktop still reads files from the USB. Removing it before
+            # poweroff can crash XFCE plug-ins and cause I/O errors in the session.
+            self.status.set_text(
+                "Instalacao concluida. MANTENHA O PENDRIVE CONECTADO ate o PC desligar."
+            )
+            dialog = Gtk.MessageDialog(
+                self, 0, Gtk.MessageType.INFO, Gtk.ButtonsType.NONE,
+                "Instalacao concluida!"
+            )
+            dialog.format_secondary_text(
+                "Nao retire o pendrive enquanto o Enfoque OS estiver ligado.\n\n"
+                "Clique em 'Desligar com seguranca' e aguarde o PC apagar "
+                "completamente. SOMENTE ENTAO remova o pendrive e ligue o PC "
+                "para iniciar pelo disco interno.\n\n"
+                "No primeiro login: usuario enfoque, senha temporaria 123456. "
+                "Troque a senha e identifique a empresa e a loja."
+            )
+            dialog.add_button("Desligar com seguranca", Gtk.ResponseType.OK)
+            dialog.add_button("Fazer depois", Gtk.ResponseType.CANCEL)
+            response = dialog.run()
+            dialog.destroy()
+            if response == Gtk.ResponseType.OK:
+                self.status.set_text("Desligando. NAO retire o pendrive ate o PC apagar.")
+                try:
+                    subprocess.run(
+                        ["sudo", "-n", "systemctl", "poweroff"],
+                        check=True, timeout=15, capture_output=True, text=True,
+                    )
+                except (OSError, subprocess.SubprocessError) as error:
+                    self.status.set_text(
+                        "Nao foi possivel desligar automaticamente. "
+                        "Mantenha o pendrive conectado e desligue o PC com seguranca."
+                    )
+                    self.message(
+                        "O desligamento automatico falhou.\n" + str(error)[:160]
+                        + "\nMantenha o pendrive conectado ate desligar.", True
+                    )
         else:
             self.status.set_text("Instalacao nao concluida. Verifique as mensagens do instalador.")
             self.message("Instalacao nao concluida.\n" + detail +

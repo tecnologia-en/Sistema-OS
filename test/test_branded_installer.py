@@ -28,6 +28,16 @@ class InstallSafetyTests(unittest.TestCase):
         self.assertIn("APAGAR", gui)
         self.assertIn("--list-disks", gui)
 
+    def test_usb_must_stay_inserted_until_poweroff(self):
+        gui = (ROOT / "config/includes.chroot/usr/local/bin/enfoque-instalar").read_text()
+        self.assertIn("MANTENHA O PENDRIVE CONECTADO", gui)
+        self.assertIn('"systemctl", "poweroff"', gui)
+        self.assertIn("Desligar com seguranca", gui)
+        self.assertNotIn("Remova o pendrive e reinicie o PC", gui)
+        guide = (ROOT / "docs/GUIA_PILOTO_PC_REAL_0216.md").read_text()
+        self.assertIn("Nunca retire o pendrive com a sessão Live aberta", guide)
+        self.assertIn("Secure Boot Violation", guide)
+
     def test_only_live_image_may_install(self):
         with mock.patch.object(installer.os, "geteuid", return_value=1000):
             with self.assertRaises(PermissionError):
