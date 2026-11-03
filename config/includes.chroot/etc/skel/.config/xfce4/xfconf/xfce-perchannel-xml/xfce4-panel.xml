@@ -31,6 +31,7 @@
         <value type="int" value="6"/>
         <value type="int" value="7"/>
         <value type="int" value="8"/>
+        <value type="int" value="13"/>
         <value type="int" value="9"/>
         <value type="int" value="10"/>
         <value type="int" value="11"/>
@@ -75,6 +76,8 @@
       <property name="square-icons" type="bool" value="true"/>
       <property name="symbolic-icons" type="bool" value="true"/>
     </property>
+    <!-- Battery indicator next to audio and clock. -->
+    <property name="plugin-13" type="string" value="battery"/>
     <!-- Real volume slider from the XFCE PulseAudio plugin. -->
     <property name="plugin-9" type="string" value="pulseaudio">
       <property name="enable-keyboard-shortcuts" type="bool" value="true"/>

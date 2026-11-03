@@ -41,7 +41,7 @@ class TaskbarTests(unittest.TestCase):
 
     def test_ordered_independent_launchers_and_tasklist(self):
         ids = [int(x.get("value")) for x in self.panel.find("./property[@name='plugin-ids']")]
-        self.assertEqual(ids, list(range(1, 13)))
+        self.assertEqual(ids, list(range(1, 9)) + [13] + list(range(9, 13)))
         self.assertIsNotNone(self.plugins)
         self.assertEqual(self.plugins.find("./property[@name='plugin-1']").get("value"), "whiskermenu")
         for plugin_id, desktop in [(2,"google-chrome.desktop"), (3,"enfoque-sige.desktop"),
@@ -73,6 +73,18 @@ class TaskbarTests(unittest.TestCase):
         binding = tree.find("./property[@name='commands']/property[@name='custom']/property[@name='Super_L']")
         self.assertIsNotNone(binding)
         self.assertEqual(binding.get("value"), "xfce4-popup-whiskermenu")
+
+    def test_laptop_battery_indicator_and_charge(self):
+        p = self.plugins.find("./property[@name='plugin-13']")
+        self.assertEqual(p.get("value"), "battery")
+        battery = ROOT / "config/includes.chroot/etc/skel/.config/xfce4/panel/battery-13.rc"
+        settings = battery.read_text(encoding="utf-8")
+        self.assertIn("display_icon=true", settings)
+        self.assertIn("display_percentage=true", settings)
+        self.assertIn("low_percentage=15", settings)
+        package = (ROOT / "config/package-lists/enfoque-base.list.chroot").read_text()
+        self.assertIn("\nxfce4-battery-plugin\n", package)
+        self.assertIn("\nupower\n", package)
 
     def test_id_button_is_persistent_and_payment_tool_is_search_only(self):
         xml = PANEL.read_text(encoding="utf-8")

@@ -18,6 +18,7 @@ for path in \
   config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml \
   config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml \
   config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml \
+  config/includes.chroot/etc/skel/.config/xfce4/panel/battery-13.rc \
   config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml \
   config/includes.chroot/usr/share/icons/hicolor/scalable/apps/enfoque-start.svg \
   config/includes.chroot/usr/share/icons/hicolor/scalable/apps/enfoque-sige.svg \
@@ -52,6 +53,9 @@ if ! grep -Fq 'wallpaper.jpg' "$ROOT/config/includes.chroot/usr/local/bin/enfoqu
 magic="$(od -An -tx1 -N3 "$ROOT/config/includes.chroot/usr/share/backgrounds/enfoque-os/wallpaper.jpg" | tr -d ' \n')"
 [ "$magic" = 'ffd8ff' ] || fail 'JPEG corporativo invalido'
 grep -Fq 'value="whiskermenu"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'menu iniciar ausente'
+grep -Fq 'name="plugin-13" type="string" value="battery"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'bateria ausente no painel'
+grep -Fq 'display_percentage=true' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/panel/battery-13.rc" || fail 'porcentagem da bateria nao habilitada'
+grep -Fxq xfce4-battery-plugin "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'plugin bateria ausente da ISO'
 grep -Fq 'show-button-title=false' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/panel/whiskermenu-1.rc" || fail 'menu inicial nao esta apenas com logo'
 grep -Fq 'button-icon=enfoque-start' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/panel/whiskermenu-1.rc" || fail 'logo do menu inicial ausente'
 grep -Fq 'name="Super_L" type="string" value="xfce4-popup-whiskermenu"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml" || fail 'tecla Windows nao abre menu'
