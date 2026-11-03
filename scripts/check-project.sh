@@ -68,6 +68,15 @@ for pkg in libreoffice libreoffice-gtk3 libreoffice-l10n-pt-br libreoffice-help-
   grep -Fxq "$pkg" "$ROOT/config/package-lists/enfoque-base.list.chroot" || { echo "LibreOffice incompleto: $pkg" >&2; exit 1; }
 done
 
+# AnyDesk vendor-signed installer must be included in the bootable ISO.
+anydesk_hook="$ROOT/config/hooks/normal/093-anydesk-oficial.hook.chroot"
+test -x "$anydesk_hook" || { echo 'Hook AnyDesk ausente' >&2; exit 1; }
+sh -n "$anydesk_hook"
+grep -Fq 'signed-by=/etc/apt/keyrings/keys.anydesk.com.asc' "$anydesk_hook"
+grep -Fq 'systemctl enable anydesk.service' "$anydesk_hook"
+grep -Fq 'rm -rf -- /etc/anydesk /root/.anydesk /var/lib/anydesk' "$anydesk_hook"
+python3 -m unittest discover -s "$ROOT/test" -p 'test_anydesk_image.py'
+
 # Kiosk 0.2.8: no hardcoded TEF credentials or untested scripts in ISO.
 for f in "$ROOT/config/hooks/normal/097-enfoque-lowram-kiosk.hook.chroot" \
          "$ROOT/config/includes.chroot/usr/local/bin/enfoque-kiosk-session" \

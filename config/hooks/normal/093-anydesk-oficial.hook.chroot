@@ -1,0 +1,33 @@
+#!/bin/sh
+# AnyDesk oficial para Debian 13, amd64, apenas no chroot do build.
+set -eu
+export DEBIAN_FRONTEND=noninteractive
+echo 'Enfoque OS: instalando AnyDesk do repositorio oficial'
+version='8.1.0'
+key_sha256='94a83c7e40d5919e897041e7c8b07ed46bd830114a6e4bcf1607675ec4bcecd5'
+key=/etc/apt/keyrings/keys.anydesk.com.asc
+tmp=/tmp/enfoque-anydesk-repo-key.asc
+install -d -m 0755 /etc/apt/keyrings
+curl --fail --show-error --silent --location --retry 4 --connect-timeout 20 \
+  https://keys.anydesk.com/repos/DEB-GPG-KEY --output "$tmp"
+printf '%s  %s\n' "$key_sha256" "$tmp" | sha256sum -c -
+install -m 0644 "$tmp" "$key"
+rm -f "$tmp"
+printf '%s\n' 'deb [arch=amd64 signed-by=/etc/apt/keyrings/keys.anydesk.com.asc] https://deb.anydesk.com all main' \
+  > /etc/apt/sources.list.d/anydesk-stable.list
+apt-get update -o Acquire::Retries=4
+# O postinst do AnyDesk usa xdg-desktop-menu no chroot.
+command -v xdg-desktop-menu >/dev/null 2>&1 || { echo 'xdg-utils obrigatorio para AnyDesk' >&2; exit 1; }
+apt-get install -y --no-install-recommends "anydesk=$version"
+dpkg -s anydesk | grep -Fxq 'Status: install ok installed'
+dpkg -s anydesk | grep -Fxq 'Version: 8.1.0'
+test -x /usr/bin/anydesk
+test -s /usr/share/applications/anydesk.desktop
+# Quando PID 1 nao e systemd, o .deb nao instala unidade no chroot.
+install -m 0644 /usr/share/anydesk/files/systemd/anydesk.service \
+  /etc/systemd/system/anydesk.service
+systemctl enable anydesk.service >/dev/null
+test -L /etc/systemd/system/multi-user.target.wants/anydesk.service
+# Nenhuma identidade, token, ID ou senha do compilador entra na ISO.
+rm -rf -- /etc/anydesk /root/.anydesk /var/lib/anydesk
+echo 'Enfoque OS: AnyDesk instalado; identidade gerada por computador'
