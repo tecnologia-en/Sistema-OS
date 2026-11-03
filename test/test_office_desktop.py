@@ -1,4 +1,4 @@
-"""Enfoque OS 0.2.13: LibreOffice pt-BR and a minimal three-icon desktop."""
+"""Enfoque OS 0.2.14: LibreOffice pt-BR and a minimal three-icon desktop."""
 from pathlib import Path
 import unittest
 import xml.etree.ElementTree as ET
@@ -63,7 +63,7 @@ class OfficeAndDesktopTests(unittest.TestCase):
 
     def test_clean_only_previous_system_shortcuts_and_keep_user_files(self):
         script = VISUAL.read_text()
-        self.assertIn('enfoque-os-visual-v0213',script)
+        self.assertIn('enfoque-os-visual-v0214',script)
         self.assertIn("remove_os_shortcut 'PayGo.desktop' 'enfoque-paygo abrir'",script)
         self.assertIn("remove_os_shortcut 'Enfoque-Central.desktop' 'enfoque-central'",script)
         self.assertIn("remove_os_shortcut 'Compatibilidade-Windows.desktop' 'enfoque-paygo configurar'",script)

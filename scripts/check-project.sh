@@ -7,6 +7,19 @@ for f in "$ROOT/config/package-lists/enfoque-base.list.chroot" "$ROOT/config/inc
   test -s "$f" || { echo "Arquivo ausente ou vazio: $f" >&2; exit 1; }
   echo "OK arquivo: ${f#"$ROOT"/}"
 done
+# Regression found during VM install of 0.2.13: Calamares was blocked
+# by the missing cracklib dictionary (apt recommendations disabled).
+for pkg in calamares-settings-debian cracklib-runtime wbrazilian; do
+  grep -Fxq "$pkg" "$ROOT/config/package-lists/enfoque-base.list.chroot" || {
+    echo "ERRO: dependencia de instalacao Calamares ausente: $pkg" >&2; exit 1;
+  }
+done
+dictionary_hook="$ROOT/config/hooks/normal/094-calamares-password-dictionary.hook.chroot"
+test -x "$dictionary_hook"
+sh -n "$dictionary_hook"
+grep -Fq 'test -s /var/cache/cracklib/cracklib_dict.pwd' "$dictionary_hook"
+python3 -m unittest discover -s "$ROOT/test" -p 'test_calamares_password_dictionary.py'
+
 # Falha detectada no primeiro boot do piloto 0.1:
 # user-setup precisa ser explicitamente instalado se o apt-recommends esta desativado.
 grep -Eq '^[[:space:]]*user-setup[[:space:]]*$' "$ROOT/config/package-lists/enfoque-base.list.chroot" || {

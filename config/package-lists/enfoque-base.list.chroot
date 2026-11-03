@@ -1,4 +1,4 @@
-# Enfoque OS 0.2.13 - Debian 13 XFCE
+# Enfoque OS 0.2.14 - Debian 13 XFCE
 # Chrome oficial do Google via hook HTTPS em build, sem Firefox.
 user-setup
 locales
@@ -9,6 +9,9 @@ xorg
 lightdm
 lightdm-gtk-greeter
 calamares-settings-debian
+# Offline password verification dictionary required by Calamares/libpwquality.
+cracklib-runtime
+wbrazilian
 pkexec
 accountsservice
 dbus-x11

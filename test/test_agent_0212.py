@@ -1,4 +1,4 @@
-"""Enfoque OS 0.2.13: safe Linux Root MCP enrollment and desktop trust."""
+"""Enfoque OS 0.2.14: safe Linux Root MCP enrollment and desktop trust."""
 import importlib.machinery
 import importlib.util
 import hashlib
