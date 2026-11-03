@@ -16,14 +16,14 @@ jobs:
       - name: Aguardar compilacao aprovada
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh run watch 41651406729 --repo "$GITHUB_REPOSITORY" --exit-status --interval 15
+        run: gh run watch 41653437240 --repo "$GITHUB_REPOSITORY" --exit-status --interval 15
       - name: Baixar artefato exato da versao
         uses: actions/download-artifact@v4
         with:
-          name: enfoque-os-iso-46
+          name: enfoque-os-iso-47
           path: dist
           repository: tecnologia-en/Sistema-OS
-          run-id: 41651406729
+          run-id: 41653437240
           github-token: ${{ github.token }}
       - name: Validar checksum antes de publicar
         run: |
@@ -46,7 +46,7 @@ jobs:
           set -euo pipefail
           gh release create v0.2.13-piloto \
             --repo "$GITHUB_REPOSITORY" \
-            --target 76942ea9169b66ecfff7e6307d3ea21594648120 \
+            --target 5fa01a528ec4e3e3167714daaf6a4d36b6212d4e \
             --title 'Enfoque OS 0.2.13 - Primeiro acesso e gerenciamento corporativo (piloto)' \
             --notes 'ISO piloto Debian 13 XFCE com cadastro unico do PC e loja no primeiro login, agente Linux Root MCP de registro automatico e comandos de diagnostico apos aprovacao TI. MeshCentral recebe instalacao individual somente apos pareamento por maquina, sem segredos embutidos. Atalhos SIGE e Intranet confiaveis sem bypass geral de seguranca; desktop Lixeira, SIGE e Intranet. LibreOffice, AnyDesk e PayGo DEMO mantidos. Juntar chunk-00 em ordem e verificar SHA256SUMS. Controle remoto e uso financeiro em lojas ainda requerem homologacao operacional.' \
             --prerelease \
