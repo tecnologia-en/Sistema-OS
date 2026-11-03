@@ -32,3 +32,11 @@ class BootTests(unittest.TestCase):
             firstboot.build_profile("../etc/hosts", "enfoque", "centro", machine)
         with self.assertRaises(ValueError):
             firstboot.build_profile("CAIXA 01", "enfoque", "papel-arte", machine)
+
+
+class VisualIdentifierTests(unittest.TestCase):
+    def test_store_selection_recalculates_display_suffix(self):
+        code = (ROOT / "config/includes.chroot/usr/local/bin/enfoque-primeiro-acesso").read_text()
+        self.assertIn('self.unit.connect("changed", self.update_id)', code)
+        self.assertIn('firstboot.UNIT_SUFFIX.get(self.unit.get_active_id(), "0")', code)
+        self.assertIn('self.device.set_text("Identificador: " + self.device_short + "-" + suffix)', code)

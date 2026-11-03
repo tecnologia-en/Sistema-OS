@@ -15,6 +15,8 @@ LIB = "/usr/local/lib/enfoque-onboarding/identity.py"
 spec = importlib.util.spec_from_file_location("enfoque_identity", LIB)
 identity = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(identity)
+sys.path.insert(0, str(Path(LIB).parent))
+import firstboot
 PROFILE = Path("/var/lib/enfoque-os/firstboot.json")
 
 
@@ -66,6 +68,7 @@ class Onboarding(Gtk.Window):
         self.unit.append("", "Selecione primeiro a empresa")
         self.unit.set_active_id("")
         wrap.pack_start(self.unit, False, False, 0)
+        self.device_short = ""
         self.device = Gtk.Label(label="Identificador: gerado no primeiro boot")
         self.device.set_xalign(0)
         self.device.set_selectable(True)
@@ -73,9 +76,13 @@ class Onboarding(Gtk.Window):
         try:
             info = subprocess.run(["/usr/local/bin/enfoque-id", "--json"],
                                   capture_output=True, text=True, timeout=4, check=True)
-            self.device.set_text("Identificador: " + json.loads(info.stdout)["id"])
+            code = json.loads(info.stdout)["id"]
+            if isinstance(code, str) and len(code) == 14 and code[12] == "-" and code[:12].isdigit():
+                self.device_short = code[:12]
+                self.update_id()
         except (OSError, KeyError, ValueError, subprocess.SubprocessError):
             pass
+        self.unit.connect("changed", self.update_id)
         self.status = Gtk.Label(label="Modo demonstracao" if preview else
                                 "A TI recebera o cadastro; autorizacao remota e separada.")
         self.status.set_line_wrap(True)
@@ -104,6 +111,11 @@ class Onboarding(Gtk.Window):
             for code, name in rec["units"].items():
                 self.unit.append(code, name)
         self.unit.set_active_id("")
+
+    def update_id(self, *_):
+        if self.device_short:
+            suffix = firstboot.UNIT_SUFFIX.get(self.unit.get_active_id(), "0")
+            self.device.set_text("Identificador: " + self.device_short + "-" + suffix)
 
     def finish(self, *_):
         if self.preview:
