@@ -27,7 +27,7 @@ DEVICE = Path("/var/lib/enfoque-os/device-identity.json")
 LIVE_DEVICE = Path("/run/enfoque-os/device-identity.json")
 PROFILE = Path("/var/lib/enfoque-os/firstboot.json")
 STORE_SUFFIX = {"ilha-plaza":"1","copacabana":"2","itaipu":"3","icarai":"4","sao-goncalo":"5","centro":"6","deposito":"7","administracao":"8","papel-arte":"9"}
-AGENT_VERSION = "0.2.16-linux-limited"
+AGENT_VERSION = "0.2.17-linux-limited"
 SAFE_READ = frozenset(("/etc/enfoque-os-release", "/etc/os-release", "/proc/meminfo", "/proc/uptime"))
 SAFE_DIR = frozenset(("/usr/share/applications", "/usr/local/bin", "/etc/xdg"))
 SAFE_UNITS = frozenset((
@@ -220,7 +220,7 @@ def send_register(state, base=SERVER):
        "tokenHash": hashlib.sha256(state["token"].encode("ascii")).hexdigest(),
        "hostname": ("Enfoque OS " + short + " " + store)[:100],
        "username": "enfoque-agent",
-       "platform": "Linux Enfoque OS 0.2.16 XFCE"}, base=base)
+       "platform": "Linux Enfoque OS 0.2.17 XFCE"}, base=base)
 
 
 def run_cycle(state, base=SERVER):

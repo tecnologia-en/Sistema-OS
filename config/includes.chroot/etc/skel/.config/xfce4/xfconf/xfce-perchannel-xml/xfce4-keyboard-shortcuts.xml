@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Tecla Windows esquerda abre o menu Whisker do Enfoque OS. -->
+<channel name="xfce4-keyboard-shortcuts" version="1.0">
+  <property name="commands" type="empty">
+    <property name="custom" type="empty">
+      <property name="Super_L" type="string" value="xfce4-popup-whiskermenu"/>
+    </property>
+  </property>
+</channel>

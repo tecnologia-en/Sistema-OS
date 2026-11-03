@@ -60,6 +60,20 @@ class TaskbarTests(unittest.TestCase):
         self.assertEqual(p.get("value"), "launcher")
         self.assertEqual(p.find("./property[@name='items']/value").get("value"), "enfoque-id.desktop")
 
+    def test_windows_key_and_start_icon_only(self):
+        menu = ROOT / "config/includes.chroot/etc/skel/.config/xfce4/panel/whiskermenu-1.rc"
+        text = menu.read_text(encoding="utf-8")
+        self.assertIn("button-icon=enfoque-start", text)
+        self.assertIn("show-button-icon=true", text)
+        self.assertIn("show-button-title=false", text)
+        self.assertNotIn("button-title=Enfoque OS", text)
+        keymap = ROOT / "config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml"
+        tree = ET.parse(keymap).getroot()
+        self.assertEqual(tree.attrib.get("name"), "xfce4-keyboard-shortcuts")
+        binding = tree.find("./property[@name='commands']/property[@name='custom']/property[@name='Super_L']")
+        self.assertIsNotNone(binding)
+        self.assertEqual(binding.get("value"), "xfce4-popup-whiskermenu")
+
     def test_id_button_is_persistent_and_payment_tool_is_search_only(self):
         xml = PANEL.read_text(encoding="utf-8")
         self.assertIn("enfoque-id.desktop", xml)

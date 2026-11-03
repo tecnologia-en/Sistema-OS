@@ -1,9 +1,9 @@
 favorites=google-chrome.desktop,enfoque-sige.desktop,enfoque-intranet.desktop,thunar.desktop,enfoque-central.desktop,enfoque-diagnostico.desktop,enfoque-primeiros-passos.desktop,enfoque-suporte.desktop
 recent=google-chrome.desktop
-button-title=Enfoque OS
+button-title=
 button-icon=enfoque-start
 button-single-row=true
-show-button-title=true
+show-button-title=false
 show-button-icon=true
 menu-width=540
 menu-height=660
