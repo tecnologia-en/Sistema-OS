@@ -1,0 +1,53 @@
+name: Publicar Enfoque OS 0.2.11 - laboratorio
+on:
+  push:
+    branches:
+      - feat/lowram-kiosk-028
+    paths:
+      - '.github/workflows/publish-iso-0211.yml'
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Aguardar compilacao aprovada
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run watch 41635294261 --repo "$GITHUB_REPOSITORY" --exit-status --interval 15
+      - name: Baixar artefato exato da versao
+        uses: actions/download-artifact@v4
+        with:
+          name: enfoque-os-iso-43
+          path: dist
+          repository: tecnologia-en/Sistema-OS
+          run-id: 41635294261
+          github-token: ${{ github.token }}
+      - name: Validar checksum antes de publicar
+        run: |
+          set -euo pipefail
+          test -s dist/enfoque-os-0.2.11-piloto-amd64.iso
+          test -s dist/SHA256SUMS
+          (cd dist && sha256sum -c SHA256SUMS)
+      - name: Separar ISO em partes verificaveis
+        run: |
+          set -euo pipefail
+          mkdir -p parts
+          split --bytes=750m --numeric-suffixes=0 --suffix-length=2 dist/enfoque-os-0.2.11-piloto-amd64.iso parts/chunk-
+          test "$(find parts -maxdepth 1 -type f -name 'chunk-*' | wc -l)" -ge 2
+          (cd parts && sha256sum chunk-* > SHA256_PARTS && sha256sum -c SHA256_PARTS)
+          cp dist/SHA256SUMS parts/SHA256SUMS
+      - name: Publicar prerelease QA sem dados financeiros
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create v0.2.11-piloto \
+            --repo "$GITHUB_REPOSITORY" \
+            --target 7a9dd4a4723c0c16351a536329e2713d0018e70e \
+            --title 'Enfoque OS 0.2.11 - LibreOffice e AnyDesk oficial (piloto)' \
+            --notes 'ISO piloto Debian 13 XFCE com LibreOffice pt-BR e AnyDesk 8.1.0 oficial preinstalados. Desktop mostra somente Lixeira, SIGE e Intranet; AnyDesk e pesquisavel no menu. ID AnyDesk gerado por computador, sem senha de acesso autonomo. Uso comercial do AnyDesk sujeito a licenciamento. PayGo nao contem credenciais de producao. Concatenar chunk-00 etc. e verificar SHA256SUMS. Uso financeiro em lojas nao homologado.' \
+            --prerelease \
+            parts/chunk-* parts/SHA256SUMS parts/SHA256_PARTS
