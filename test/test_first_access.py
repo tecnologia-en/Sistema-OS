@@ -100,6 +100,7 @@ class FirstAccessTests(unittest.TestCase):
         self.assertEqual(fmt.get("digital-layout"),"3")
         central=(CONFIG/"etc/xdg/autostart/enfoque-central.desktop").read_text()
         self.assertIn("X-GNOME-Autostart-enabled=false",central)
+        self.assertIn("Hidden=true",central)
 
     def test_telemetry_contains_only_optional_non_secret_user_data(self):
         src=(CONFIG/"usr/local/bin/enfoque-telemetria").read_text(encoding="utf-8")

@@ -40,3 +40,24 @@ class VisualIdentifierTests(unittest.TestCase):
         self.assertIn('self.unit.connect("changed", self.update_id)', code)
         self.assertIn('firstboot.UNIT_SUFFIX.get(self.unit.get_active_id(), "0")', code)
         self.assertIn('self.device.set_text("Identificador: " + self.device_short + "-" + suffix)', code)
+
+
+class InstalledSessionSafetyTests(unittest.TestCase):
+    def test_firstboot_starts_in_active_xfce_session_not_background(self):
+        launcher = (ROOT / "config/includes.chroot/usr/local/bin/enfoque-firstboot-launch").read_text()
+        self.assertIn("exec /usr/local/bin/enfoque-primeiro-acesso", launcher)
+        self.assertNotIn("systemctl --user start", launcher)
+        script = (ROOT / "config/includes.chroot/usr/local/bin/enfoque-primeiro-acesso").read_text()
+        self.assertIn("GLib.timeout_add(1700, focus_once)", script)
+        self.assertIn("dialog.submit.get_sensitive()", script)
+        hidden = (ROOT / "config/includes.chroot/etc/xdg/autostart/enfoque-central.desktop").read_text()
+        self.assertIn("Hidden=true", hidden)
+        self.assertTrue((ROOT / "config/includes.chroot/usr/share/applications/enfoque-central.desktop").is_file())
+
+    def test_installed_clock_and_locale_are_explicit(self):
+        installer = (ROOT / "config/includes.chroot/usr/local/sbin/enfoque-install-system").read_text()
+        self.assertIn('"America/Sao_Paulo\\n"', installer)
+        self.assertIn('localtime.symlink_to("/usr/share/zoneinfo/America/Sao_Paulo")', installer)
+        self.assertIn('"LANG=pt_BR.UTF-8\\nLANGUAGE=pt_BR:pt\\n"', installer)
+        self.assertIn('"pt_BR.UTF-8 UTF-8"', installer)
+        self.assertIn('"/usr/sbin/locale-gen"', installer)

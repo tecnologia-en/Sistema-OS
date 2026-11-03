@@ -25,7 +25,7 @@ SERVER = "https://mcp.enfoquepapelaria.com.br/mcp/pc-agent"
 STATE = Path(os.environ.get("STATE_DIRECTORY", "/var/lib/enfoque-agent"))
 DEVICE = Path("/var/lib/enfoque-os/device-identity.json")
 LIVE_DEVICE = Path("/run/enfoque-os/device-identity.json")
-AGENT_VERSION = "0.2.14-linux-limited"
+AGENT_VERSION = "0.2.16-linux-limited"
 SAFE_READ = frozenset(("/etc/enfoque-os-release", "/etc/os-release", "/proc/meminfo", "/proc/uptime"))
 SAFE_DIR = frozenset(("/usr/share/applications", "/usr/local/bin", "/etc/xdg"))
 SAFE_UNITS = frozenset((
@@ -195,7 +195,7 @@ def send_register(state, base=SERVER):
        "tokenHash": hashlib.sha256(state["token"].encode("ascii")).hexdigest(),
        "hostname": ("Enfoque OS " + short + " " + store)[:100],
        "username": "enfoque-agent",
-       "platform": "Linux Enfoque OS 0.2.14 XFCE"}, base=base)
+       "platform": "Linux Enfoque OS 0.2.16 XFCE"}, base=base)
 
 
 def run_cycle(state, base=SERVER):

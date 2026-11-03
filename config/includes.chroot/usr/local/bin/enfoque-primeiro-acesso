@@ -9,7 +9,7 @@ import subprocess
 import sys
 import gi
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk
+from gi.repository import Gtk, GLib
 
 LIB = "/usr/local/lib/enfoque-onboarding/identity.py"
 spec = importlib.util.spec_from_file_location("enfoque_identity", LIB)
@@ -165,6 +165,14 @@ def main():
         return 0
     dialog = Onboarding(preview)
     dialog.show_all()
+    # A delayed, single focus request protects the first-run wizard from
+    # other session startup windows, without stealing focus during polkit.
+    if not preview:
+        def focus_once():
+            if not PROFILE.exists() and dialog.submit.get_sensitive():
+                dialog.present()
+            return False
+        GLib.timeout_add(1700, focus_once)
     Gtk.main()
     return 0
 

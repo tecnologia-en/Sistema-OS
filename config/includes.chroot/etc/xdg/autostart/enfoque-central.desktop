@@ -7,3 +7,4 @@ Exec=/usr/local/bin/enfoque-central
 OnlyShowIn=XFCE;
 NoDisplay=true
 X-GNOME-Autostart-enabled=false
+Hidden=true
