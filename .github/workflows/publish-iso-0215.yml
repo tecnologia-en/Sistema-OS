@@ -42,7 +42,7 @@ jobs:
         run: |
           gh release create v0.2.15-piloto \
             --repo "$GITHUB_REPOSITORY" \
-            --target 0eca587 \
+            --target 0eca587e0376d9a547e499d70af3ccf9080416a3 \
             --title 'Enfoque OS 0.2.15 - instalacao propria e ID persistente (candidato QA)' \
             --notes 'Candidato de QA, NAO HOMOLOGADO para pagamentos reais. Removido o assistente Calamares. Instalador grafico do Enfoque OS apaga apenas o disco escolhido apos confirmacao explicita APAGAR; boot BIOS/UEFI e usuario inicial enfoque/123456 com troca obrigatoria no primeiro login. Depois disso, o usuario associa nome do computador, empresa e loja; UUID e ID ficam no disco instalado. No modo Live sem instalar, o ID nao e persistente. Acesso remoto continua condicionado a aprovacao e credenciais individuais da TI. Requer teste de instalacao, reboot e TEF em hardware real antes de producao. Juntar chunk-00 em ordem, verificar SHA256SUMS.' \
             --prerelease \
