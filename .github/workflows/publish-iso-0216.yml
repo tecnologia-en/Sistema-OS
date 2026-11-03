@@ -1,0 +1,49 @@
+name: Publicar Enfoque OS 0.2.16 - candidato QA
+on:
+  push:
+    branches:
+      - feat/lowram-kiosk-028
+    paths:
+      - '.github/workflows/publish-iso-0216.yml'
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    steps:
+      - name: Aguardar build exato da versao
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run watch 41686147564 --repo "$GITHUB_REPOSITORY" --exit-status --interval 20
+      - name: Baixar ISO do build verificado
+        uses: actions/download-artifact@v4
+        with:
+          name: enfoque-os-iso-52
+          path: dist
+          repository: tecnologia-en/Sistema-OS
+          run-id: 41686147564
+          github-token: ${{ github.token }}
+      - name: Validar a ISO e criar partes transportaveis
+        run: |
+          set -euo pipefail
+          test -s dist/enfoque-os-0.2.16-piloto-amd64.iso
+          (cd dist && sha256sum -c SHA256SUMS)
+          mkdir -p parts
+          split --bytes=750m --numeric-suffixes=0 --suffix-length=2 \
+            dist/enfoque-os-0.2.16-piloto-amd64.iso parts/chunk-
+          (cd parts && sha256sum chunk-* > SHA256_PARTS && sha256sum -c SHA256_PARTS)
+          cp dist/SHA256SUMS parts/SHA256SUMS
+      - name: Publicar prerelease (nao homologada para lojas)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v0.2.16-piloto \
+            --repo "$GITHUB_REPOSITORY" \
+            --target 1d352d96ee0f4840f4bc4b40ecb58bca59cbdd1e \
+            --title 'Enfoque OS 0.2.16 - primeiro acesso, idioma e agente remoto (QA)' \
+            --notes 'Candidato de QA, NAO homologado para pagamentos. Instalador Enfoque com login inicial enfoque/123456 que exige troca no primeiro uso, ID unico persistido no disco e cadastro de computador e loja. 0.2.16 persiste fuso America/Sao_Paulo e locale pt_BR.UTF-8; coloca o cadastro em primeiro plano e condiciona o registro remoto a primeira configuracao instalada, sem registro de Live. Aprovacao remota individual da TI, sem token na ISO. Boot BIOS testado na 0.2.15; 0.2.16 requer nova QA de instalacao, UEFI e PayGo com pinpad real antes de producao. Juntar partes em ordem e verificar SHA256SUMS.' \
+            --prerelease \
+            parts/chunk-* parts/SHA256SUMS parts/SHA256_PARTS
