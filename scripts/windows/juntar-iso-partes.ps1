@@ -1,7 +1,7 @@
 #requires -version 5.1
 <#
 .SYNOPSIS
-Monta ISO Enfoque OS a partir de quatro partes verificadas do GitHub Actions.
+Monta ISO Enfoque OS a partir de partes numeradas e verificadas do GitHub Actions.
 .EXAMPLE
 .\scripts\windows\juntar-iso-partes.ps1 -PartsDirectory .\dist\0.1.3-parts
 #>
@@ -12,7 +12,7 @@ $dir=(Resolve-Path -LiteralPath $PartsDirectory).ProviderPath
 $source=Join-Path $dir 'SHA256SUMS'
 $manifest=Join-Path $dir 'SHA256_PARTS'
 if(!(Test-Path -LiteralPath $source) -or !(Test-Path -LiteralPath $manifest)){
-    throw 'SHA256SUMS e SHA256_PARTS sao obrigatorios ao lado das quatro partes.'
+    throw 'SHA256SUMS e SHA256_PARTS sao obrigatorios ao lado das partes.'
 }
 $isoLines=@(Get-Content -LiteralPath $source | Where-Object { $_ -match '^([a-fA-F0-9]{64})\s+\*?(?:\./)?(enfoque-os-[0-9]+\.[0-9]+\.[0-9]+-piloto-amd64\.iso)$' })
 if($isoLines.Count -ne 1){throw 'SHA256SUMS nao contem uma ISO Enfoque OS unica.'}
@@ -28,8 +28,13 @@ foreach($line in (Get-Content -LiteralPath $manifest)){
     if($hashes.ContainsKey($Matches[2])){throw "Parte repetida: $($Matches[2])"}
     $hashes[$Matches[2]]=$Matches[1].ToUpperInvariant()
 }
-if($hashes.Count -ne 4){throw "Esperadas quatro partes, recebidas $($hashes.Count)."}
-$parts=@('chunk-00','chunk-01','chunk-02','chunk-03')
+if($hashes.Count -lt 2 -or $hashes.Count -gt 99){throw "Quantidade de partes invalida: $($hashes.Count)."}
+$parts=@()
+for($i=0; $i -lt $hashes.Count; $i++){
+    $part=('chunk-{0:D2}' -f $i)
+    if(!$hashes.ContainsKey($part)){throw "Parte faltando no manifesto: $part"}
+    $parts+= $part
+}
 foreach($part in $parts){
     $file=Join-Path $dir $part
     if(!(Test-Path -LiteralPath $file)){throw "Parte nao encontrada: $part"}
