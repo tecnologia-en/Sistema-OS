@@ -1,0 +1,12 @@
+[Unit]
+Description=Enfoque OS - verificacao periodica de atualizacoes
+
+[Timer]
+OnBootSec=20min
+OnCalendar=*-*-* 04:30:00
+RandomizedDelaySec=2h
+Persistent=true
+Unit=enfoque-update-check.service
+
+[Install]
+WantedBy=timers.target

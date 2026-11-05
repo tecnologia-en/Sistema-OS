@@ -138,4 +138,22 @@ test -s "$ROOT/config/includes.chroot/usr/share/applications/enfoque-id.desktop"
 test -s "$ROOT/config/includes.chroot/usr/share/applications/enfoque-paygo-teste.desktop"
 test -s "$ROOT/config/includes.chroot/usr/local/lib/enfoque-paygo-teste/app.py"
 bash "$ROOT/scripts/check-visual.sh"
+
+# Enfoque OS 0.2.21: signed APT repository and versioned core package.
+for file in "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-update" \
+            "$ROOT/config/includes.chroot/usr/local/bin/enfoque-update-ui" \
+            "$ROOT/scripts/build-update-package.py" \
+            "$ROOT/scripts/publish-update-repo.sh"; do
+    test -x "$file" || { echo "Atualizador ausente: $file" >&2; exit 1; }
+done
+python3 -m py_compile "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-update"
+python3 -m py_compile "$ROOT/scripts/build-update-package.py"
+bash -n "$ROOT/scripts/publish-update-repo.sh"
+sh -n "$ROOT/config/includes.chroot/usr/local/bin/enfoque-update-ui"
+test -s "$ROOT/config/includes.chroot/usr/share/keyrings/enfoque-os-archive-keyring.gpg"
+grep -Fq "Signed-By: /usr/share/keyrings/enfoque-os-archive-keyring.gpg" "$ROOT/config/includes.chroot/etc/apt/sources.list.d/enfoque-os.sources"
+for unit in enfoque-update-check.service enfoque-update-check.timer enfoque-update-apply.service enfoque-update-apply.timer; do
+    test -s "$ROOT/config/includes.chroot/etc/systemd/system/$unit"
+done
+python3 -m unittest discover -s "$ROOT/test" -p 'test_enfoque_update.py'
 echo 'Estrutura valida. A ISO deve ser compilada e testada em VM.'

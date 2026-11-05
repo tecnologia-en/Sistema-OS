@@ -1,0 +1,4 @@
+#!/bin/sh
+# Updates from the local desktop; privilege elevation is handled by sudo.
+# An authorized administrator must enter their own password.
+exec xfce4-terminal --hold --title="Enfoque Update" -x sudo /usr/local/sbin/enfoque-update apply

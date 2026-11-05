@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Enfoque Update
+Comment=Atualizar o Debian, aplicativos e componentes Enfoque OS
+Exec=/usr/local/bin/enfoque-update-ui
+Icon=software-update-available
+Terminal=false
+Categories=System;Settings;
+StartupNotify=false

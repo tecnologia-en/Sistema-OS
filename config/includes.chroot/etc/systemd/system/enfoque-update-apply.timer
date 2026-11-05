@@ -1,0 +1,11 @@
+[Unit]
+Description=Enfoque OS - janela semanal de atualizacoes autorizadas
+
+[Timer]
+OnCalendar=Sun *-*-* 04:00:00
+RandomizedDelaySec=30min
+Persistent=false
+Unit=enfoque-update-apply.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,288 @@
+#!/usr/bin/env python3
+"""Enfoque OS Update: APT-based complete package maintenance.
+
+Debian, kernel, LibreOffice, Chrome, AnyDesk (when their signed repositories
+exist), and the versioned Enfoque OS core are maintained through APT.
+No remote shell, generic command execution, embedded administrator password,
+or unsigned update feed is implemented here.
+"""
+import argparse
+from datetime import datetime, timezone
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import urllib.request
+import urllib.error
+
+STATE = Path("/var/lib/enfoque-update")
+LOG = Path("/var/log/enfoque-update/history.jsonl")
+AUTO = Path("/etc/enfoque-update/auto.enabled")
+LOCK = Path("/run/lock/enfoque-update.lock")
+RELEASE = Path("/etc/enfoque-os-release")
+LIVE = Path("/run/live/medium")
+REBOOT = Path("/run/reboot-required")
+PACKAGE = "enfoque-os-core"
+SOURCE = Path("/etc/apt/sources.list.d/enfoque-os.sources")
+KEY = Path("/usr/share/keyrings/enfoque-os-archive-keyring.gpg")
+REPO_INRELEASE = "https://intranet.enfoquepapelaria.com.br/enfoque-os-updates/dists/stable/InRelease"
+PKG = re.compile(r"^[a-z0-9][a-z0-9+.-]{0,110}(?::(?:amd64|i386|all))?$")
+VERSION = re.compile(r"^[0-9][0-9A-Za-z.+:~\-]{0,95}$")
+
+
+def stamp():
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def installed_version():
+    try:
+        text = RELEASE.read_text("utf8")
+        match = re.search(r'^VERSION="([^"]+)"$', text, re.MULTILINE)
+        return match.group(1) if match else "desconhecida"
+    except OSError:
+        return "desconhecida"
+
+
+def log_event(action, result, detail=None):
+    LOG.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    event = {
+        "time": stamp(),
+        "action": action,
+        "result": result,
+        "operator": os.environ.get("SUDO_USER", "systemd" if os.geteuid() == 0 else "local")[:80],
+        "version": installed_version(),
+    }
+    if detail is not None:
+        event["detail"] = str(detail)[:350]
+    # Only root can append. Never put tokens, credentials or full environment here.
+    fd = os.open(str(LOG), os.O_CREAT | os.O_WRONLY | os.O_APPEND, 0o600)
+    try:
+        os.write(fd, (json.dumps(event, ensure_ascii=False) + "\n").encode("utf8"))
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def atomic_json(path, payload):
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    tmp = path.with_suffix(".new")
+    with open(tmp, "w", encoding="utf8") as fp:
+        os.chmod(tmp, 0o600)
+        json.dump(payload, fp, ensure_ascii=False, indent=2)
+        fp.write("\n")
+        fp.flush()
+        os.fsync(fp.fileno())
+    os.replace(tmp, path)
+
+
+def apt_env():
+    env = os.environ.copy()
+    env.update({"DEBIAN_FRONTEND": "noninteractive", "APT_LISTCHANGES_FRONTEND": "none"})
+    return env
+
+
+def apt(*args, timeout=7200, capture=False):
+    argv = ["/usr/bin/apt-get", "-o", "Acquire::Retries=3", *args]
+    return subprocess.run(
+        argv, check=True, timeout=timeout, env=apt_env(),
+        text=True, stdout=subprocess.PIPE if capture else None,
+        stderr=subprocess.PIPE if capture else None,
+        stdin=subprocess.DEVNULL,
+    )
+
+
+def enable_repo_if_signed():
+    """Enable the Enfoque source only after verifying its signed InRelease.
+
+    Debian security updates remain functional before the Enfoque archive is
+    published. Never trust a missing, unsigned or differently signed archive.
+    """
+    sources = SOURCE.read_text("utf8")
+    if "Enabled: no" not in sources:
+        return "Enabled: yes" in sources
+    try:
+        req = urllib.request.Request(REPO_INRELEASE,
+                                     headers={"User-Agent": "Enfoque-OS-Update"})
+        with urllib.request.urlopen(req, timeout=12) as response:
+            body = response.read(1024 * 1024 + 1)
+        if len(body) > 1024 * 1024:
+            return False
+        with tempfile.NamedTemporaryFile(prefix="enfoque-inrelease-", delete=True) as tmp:
+            tmp.write(body)
+            tmp.flush()
+            subprocess.run(["/usr/bin/gpgv", "--keyring", str(KEY), tmp.name],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=15, check=True)
+        replacement = sources.replace("Enabled: no", "Enabled: yes", 1)
+        staging = SOURCE.with_suffix(".new")
+        staging.write_text(replacement, encoding="utf8")
+        staging.chmod(0o644)
+        os.replace(staging, SOURCE)
+        return True
+    except (OSError, ValueError, subprocess.SubprocessError, urllib.error.URLError):
+        return False
+
+
+def refresh():
+    enabled = enable_repo_if_signed()
+    if not enabled:
+        print("Enfoque Update: repositorio corporativo ainda nao assinado/publicado; "
+              "mantendo atualizacoes Debian.", file=sys.stderr)
+    apt("-o", "APT::Update::Error-Mode=any", "update", timeout=600)
+
+
+def candidates():
+    report = apt("-s", "full-upgrade", timeout=120, capture=True)
+    packages = []
+    for line in report.stdout.splitlines():
+        if line.startswith("Inst "):
+            tokens = line.split()
+            if len(tokens) > 1:
+                packages.append(tokens[1])
+    return packages
+
+
+def get_status():
+    status = {
+        "enfoque_os": installed_version(),
+        "automatic_install": AUTO.is_file(),
+        "reboot_required": REBOOT.is_file(),
+        "enfoque_repo_enabled": SOURCE.is_file() and "Enabled: yes" in SOURCE.read_text("utf8"),
+        "pending": None,
+        "last_check": None,
+    }
+    try:
+        data = json.loads((STATE / "status.json").read_text("utf8"))
+        status["pending"] = data.get("pending")
+        status["last_check"] = data.get("checked_at")
+    except (OSError, ValueError, TypeError):
+        pass
+    return status
+
+
+def verify_environment():
+    if os.geteuid() != 0:
+        raise PermissionError("Execute como administrador autorizado (sudo/pkexec).")
+    if LIVE.exists():
+        raise PermissionError("Atualizacao desativada na ISO Live; instale o Enfoque OS primeiro.")
+    if not Path("/usr/share/keyrings/enfoque-os-archive-keyring.gpg").is_file():
+        raise RuntimeError("Chave publica do repositorio Enfoque ausente.")
+    if not Path("/etc/apt/sources.list.d/enfoque-os.sources").is_file():
+        raise RuntimeError("Repositorio Enfoque nao configurado.")
+    if shutil.disk_usage("/").free < 2 * 1024 ** 3:
+        raise RuntimeError("Espaco livre insuficiente: sao necessarios ao menos 2 GiB.")
+
+
+def update_state():
+    todo = candidates()
+    atomic_json(STATE / "status.json", {
+        "checked_at": stamp(), "pending": len(todo),
+        "packages": todo[:250], "version": installed_version(),
+    })
+    return todo
+
+
+def perform(kind, values, *, automatic=False):
+    verify_environment()
+    if automatic and not AUTO.exists():
+        return {"skipped": "modo automatico nao habilitado pela TI"}
+    LOCK.parent.mkdir(parents=True, exist_ok=True)
+    with open(LOCK, "w", encoding="utf8") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise RuntimeError("Ja existe uma atualizacao Enfoque em andamento.") from exc
+        log_event(kind, "started", ",".join(values) if values else None)
+        try:
+            refresh()
+            if kind == "check":
+                pending = update_state()
+                log_event(kind, "success", str(len(pending)) + " pacotes")
+                return {"pending": len(pending), "packages": pending[:50]}
+            if kind == "apply":
+                cmd = [
+                    "-o", "Dpkg::Options::=--force-confdef",
+                    "-o", "Dpkg::Options::=--force-confold",
+                    "--yes", "full-upgrade",
+                ]
+            elif kind == "install":
+                cmd = ["--yes", "--no-install-recommends", "install", *values]
+            elif kind == "remove":
+                cmd = ["--yes", "remove", *values]
+            elif kind == "rollback-core":
+                cmd = ["--yes", "--allow-downgrades", "install",
+                       PACKAGE + "=" + values[0]]
+            else:
+                raise ValueError("Acao de manutencao desconhecida")
+            # APT validates signed repository metadata before upgrading.
+            # Never run downloaded scripts or user-supplied shell commands.
+            apt(*cmd)
+            pending = update_state()
+            log_event(kind, "success", "pacotes restantes=" + str(len(pending)))
+            return {"ok": True, "pending": len(pending),
+                    "reboot_required": REBOOT.is_file()}
+        except (OSError, RuntimeError, subprocess.SubprocessError, ValueError) as error:
+            log_event(kind, "failed", type(error).__name__)
+            raise
+
+
+def main():
+    p = argparse.ArgumentParser(description="Gerenciador de atualizacoes Enfoque OS")
+    p.add_argument("operation", choices=[
+        "status", "check", "apply", "install", "remove",
+        "rollback-core", "auto", "history",
+    ])
+    p.add_argument("values", nargs="*")
+    p.add_argument("--automatic", action="store_true", help="Apenas para timer autorizado")
+    args = p.parse_args()
+    try:
+        if args.operation == "status":
+            print(json.dumps(get_status(), indent=2, ensure_ascii=False))
+            return 0
+        if args.operation == "history":
+            if LOG.exists():
+                for line in LOG.read_text("utf8").splitlines()[-40:]:
+                    print(line)
+            return 0
+        if args.operation == "auto":
+            verify_environment()
+            if args.values not in (["on"], ["off"]):
+                p.error("Use auto on ou auto off")
+            AUTO.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            if args.values[0] == "on":
+                fd = os.open(str(AUTO), os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
+                os.write(fd, b"Enfoque OS: automatic APT maintenance authorized by TI\n")
+                os.close(fd)
+            else:
+                AUTO.unlink(missing_ok=True)
+            log_event("auto", args.values[0])
+            print("Atualizacoes automaticas: " + args.values[0])
+            return 0
+        if args.operation in ("install", "remove"):
+            if not args.values or any(PKG.fullmatch(v) is None for v in args.values):
+                p.error("Informe nomes validos de pacotes APT")
+            if args.operation == "remove" and PACKAGE in args.values:
+                p.error("O pacote principal do Enfoque OS nao pode ser removido aqui")
+        elif args.operation == "rollback-core":
+            if len(args.values) != 1 or VERSION.fullmatch(args.values[0]) is None:
+                p.error("Informe uma versao APT valida para o pacote Enfoque")
+        elif args.values:
+            p.error("Esta acao nao aceita nomes de pacotes")
+        if args.automatic and args.operation != "apply":
+            p.error("--automatic so e valido com apply")
+        print(json.dumps(perform(args.operation, args.values,
+                                 automatic=args.automatic),
+                         indent=2, ensure_ascii=False))
+        return 0
+    except (OSError, RuntimeError, PermissionError, subprocess.SubprocessError) as error:
+        print("ENFOQUE_UPDATE_ERROR: " + str(error)[:300], file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

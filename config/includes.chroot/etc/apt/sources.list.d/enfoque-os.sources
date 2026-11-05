@@ -1,0 +1,7 @@
+Enabled: no
+Types: deb
+URIs: https://intranet.enfoquepapelaria.com.br/enfoque-os-updates
+Suites: stable
+Components: main
+Architectures: amd64
+Signed-By: /usr/share/keyrings/enfoque-os-archive-keyring.gpg

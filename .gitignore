@@ -1,5 +1,6 @@
 .build/
 dist/
+config/packages.chroot/*.deb
 *.iso
 *.img
 *.qcow2

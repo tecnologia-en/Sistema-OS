@@ -1,0 +1,14 @@
+[Unit]
+Description=Enfoque OS - consultar atualizacoes assinadas do sistema
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=!/run/live/medium
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/enfoque-update check
+TimeoutStartSec=600
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+UMask=0077

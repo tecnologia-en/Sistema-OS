@@ -57,6 +57,23 @@ jobs:
           cd dist
           sha256sum -c SHA256SUMS
 
+      - name: Validate versioned Enfoque APT package
+        run: |
+          set -euo pipefail
+          pkg=$(find config/packages.chroot -maxdepth 1 -name 'enfoque-os-core_*.deb' -print -quit)
+          test -s "$pkg"
+          test "$(dpkg-deb -f "$pkg" Package)" = 'enfoque-os-core'
+          test "$(dpkg-deb -f "$pkg" Version)" = '0.2.21-1'
+          dpkg-deb --contents "$pkg" | grep -q 'usr/local/sbin/enfoque-update'
+
+      - name: Upload signed-repo-ready APT core package
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-os-core-${{ github.run_number }}
+          path: config/packages.chroot/enfoque-os-core_*.deb
+          retention-days: 14
+          if-no-files-found: error
+
       - name: Upload ISO and checksums
         uses: actions/upload-artifact@v4
         with:
