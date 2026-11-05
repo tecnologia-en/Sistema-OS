@@ -1,0 +1,103 @@
+name: Enfoque OS 0.2.19 - transferir artefato verificado
+on:
+  push:
+    branches:
+      - feat/lowram-kiosk-028
+    paths:
+      - '.github/workflows/transfer-iso-0219-small.yml'
+permissions:
+  actions: read
+  contents: read
+jobs:
+  transfer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - name: Aguardar compilacao da ISO 0.2.19 e conferir sucesso
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run watch 42033974037 --repo "$GITHUB_REPOSITORY" --exit-status --interval 15
+      - name: Baixar ISO aprovada do build 57
+        uses: actions/download-artifact@v4
+        with:
+          name: enfoque-os-iso-57
+          repository: tecnologia-en/Sistema-OS
+          run-id: 42033974037
+          github-token: ${{ github.token }}
+          path: dist
+      - name: Verificar integridade e dividir em partes transportaveis
+        run: |
+          set -euo pipefail
+          test -s dist/enfoque-os-0.2.19-piloto-amd64.iso
+          (cd dist && sha256sum -c SHA256SUMS)
+          mkdir -p parts
+          split --bytes=350m --numeric-suffixes=0 --suffix-length=2 dist/enfoque-os-0.2.19-piloto-amd64.iso parts/chunk-
+          test "$(find parts -maxdepth 1 -type f -name 'chunk-*' | wc -l)" -eq 7
+          (cd parts && sha256sum chunk-* > SHA256_PARTS && sha256sum -c SHA256_PARTS)
+          cp dist/SHA256SUMS parts/SHA256SUMS
+      - name: Manifestos
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-os-0219-small-sha256
+          path: |
+            parts/SHA256SUMS
+            parts/SHA256_PARTS
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+      - name: Parte 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-os-0219-small-chunk-00
+          path: parts/chunk-00
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+      - name: Parte 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-os-0219-small-chunk-01
+          path: parts/chunk-01
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+      - name: Parte 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-os-0219-small-chunk-02
+          path: parts/chunk-02
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+      - name: Parte 03
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-os-0219-small-chunk-03
+          path: parts/chunk-03
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+      - name: Parte 04
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-os-0219-small-chunk-04
+          path: parts/chunk-04
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+      - name: Parte 05
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-os-0219-small-chunk-05
+          path: parts/chunk-05
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+      - name: Parte 06
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-os-0219-small-chunk-06
+          path: parts/chunk-06
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
