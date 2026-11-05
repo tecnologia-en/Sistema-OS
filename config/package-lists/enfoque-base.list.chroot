@@ -1,4 +1,4 @@
-# Enfoque OS 0.2.19 - Debian 13 XFCE
+# Enfoque OS 0.2.20 - Debian 13 XFCE (piloto, diagnostico remoto somente-leitura)
 # Chrome oficial do Google via hook HTTPS em build, sem Firefox.
 user-setup
 locales
