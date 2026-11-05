@@ -69,7 +69,9 @@ class SupportSSHTests(unittest.TestCase):
     def test_no_keys_embedded_or_shared(self):
         home = TREE / "etc/enfoque-ssh"
         if home.exists():
-            self.assertEqual(list(home.rglob("*")), [])
+            self.assertEqual([p.name for p in home.rglob("*")], ["vps-known-hosts"])
+            self.assertTrue((home / "vps-known-hosts").read_text("ascii").startswith(
+                "intranet.enfoquepapelaria.com.br ssh-ed25519 "))
         script = (TREE / "usr/local/sbin/enfoque-ssh-support").read_text()
         self.assertNotIn("123456", script)
         self.assertNotIn("StrictHostKeyChecking=no", script)

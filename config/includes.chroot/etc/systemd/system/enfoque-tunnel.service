@@ -1,0 +1,32 @@
+[Unit]
+Description=Enfoque OS - tunel SSH reverso por dispositivo, somente loopback VPS
+Wants=network-online.target
+After=network-online.target ssh.service
+Requires=ssh.service
+ConditionPathExists=/etc/enfoque-ssh/tunnel.json
+ConditionPathExists=!/run/live/medium
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/sbin/enfoque-tunnel
+Restart=always
+RestartSec=20
+TimeoutStartSec=45
+UMask=0077
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+MemoryMax=100M
+
+[Install]
+WantedBy=multi-user.target

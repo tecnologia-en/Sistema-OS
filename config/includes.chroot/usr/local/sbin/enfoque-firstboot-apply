@@ -30,13 +30,24 @@ def save(name, company, unit):
                         'enfoque-remote-agent.service'], check=False, timeout=8)
     except (OSError, subprocess.SubprocessError):
         pass
+    # Show the public enrollment fingerprint on this installation's screen.
+    # The private identity key never leaves the machine.
+    try:
+        verification = subprocess.run(
+            ['/usr/local/sbin/enfoque-zero-touch', 'status'],
+            capture_output=True, text=True, timeout=20)
+        if verification.returncode == 0:
+            record['zeroTouchCode'] = json.loads(verification.stdout).get('code')
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pass
     return record
 
 if __name__ == '__main__':
     try:
         if len(sys.argv) != 4: raise ValueError('Parametros invalidos')
         record = save(*sys.argv[1:])
-        print(json.dumps({'ok': True, 'id': record['displayId'], 'unit': record['unitName']}))
+        print(json.dumps({'ok': True, 'id': record['displayId'], 'unit': record['unitName'],
+                          'code': record.get('zeroTouchCode')}))
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         print(str(error)[:150], file=sys.stderr)
         sys.exit(1)

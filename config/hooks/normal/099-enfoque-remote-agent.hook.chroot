@@ -13,4 +13,7 @@ for unit in /etc/systemd/system/enfoque-remote-agent.service /etc/systemd/system
 done
 systemctl enable enfoque-remote-agent.service
 systemctl enable enfoque-mesh-autoprovision.service
+systemctl enable enfoque-zero-touch.timer
+# SSH and the outbound administrative tunnel remain disabled until TI approval.
+systemctl disable ssh.service enfoque-tunnel.service 2>/dev/null || true
 rm -rf -- /var/lib/enfoque-agent /root/.config/enfoque-agent

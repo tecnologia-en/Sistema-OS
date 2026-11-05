@@ -1,0 +1,329 @@
+#!/usr/bin/env python3
+"""Enfoque OS Zero Touch enrollment, without a shared secret in the ISO.
+
+After First Boot, generate a *per-installation* Ed25519 identity and request
+approval from the existing Enfoque TI server. Approval is an Intranet admin
+action, never inferred from local claims. A valid signed poll delivers a
+per-device inventory credential for the existing MeshCentral provisioning.
+The diagnostic MCP agent remains read-only.
+"""
+import argparse
+import base64
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import secrets
+import stat
+import subprocess
+import sys
+import time
+import urllib.request
+import urllib.error
+import uuid
+
+SERVER = "https://intranet.enfoquepapelaria.com.br"
+IDENTITY = Path("/var/lib/enfoque-os/device-identity.json")
+PROFILE = Path("/var/lib/enfoque-os/firstboot.json")
+LIVE = Path("/run/live/medium")
+SECRETS = Path("/var/lib/enfoque-os/zero-touch")
+PRIVATE = SECRETS / "machine_ed25519.pem"
+PUBLIC = SECRETS / "machine_ed25519.pub"
+AGENT = Path("/etc/enfoque-os/agent.json")
+STORES = {
+    "ilha-plaza", "copacabana", "itaipu", "icarai",
+    "sao-goncalo", "centro", "deposito", "administracao", "papel-arte"
+}
+NAME = re.compile(r"^[A-Za-zÀ-ÿ0-9 _.-]{3,48}$")
+ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+TOKEN = re.compile(r"^[A-Za-z0-9_-]{40,150}$")
+SSHKEY = re.compile(r"^ssh-ed25519 [A-Za-z0-9+/]+={0,2}$")
+TUNNEL = SECRETS / "tunnel_ed25519"
+TUNNEL_PUB = SECRETS / "tunnel_ed25519.pub"
+HOST_PUB = Path("/etc/ssh/ssh_host_ed25519_key.pub")
+SSH_CONFIG = Path("/etc/enfoque-ssh/tunnel.json")
+SSH_KEYS = Path("/etc/enfoque-ssh/authorized_keys")
+API = "/api/remote-access/zero-touch"
+
+
+def run(args, data=None, timeout=15):
+    return subprocess.run(args, input=data, capture_output=True,
+                          check=True, timeout=timeout)
+
+
+def safe_dir():
+    SECRETS.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if SECRETS.is_symlink() or SECRETS.stat().st_uid != 0 or stat.S_IMODE(SECRETS.stat().st_mode) != 0o700:
+        raise PermissionError("Pasta de chaves Zero Touch exige root:root 0700")
+
+
+def secure_keypair():
+    safe_dir()
+    exists = PRIVATE.exists(), PUBLIC.exists()
+    if any(exists) and not all(exists):
+        raise RuntimeError("Par de chaves incompleto; nao regenerar automaticamente")
+    if all(exists):
+        for file in (PRIVATE, PUBLIC):
+            if file.is_symlink() or file.stat().st_uid != 0:
+                raise PermissionError("Chave modificada ou de outro usuario")
+        if stat.S_IMODE(PRIVATE.stat().st_mode) != 0o600:
+            raise PermissionError("Chave privada sem permissoes 0600")
+        public = PUBLIC.read_text("ascii")
+    else:
+        tmp = SECRETS / ("key-" + secrets.token_hex(8))
+        # openssl generates a unique Ed25519 key within this installation only.
+        try:
+            run(["/usr/bin/openssl", "genpkey", "-algorithm", "ED25519", "-out", str(tmp)])
+            tmp.chmod(0o600)
+            public = run(["/usr/bin/openssl", "pkey", "-in", str(tmp), "-pubout"]).stdout.decode("ascii")
+            if not public.startswith("-----BEGIN PUBLIC KEY-----\n"):
+                raise RuntimeError("Chave publica OpenSSL invalida")
+            with open(PUBLIC, "x", encoding="ascii") as writer:
+                writer.write(public)
+            PUBLIC.chmod(0o644)
+            os.replace(tmp, PRIVATE)
+        finally:
+            tmp.unlink(missing_ok=True)
+    derived = run(["/usr/bin/openssl", "pkey", "-in", str(PRIVATE), "-pubout"]).stdout.decode("ascii")
+    if public != derived:
+        raise RuntimeError("Chave publica nao corresponde a chave privada existente")
+    return public
+
+
+def local_info():
+    if LIVE.exists():
+        raise RuntimeError("Zero Touch nao funciona no modo Live")
+    for file in (IDENTITY, PROFILE):
+        if file.is_symlink() or not file.is_file() or file.stat().st_uid != 0:
+            raise PermissionError("First Boot ou identidade ausente")
+        if file.stat().st_mode & 0o022:
+            raise PermissionError("Perfil First Boot modificavel por outros")
+    identity = json.loads(IDENTITY.read_text("utf8"))
+    profile = json.loads(PROFILE.read_text("utf8"))
+    uid = identity.get("uuid")
+    if not isinstance(uid, str) or not ID.fullmatch(uid) or str(uuid.UUID(uid)) != uid:
+        raise ValueError("Identidade de dispositivo invalida")
+    if profile.get("uuid") != uid or profile.get("shortId") != identity.get("shortId"):
+        raise ValueError("Perfil First Boot e identidade nao correspondem")
+    name, unit, unit_name = profile.get("pcName"), profile.get("unitId"), profile.get("unitName")
+    if not isinstance(name, str) or not NAME.fullmatch(name):
+        raise ValueError("Nome de computador invalido")
+    if unit not in STORES or not isinstance(unit_name, str) or not NAME.fullmatch(unit_name):
+        raise ValueError("Unidade invalida")
+    return {"deviceId": uid, "pcName": name, "unitId": unit, "unitName": unit_name}
+
+
+def sign_message(action, values, public):
+    fields = [
+        "enfoque-zt-v1", action, values["deviceId"],
+        hashlib.sha256(
+            run(["/usr/bin/openssl", "pkey", "-in", str(PRIVATE), "-pubout", "-outform", "DER"]).stdout
+        ).hexdigest() if action == "register" else "",
+        values.get("pcName", "") if action == "register" else "",
+        values.get("unitId", "") if action == "register" else "",
+        values.get("unitName", "") if action == "register" else "",
+        hashlib.sha256(values["tunnelPublicKey"].encode("ascii")).hexdigest() if action == "register" else "",
+        hashlib.sha256(values["hostPublicKey"].encode("ascii")).hexdigest() if action == "register" else "",
+        str(values["timestamp"]), values["nonce"],
+    ]
+    content = ("\n".join(fields) + "\n").encode("utf8")
+    sig = run(["/usr/bin/openssl", "pkeyutl", "-sign", "-rawin", "-inkey", str(PRIVATE)],
+              data=content).stdout
+    if len(sig) != 64:
+        raise RuntimeError("Assinatura Ed25519 invalida")
+    return base64.b64encode(sig).decode("ascii")
+
+
+def post(url, payload):
+    encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf8")
+    if len(encoded) > 4096:
+        raise ValueError("Payload de inscricao excede o limite")
+    request = urllib.request.Request(SERVER + API + "/" + url, encoded,
+                                    {"Content-Type": "application/json", "User-Agent": "Enfoque-OS-0.2.23"},
+                                    method="POST")
+    with urllib.request.urlopen(request, timeout=12) as response:
+        if response.status != 200:
+            raise RuntimeError("Resposta inesperada da TI")
+        data = response.read(4097)
+    if len(data) > 4096:
+        raise RuntimeError("Resposta da TI acima do limite")
+    result = json.loads(data)
+    if not isinstance(result, dict) or result.get("ok") is not True:
+        raise RuntimeError("Cadastro negado pelo servidor")
+    return result
+
+
+def public_ssh_key(file):
+    if file.is_symlink() or not file.is_file() or file.stat().st_uid != 0:
+        raise PermissionError("Chave publica SSH nao confiavel")
+    parts = file.read_text("ascii").strip().split()
+    if len(parts) < 2:
+        raise ValueError("Chave SSH incompleta")
+    key = parts[0] + " " + parts[1]
+    if not SSHKEY.fullmatch(key) or len(key) > 200:
+        raise ValueError("Chave SSH Ed25519 invalida")
+    return key
+
+
+def ensure_tunnel_key():
+    safe_dir()
+    if not TUNNEL.exists() and not TUNNEL_PUB.exists():
+        run(["/usr/bin/ssh-keygen", "-q", "-t", "ed25519", "-N", "",
+             "-f", str(TUNNEL), "-C", "enfoque-zt-tunnel"], timeout=25)
+        TUNNEL.chmod(0o600)
+        TUNNEL_PUB.chmod(0o644)
+    if TUNNEL.is_symlink() or TUNNEL_PUB.is_symlink() or not TUNNEL.is_file():
+        raise PermissionError("Par de chaves de tunel inseguro")
+    if TUNNEL.stat().st_uid != 0 or stat.S_IMODE(TUNNEL.stat().st_mode) != 0o600:
+        raise PermissionError("Chave privada de tunel exige root 0600")
+    derived = run(["/usr/bin/ssh-keygen", "-y", "-f", str(TUNNEL)]).stdout.decode("ascii")
+    if derived.split()[:2] != public_ssh_key(TUNNEL_PUB).split():
+        raise RuntimeError("Chave publica de tunel nao corresponde")
+    return public_ssh_key(TUNNEL_PUB)
+
+
+def signed_request(action, info, public):
+    data = dict(info) if action == "register" else {"deviceId": info["deviceId"]}
+    data["timestamp"] = int(time.time() * 1000)
+    data["nonce"] = secrets.token_hex(16)
+    if action == "register":
+        data["publicKey"] = public
+        data["tunnelPublicKey"] = ensure_tunnel_key()
+        data["hostPublicKey"] = public_ssh_key(HOST_PUB)
+    data["signature"] = sign_message(action, data, public)
+    return data
+
+
+def write_credentials(uid, result):
+    credentials = result.get("credentials")
+    if not isinstance(credentials, dict):
+        raise ValueError("Credencial por maquina ausente")
+    id_str, token = credentials.get("id"), credentials.get("token")
+    if not isinstance(id_str, str) or not ID.fullmatch(id_str) or not isinstance(token, str) or not TOKEN.fullmatch(token):
+        raise ValueError("Resposta de credenciais invalida")
+    if result.get("deviceId") != uid or result.get("status") != "approved":
+        raise ValueError("Servidor nao confirmou este computador")
+    if AGENT.is_symlink():
+        raise PermissionError("Cadastro anterior inseguro")
+    value = {"id": id_str, "token": token, "localUuid": uid}
+    if AGENT.exists():
+        if AGENT.stat().st_uid != 0 or stat.S_IMODE(AGENT.stat().st_mode) != 0o600:
+            raise PermissionError("Cadastro existente sem protecao root 0600")
+        if json.loads(AGENT.read_text("utf8")) != value:
+            raise RuntimeError("Credencial anterior diferente; exigir revisao TI")
+        return False
+    AGENT.parent.mkdir(parents=True, exist_ok=True)
+    # Keep the device token out of stdout, systemd logs and diagnostics.
+    staging = AGENT.with_suffix(".zt-new")
+    with open(staging, "x", encoding="utf8") as output:
+        os.chmod(staging, 0o600)
+        json.dump(value, output)
+        output.write("\n")
+        output.flush()
+        os.fsync(output.fileno())
+    os.replace(staging, AGENT)
+    return True
+
+
+def atomic_root_file(destination, data, mode=0o600):
+    if destination.is_symlink():
+        raise PermissionError("Destino de credenciais e um link")
+    destination.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+    destination.parent.chmod(0o755)
+    tmp = destination.with_name(destination.name + ".zt-new")
+    with open(tmp, "x", encoding="utf8") as fp:
+        os.chmod(tmp, mode)
+        fp.write(data)
+        fp.flush()
+        os.fsync(fp.fileno())
+    os.replace(tmp, destination)
+
+
+def activate_tunnel(uid, ssh):
+    if not isinstance(ssh, dict) or ssh.get("host") != "intranet.enfoquepapelaria.com.br":
+        raise ValueError("Destino SSH nao autorizado")
+    port, key = ssh.get("port"), ssh.get("adminPublicKey")
+    if not isinstance(port, int) or not 23101 <= port <= 23450:
+        raise ValueError("Porta SSH por maquina invalida")
+    if not isinstance(key, str) or not SSHKEY.fullmatch(key) or len(key) > 200:
+        raise ValueError("Chave publica da TI invalida")
+    config = {"uuid": uid, "host": ssh["host"], "port": port}
+    if SSH_CONFIG.exists():
+        if SSH_CONFIG.is_symlink() or SSH_CONFIG.stat().st_uid != 0:
+            raise PermissionError("Configuracao de tunel modificada")
+        old = json.loads(SSH_CONFIG.read_text("utf8"))
+        if old != config:
+            raise RuntimeError("Tunel vinculado a outra identidade; exige TI")
+    else:
+        atomic_root_file(SSH_CONFIG, json.dumps(config) + "\n")
+    if SSH_KEYS.exists():
+        if SSH_KEYS.is_symlink() or SSH_KEYS.stat().st_uid != 0:
+            raise PermissionError("Chaves administrativas modificadas")
+        if SSH_KEYS.read_text("ascii") != key + "\n":
+            raise RuntimeError("Chave administrativa diferente; exige TI")
+    else:
+        atomic_root_file(SSH_KEYS, key + "\n", 0o644)
+    run(["/usr/sbin/sshd", "-t"])
+    run(["/usr/bin/systemctl", "enable", "--now", "ssh.service"], timeout=40)
+    run(["/usr/bin/systemctl", "enable", "--now", "enfoque-tunnel.service"], timeout=40)
+
+
+def start_approved_services():
+    # Existing Mesh agent downloads only with this machine's approved credentials.
+    # The already-installed monitor/desktop service keeps its own TI access policy.
+    for service in ("enfoque-mesh-autoprovision.service", "enfoque-telemetria.service"):
+        run(["/usr/bin/systemctl", "enable", "--now", service], timeout=240)
+
+
+def run_once():
+    if os.geteuid() != 0:
+        raise PermissionError("Zero Touch exige servico systemd root")
+    info = local_info()
+    public = secure_keypair()
+    enrolled = post("register", signed_request("register", info, public))
+    if enrolled.get("deviceId") != info["deviceId"] or enrolled.get("status") not in ("pending", "approved", "rejected", "revoked"):
+        raise RuntimeError("Cadastro pendente invalido")
+    status = post("status", signed_request("status", info, public))
+    if status.get("deviceId") != info["deviceId"]:
+        raise RuntimeError("Resposta atribuida a outro dispositivo")
+    if status.get("status") == "approved":
+        write_credentials(info["deviceId"], status)
+        activate_tunnel(info["deviceId"], status.get("ssh"))
+        start_approved_services()
+        return "enrolled"
+    if status.get("status") in ("rejected", "revoked"):
+        run(["/usr/bin/systemctl", "disable", "--now", "enfoque-tunnel.service"])
+        if status.get("status") == "revoked":
+            SSH_KEYS.unlink(missing_ok=True)
+            return "revoked"
+        return "rejected"
+    return "pending"
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Enfoque Zero Touch")
+    parser.add_argument("action", choices=("once", "status"), nargs="?", default="once")
+    action = parser.parse_args().action
+    try:
+        if action == "status":
+            if os.geteuid() != 0:
+                raise PermissionError("Consulte o status com sudo")
+            info = local_info()
+            public = secure_keypair()
+            der = run(["/usr/bin/openssl", "pkey", "-in", str(PRIVATE), "-pubout", "-outform", "DER"]).stdout
+            code = hashlib.sha256(info["deviceId"].encode("ascii") + der).hexdigest()[:10].upper()
+            print(json.dumps({"device": info["pcName"], "unit": info["unitName"],
+                              "code": code, "enrolled": AGENT.is_file()}, ensure_ascii=False))
+            return 0
+        result = run_once()
+        print("ENFOQUE_ZERO_TOUCH=" + result)
+        return 0 if result in ("enrolled", "pending", "rejected", "revoked") else 1
+    except (OSError, RuntimeError, ValueError, PermissionError,
+            subprocess.SubprocessError, urllib.error.URLError) as error:
+        print("ENFOQUE_ZERO_TOUCH_ERROR=" + type(error).__name__, file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""Open an authenticated Enfoque OS administrative SSH session from the VPS.
+
+Usage:
+  sudo enfoque-ssh-pc UUID
+  sudo enfoque-ssh-pc UUID -- uname -a
+  sudo enfoque-ssh-pc UUID -- systemctl status cups
+The SSH identity is unique per machine; the remote login itself is a
+password-locked service account with narrowly distributed authorized key.
+"""
+import os
+from pathlib import Path
+import re
+import shlex
+import stat
+import subprocess
+import sys
+
+ROOT = Path("/var/lib/enfoque-tunnel")
+UUID4 = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+PORT = re.compile(r"^\[127\.0\.0\.1\]:(23[1-4][0-9]{2}) ssh-ed25519 [A-Za-z0-9+/]+={0,2}$")
+
+
+def root_owned(file):
+    if file.is_symlink() or not file.is_file():
+        raise PermissionError("Arquivo SSH esperado nao encontrado")
+    s = file.stat()
+    if s.st_uid != 0 or stat.S_IMODE(s.st_mode) & 0o077:
+        raise PermissionError("Credencial SSH com permissao insegura")
+    return file
+
+
+def main(argv):
+    if os.geteuid() != 0:
+        raise PermissionError("Execute na VPS como administrador TI")
+    if len(argv) < 2 or not UUID4.fullmatch(argv[1]):
+        raise ValueError("Uso: enfoque-ssh-pc UUID [-- comando argumentos...]")
+    uid = argv[1]
+    key = root_owned(ROOT / "ti-keys" / uid)
+    host_file = root_owned(ROOT / "known-hosts" / uid)
+    line = host_file.read_text("ascii").strip()
+    match = PORT.fullmatch(line)
+    if not match:
+        raise ValueError("Porta ou chave de host SSH invalida")
+    port = match.group(1)
+    opts = [
+        "/usr/bin/ssh", "-p", port,
+        "-i", str(key),
+        "-o", "BatchMode=yes",
+        "-o", "IdentitiesOnly=yes",
+        "-o", "StrictHostKeyChecking=yes",
+        "-o", "UserKnownHostsFile=" + str(host_file),
+        "-o", "GlobalKnownHostsFile=/dev/null",
+        "-o", "ConnectTimeout=8",
+        "-o", "ServerAliveInterval=20",
+        "-o", "ServerAliveCountMax=3",
+        "-o", "ForwardAgent=no",
+        "-o", "ClearAllForwardings=yes"
+    ]
+    if len(argv) > 2:
+        if argv[2] != "--" or len(argv) < 4:
+            raise ValueError("Comandos remotos exigem separador --")
+        # Fully quoted remote argv; never concatenate untrusted shell tokens.
+        remote = "sudo -n -- " + shlex.join(argv[3:])
+        opts += ["-T", "enfoque-ti@127.0.0.1", remote]
+    else:
+        opts += ["-tt", "enfoque-ti@127.0.0.1", "sudo -i"]
+    subprocess.run(["/usr/bin/logger", "-t", "enfoque-ssh-ti",
+                    "operator=" + os.environ.get("SUDO_USER", "root")[:64],
+                    "device=" + uid, "connection_started"], timeout=5, check=False)
+    return subprocess.call(opts)
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv))
+    except (OSError, PermissionError, ValueError) as exc:
+        print("ENFOQUE_SSH_TI_ERROR: " + str(exc)[:150], file=sys.stderr)
+        sys.exit(1)

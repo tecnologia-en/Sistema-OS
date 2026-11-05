@@ -1,5 +1,5 @@
 NAME="Enfoque OS"
-VERSION="0.2.22"
+VERSION="0.2.23"
 CHANNEL="piloto"
 BASE="Debian 13 (trixie)"
-STATUS="piloto-ssh-local-sob-aprovacao"
+STATUS="piloto-zero-touch-ssh-reverso"

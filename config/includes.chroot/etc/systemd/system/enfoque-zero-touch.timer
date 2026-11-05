@@ -1,0 +1,13 @@
+[Unit]
+Description=Enfoque OS - acompanhar autorizacao da TI no First Boot
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+OnCalendar=*-*-* *:0/5:00
+RandomizedDelaySec=30s
+Persistent=true
+Unit=enfoque-zero-touch.service
+
+[Install]
+WantedBy=timers.target

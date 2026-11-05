@@ -156,4 +156,15 @@ for unit in enfoque-update-check.service enfoque-update-check.timer enfoque-upda
     test -s "$ROOT/config/includes.chroot/etc/systemd/system/$unit"
 done
 python3 -m unittest discover -s "$ROOT/test" -p 'test_enfoque_update.py'
+# Enfoque OS 0.2.23: offline enrollment and per-device SSH reverse tunnel.
+for unit in enfoque-zero-touch.service enfoque-zero-touch.timer enfoque-tunnel.service; do
+  test -s "$ROOT/config/includes.chroot/etc/systemd/system/$unit"
+done
+test -x "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-zero-touch"
+test -x "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-tunnel"
+test -s "$ROOT/config/includes.chroot/etc/enfoque-ssh/vps-known-hosts"
+test -s "$ROOT/config/includes.chroot/etc/sudoers.d/97-enfoque-ti"
+python3 -m py_compile "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-zero-touch" "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-tunnel"
+grep -Fq 'AllowUsers enfoque-ti' "$ROOT/config/includes.chroot/etc/ssh/sshd_config.d/95-enfoque-suporte.conf"
+grep -Fq 'PermitRootLogin no' "$ROOT/config/includes.chroot/etc/ssh/sshd_config.d/95-enfoque-suporte.conf"
 echo 'Estrutura valida. A ISO deve ser compilada e testada em VM.'

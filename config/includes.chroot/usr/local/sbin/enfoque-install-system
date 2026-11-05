@@ -196,6 +196,8 @@ def configure_system(disk, esp, root):
     # changing it on the first installed login (never for remote control).
     run(["chroot", str(TARGET), "/usr/sbin/chpasswd"], input="enfoque:123456\n")
     run(["chroot", str(TARGET), "/usr/bin/chage", "-d", "0", "enfoque"])
+    # Separate password-locked service account. SSH key is only delivered after TI approval.
+    run(["chroot", str(TARGET), "/usr/sbin/useradd", "-m", "-s", "/bin/bash", "enfoque-ti"], timeout=60)
     run(["chroot", str(TARGET), "/usr/bin/passwd", "-l", "root"])
     run(["chroot", str(TARGET), "/usr/sbin/update-initramfs", "-u", "-k", "all"], timeout=900)
     run(["chroot", str(TARGET), "/usr/sbin/grub-install", "--target=i386-pc",

@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+"""Enfoque OS outbound SSH reverse tunnel (per-installation, pinned VPS key).
+
+This program does not accept shell commands or secrets from the server.
+It only binds the approved remote loopback port back to the local SSH daemon.
+"""
+import json
+import os
+from pathlib import Path
+import re
+import stat
+import subprocess
+import sys
+
+CONFIG = Path("/etc/enfoque-ssh/tunnel.json")
+KEY = Path("/var/lib/enfoque-os/zero-touch/tunnel_ed25519")
+KNOWN = Path("/etc/enfoque-ssh/vps-known-hosts")
+PROFILE = Path("/var/lib/enfoque-os/firstboot.json")
+HOST = "intranet.enfoquepapelaria.com.br"
+UUID4 = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+
+
+def root_file(file, mode=None):
+    if file.is_symlink() or not file.is_file() or file.stat().st_uid != 0:
+        raise PermissionError("Arquivo SSH nao confiavel")
+    if mode is not None and stat.S_IMODE(file.stat().st_mode) != mode:
+        raise PermissionError("Permissoes SSH incorretas")
+    return file
+
+
+def parameters():
+    if os.geteuid() != 0:
+        raise PermissionError("Tunel exige servico isolado do sistema")
+    if Path("/run/live/medium").exists():
+        raise PermissionError("Nao iniciar tunel na ISO Live")
+    data = json.loads(root_file(CONFIG, 0o600).read_text("utf8"))
+    profile = json.loads(root_file(PROFILE).read_text("utf8"))
+    if not UUID4.fullmatch(data.get("uuid", "")) or data.get("uuid") != profile.get("uuid"):
+        raise PermissionError("Tunel nao corresponde a este computador")
+    if data.get("host") != HOST or not isinstance(data.get("port"), int) or not 23101 <= data["port"] <= 23450:
+        raise ValueError("Destino SSH invalido")
+    root_file(KEY, 0o600)
+    known = root_file(KNOWN).read_text("ascii")
+    if len(known) > 512 or "ssh-ed25519" not in known or not known.startswith(HOST + " ssh-ed25519 "):
+        raise PermissionError("Chave publica do servidor indisponivel ou incorreta")
+    return data["port"]
+
+
+def main():
+    try:
+        port = parameters()
+        cmd = [
+            "/usr/bin/ssh", "-N", "-T", "-p", "22",
+            "-i", str(KEY),
+            "-o", "BatchMode=yes",
+            "-o", "IdentitiesOnly=yes",
+            "-o", "StrictHostKeyChecking=yes",
+            "-o", "UserKnownHostsFile=" + str(KNOWN),
+            "-o", "GlobalKnownHostsFile=/dev/null",
+            "-o", "UpdateHostKeys=no",
+            "-o", "ConnectTimeout=15",
+            "-o", "ServerAliveInterval=25",
+            "-o", "ServerAliveCountMax=3",
+            "-o", "ExitOnForwardFailure=yes",
+            "-R", "127.0.0.1:" + str(port) + ":127.0.0.1:22",
+            "enfoque-tunnel@" + HOST
+        ]
+        os.execv(cmd[0], cmd)
+    except (OSError, ValueError, PermissionError, subprocess.SubprocessError) as e:
+        print("ENFOQUE_TUNNEL_ERROR=" + type(e).__name__, file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

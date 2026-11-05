@@ -49,6 +49,8 @@ def managed(name):
         "etc/default/grub.d/90-enfoque",
         "etc/enfoque-os/lojas-ip.json",
         "etc/ssh/sshd_config.d/95-enfoque-suporte.conf",
+        "etc/enfoque-ssh/vps-known-hosts",
+        "etc/sudoers.d/97-enfoque-ti",
         "etc/apt/sources.list.d/enfoque-os.sources",
         "etc/apt/apt.conf.d/90enfoque",
         "etc/apt/apt.conf.d/91enfoque",
@@ -83,8 +85,12 @@ def manifest():
         "etc/enfoque-os-release",
         "usr/local/sbin/enfoque-update",
         "usr/local/sbin/enfoque-ssh-support",
+        "usr/local/sbin/enfoque-zero-touch",
+        "usr/local/sbin/enfoque-tunnel",
         "usr/share/keyrings/enfoque-os-archive-keyring.gpg",
         "etc/ssh/sshd_config.d/95-enfoque-suporte.conf",
+        "etc/enfoque-ssh/vps-known-hosts",
+        "etc/sudoers.d/97-enfoque-ti",
         "etc/apt/sources.list.d/enfoque-os.sources",
         "etc/systemd/system/enfoque-update-check.timer",
         "etc/systemd/system/enfoque-update-apply.timer",
@@ -132,7 +138,10 @@ def create(output):
             "#!/bin/sh\nset -e\n"
             "if [ \"$1\" = configure ] && command -v systemctl >/dev/null 2>&1; then\n"
             "  systemctl daemon-reload >/dev/null 2>&1 || true\n"
-            "  systemctl enable enfoque-update-check.timer enfoque-update-apply.timer >/dev/null 2>&1 || true\n"
+            "  if ! id -u enfoque-ti >/dev/null 2>&1; then\n"
+            "    useradd -m -s /bin/bash enfoque-ti\n"
+            "  fi\n"
+            "  systemctl enable enfoque-update-check.timer enfoque-update-apply.timer enfoque-zero-touch.timer >/dev/null 2>&1 || true\n"
             "  if [ ! -s /etc/enfoque-ssh/authorized_keys ]; then\n"
             "    systemctl disable --now ssh.service ssh.socket >/dev/null 2>&1 || true\n"
             "  fi\n"

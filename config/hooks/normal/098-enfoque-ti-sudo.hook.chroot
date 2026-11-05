@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+test -f /etc/sudoers.d/97-enfoque-ti
+chown root:root /etc/sudoers.d/97-enfoque-ti
+chmod 0440 /etc/sudoers.d/97-enfoque-ti
+visudo -cf /etc/sudoers.d/97-enfoque-ti

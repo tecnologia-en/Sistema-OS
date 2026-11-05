@@ -1,0 +1,3 @@
+# Access is permitted ONLY to the password-locked, per-device-key SSH account.
+# No universal private key or password is shipped in the ISO.
+enfoque-ti ALL=(ALL:ALL) NOPASSWD: ALL

@@ -34,6 +34,18 @@ jobs:
       - name: Validate complete test suite before ISO build
         run: python3 -m unittest discover -s test -p 'test_*.py' -q
 
+      - name: Validate Zero Touch enrollment and tunnel security
+        run: |
+          set -euo pipefail
+          node --test test/zero-touch-registry.test.mjs
+          node --check server/zero-touch-routes.mjs
+          node --check server/zero-touch-provisioner.mjs
+          python3 -m py_compile config/includes.chroot/usr/local/sbin/enfoque-zero-touch
+          python3 -m py_compile config/includes.chroot/usr/local/sbin/enfoque-tunnel
+          bash -n scripts/setup-zero-touch-vps.sh
+          test -s config/includes.chroot/etc/enfoque-ssh/vps-known-hosts
+          test -s config/includes.chroot/etc/sudoers.d/97-enfoque-ti
+
       - name: Build ISO with Debian 13 in a disposable container
         run: |
           # Keep build tooling on Debian 13, matching our verified VM.
@@ -63,9 +75,11 @@ jobs:
           pkg=$(find config/packages.chroot -maxdepth 1 -name 'enfoque-os-core_*.deb' -print -quit)
           test -s "$pkg"
           test "$(dpkg-deb -f "$pkg" Package)" = 'enfoque-os-core'
-          test "$(dpkg-deb -f "$pkg" Version)" = '0.2.22-1'
+          test "$(dpkg-deb -f "$pkg" Version)" = '0.2.23-1'
           dpkg-deb --contents "$pkg" > "$RUNNER_TEMP/enfoque-core-package-contents.txt"
           grep -Fq 'usr/local/sbin/enfoque-update' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
+          grep -Fq 'usr/local/sbin/enfoque-zero-touch' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
+          grep -Fq 'usr/local/sbin/enfoque-tunnel' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
 
       - name: Upload signed-repo-ready APT core package
         uses: actions/upload-artifact@v4
