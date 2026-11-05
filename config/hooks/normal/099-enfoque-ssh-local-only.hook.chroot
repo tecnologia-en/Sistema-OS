@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+# SSH is not enabled until local TI enrollment. The local-only config
+# prevents exposing the factory login over a LAN or the public Internet.
+systemctl disable ssh.service ssh.socket 2>/dev/null || true
+systemctl mask ssh.socket 2>/dev/null || true
+mkdir -p /run/sshd
+/usr/sbin/sshd -t

@@ -1,5 +1,5 @@
 NAME="Enfoque OS"
-VERSION="0.2.21"
+VERSION="0.2.22"
 CHANNEL="piloto"
 BASE="Debian 13 (trixie)"
-STATUS="piloto-atualizador-apt"
+STATUS="piloto-ssh-local-sob-aprovacao"

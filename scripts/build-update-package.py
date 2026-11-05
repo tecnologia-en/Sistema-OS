@@ -48,6 +48,7 @@ def managed(name):
         "etc/systemd/journald.conf.d/90-enfoque",
         "etc/default/grub.d/90-enfoque",
         "etc/enfoque-os/lojas-ip.json",
+        "etc/ssh/sshd_config.d/95-enfoque-suporte.conf",
         "etc/apt/sources.list.d/enfoque-os.sources",
         "etc/apt/apt.conf.d/90enfoque",
         "etc/apt/apt.conf.d/91enfoque",
@@ -81,7 +82,9 @@ def manifest():
     required = (
         "etc/enfoque-os-release",
         "usr/local/sbin/enfoque-update",
+        "usr/local/sbin/enfoque-ssh-support",
         "usr/share/keyrings/enfoque-os-archive-keyring.gpg",
+        "etc/ssh/sshd_config.d/95-enfoque-suporte.conf",
         "etc/apt/sources.list.d/enfoque-os.sources",
         "etc/systemd/system/enfoque-update-check.timer",
         "etc/systemd/system/enfoque-update-apply.timer",
@@ -116,7 +119,7 @@ def create(output):
             f"Package: {PACKAGE}\nVersion: {release}-1\n"
             "Section: admin\nPriority: optional\nArchitecture: all\n"
             "Maintainer: Enfoque TI <tecnologia@enfoquepapelaria.com.br>\n"
-            "Depends: python3, apt, systemd, ca-certificates\n"
+            "Depends: python3, apt, systemd, ca-certificates, openssh-client, openssh-server\n"
             "Description: Enfoque OS corporate system components and updater\n"
             " Replaces custom Enfoque OS files on managed workstations using\n"
             " individually signed APT repository updates.\n",
@@ -130,6 +133,10 @@ def create(output):
             "if [ \"$1\" = configure ] && command -v systemctl >/dev/null 2>&1; then\n"
             "  systemctl daemon-reload >/dev/null 2>&1 || true\n"
             "  systemctl enable enfoque-update-check.timer enfoque-update-apply.timer >/dev/null 2>&1 || true\n"
+            "  if [ ! -s /etc/enfoque-ssh/authorized_keys ]; then\n"
+            "    systemctl disable --now ssh.service ssh.socket >/dev/null 2>&1 || true\n"
+            "  fi\n"
+            "  systemctl mask ssh.socket >/dev/null 2>&1 || true\n"
             "fi\n", encoding="utf8",
         )
         postinst.chmod(0o755)

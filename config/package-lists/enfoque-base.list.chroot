@@ -1,4 +1,4 @@
-# Enfoque OS 0.2.21 - Debian 13 XFCE (atualizador de pacotes assinado; remoto de diagnostico somente-leitura)
+# Enfoque OS 0.2.22 - Debian 13 XFCE (SSH local com cadastro TI; agente diagnostico limitado)
 # Chrome oficial do Google via hook HTTPS em build, sem Firefox.
 user-setup
 locales
@@ -72,6 +72,7 @@ sudo
 ca-certificates
 curl
 openssh-client
+openssh-server
 unattended-upgrades
 fonts-liberation
 adwaita-icon-theme

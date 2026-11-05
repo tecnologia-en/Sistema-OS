@@ -1,0 +1,140 @@
+#!/usr/bin/env python3
+"""Manage explicit SSH maintenance approval on corporate Enfoque OS systems.
+
+The SSH daemon is bound to 127.0.0.1 and accepts only the TI-authorized
+Ed25519 public key. Enrollment is a local privileged action. This tool
+does not create remote tunnels, contact the VPS, or grant passwordless sudo.
+"""
+import argparse
+import base64
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+from datetime import datetime, timezone
+
+ROOT = Path("/etc/enfoque-ssh")
+KEYS = ROOT / "authorized_keys"
+CONFIG = Path("/etc/ssh/sshd_config.d/95-enfoque-suporte.conf")
+LOG = Path("/var/log/enfoque-ssh-support.jsonl")
+LOCK = Path("/run/lock/enfoque-ssh-support.lock")
+
+
+def log(action, status, fingerprint=""):
+    event = {
+        "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "action": action,
+        "status": status,
+        "fingerprint": fingerprint[:100],
+        "operator": os.environ.get("SUDO_USER", "root")[:80],
+    }
+    fd = os.open(LOG, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    try:
+        os.write(fd, (json.dumps(event) + "\n").encode("utf8"))
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def load_key(source):
+    if source.is_symlink() or not source.is_file() or source.stat().st_size > 2048:
+        raise ValueError("Arquivo de chave publica ausente ou invalido")
+    text = source.read_text("ascii").strip()
+    parts = text.split()
+    if len(parts) not in (2, 3) or parts[0] != "ssh-ed25519":
+        raise ValueError("Somente chave publica ssh-ed25519 e permitida")
+    if not re.fullmatch(r"[A-Za-z0-9+/]+={0,2}", parts[1]):
+        raise ValueError("Chave publica em formato invalido")
+    raw = base64.b64decode(parts[1], validate=True)
+    if len(raw) < 45 or len(raw) > 128:
+        raise ValueError("Tamanho de chave publica invalido")
+    if b"ssh-ed25519" not in raw[:22]:
+        raise ValueError("Tipo da chave publica invalido")
+    if len(parts) == 3 and not re.fullmatch(r"[A-Za-z0-9@._:-]{1,100}", parts[2]):
+        raise ValueError("Comentario de chave publica invalido")
+    result = subprocess.run(
+        ["/usr/bin/ssh-keygen", "-lf", str(source)],
+        check=True, text=True, capture_output=True, timeout=10,
+    )
+    fingerprint = result.stdout.strip().split()
+    if len(fingerprint) < 2 or not fingerprint[1].startswith("SHA256:"):
+        raise ValueError("Nao foi possivel verificar a chave publica")
+    return text + "\n", fingerprint[1]
+
+
+def root_only():
+    if os.geteuid() != 0:
+        raise PermissionError("Use sudo presencialmente para autorizar o suporte")
+
+
+def check_daemon():
+    result = subprocess.run(
+        ["/usr/sbin/sshd", "-t"], capture_output=True, text=True, timeout=15
+    )
+    if result.returncode != 0:
+        raise RuntimeError("Configuracao SSH invalida")
+
+
+def action(name, file=None):
+    root_only()
+    if not CONFIG.is_file():
+        raise RuntimeError("Configuracao Enfoque SSH nao instalada")
+    ROOT.mkdir(mode=0o755, parents=True, exist_ok=True)
+    ROOT.chmod(0o755)
+    with open(LOCK, "a", encoding="utf8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if name == "enroll":
+            public, fingerprint = load_key(file)
+            temp = ROOT / "authorized_keys.tmp"
+            with open(temp, "x", encoding="ascii") as target:
+                target.write(public)
+                target.flush()
+                os.fsync(target.fileno())
+            temp.chmod(0o644)
+            os.replace(temp, KEYS)
+            check_daemon()
+            subprocess.run(["/usr/bin/systemctl", "enable", "--now", "ssh.service"],
+                           check=True, timeout=35)
+            log("enroll", "ok", fingerprint)
+            return {"active": True, "fingerprint": fingerprint,
+                    "listen": "127.0.0.1:22"}
+        if name == "revoke":
+            KEYS.unlink(missing_ok=True)
+            subprocess.run(["/usr/bin/systemctl", "disable", "--now", "ssh.service"],
+                           check=True, timeout=35)
+            log("revoke", "ok")
+            return {"active": False}
+    raise ValueError("Acao desconhecida")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Suporte SSH Enfoque OS")
+    parser.add_argument("operation", choices=["status", "enroll", "revoke"])
+    parser.add_argument("key_file", nargs="?")
+    args = parser.parse_args()
+    if args.operation == "enroll" and not args.key_file:
+        parser.error("enroll exige caminho da chave PUBLICA autorizada pela TI")
+    if args.operation != "enroll" and args.key_file:
+        parser.error("Somente enroll aceita arquivo")
+    try:
+        if args.operation == "status":
+            result = subprocess.run(["/usr/bin/systemctl", "is-active", "ssh.service"],
+                                    capture_output=True, text=True, timeout=8)
+            print(json.dumps({"ssh_active": result.returncode == 0,
+                              "authorized": KEYS.is_file(),
+                              "listen": "127.0.0.1:22"}))
+            return 0
+        print(json.dumps(action(args.operation,
+                                Path(args.key_file) if args.key_file else None)))
+        return 0
+    except (OSError, ValueError, PermissionError, subprocess.SubprocessError,
+            RuntimeError) as error:
+        print("ENFOQUE_SSH_ERROR: " + str(error)[:160], file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

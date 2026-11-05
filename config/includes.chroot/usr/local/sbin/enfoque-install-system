@@ -144,7 +144,8 @@ def configure_system(disk, esp, root):
                  "var/lib/enfoque-os/firstboot.json", "etc/enfoque-os/agent.json",
                  "var/lib/enfoque-os/mesh-bootstrap.json"):
         (TARGET / path).unlink(missing_ok=True)
-    # New host secrets are generated only after this installation boots.
+    # Never clone SSH host keys from the ISO to installed PCs.
+    # Generate unique host keys only inside each installed target below.
     for path in (TARGET / "etc").glob("ssh/ssh_host_*"):
         path.unlink()
     (TARGET / "etc/machine-id").write_text("")
@@ -187,6 +188,7 @@ def configure_system(disk, esp, root):
     hosts.write_text("127.0.0.1 localhost\n127.0.1.1 enfoque-novo\n"
                      "::1 localhost ip6-localhost ip6-loopback\n")
     bind_chroot()
+    run(["chroot", str(TARGET), "/usr/bin/ssh-keygen", "-A"], timeout=90)
     run(["chroot", str(TARGET), "/usr/sbin/locale-gen"], timeout=150)
     run(["chroot", str(TARGET), "/usr/sbin/useradd", "-m", "-s", "/bin/bash",
          "-G", "sudo,audio,video,plugdev,netdev,dialout,lp", "enfoque"], timeout=60)
