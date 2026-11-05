@@ -128,8 +128,20 @@ def sign_message(action, values, public):
         str(values["timestamp"]), values["nonce"],
     ]
     content = ("\n".join(fields) + "\n").encode("utf8")
-    sig = run(["/usr/bin/openssl", "pkeyutl", "-sign", "-rawin", "-inkey", str(PRIVATE)],
-              data=content).stdout
+    # OpenSSL Ed25519 one-shot signing requires a regular input file on
+    # Debian/OpenSSL 3; piping stdin can fail even with -rawin.
+    safe_dir()
+    message_file = SECRETS / ("signature-input-" + secrets.token_hex(10))
+    try:
+        with open(message_file, "xb") as signed_input:
+            os.chmod(message_file, 0o600)
+            signed_input.write(content)
+            signed_input.flush()
+            os.fsync(signed_input.fileno())
+        sig = run(["/usr/bin/openssl", "pkeyutl", "-sign", "-rawin",
+                   "-inkey", str(PRIVATE), "-in", str(message_file)]).stdout
+    finally:
+        message_file.unlink(missing_ok=True)
     if len(sig) != 64:
         raise RuntimeError("Assinatura Ed25519 invalida")
     return base64.b64encode(sig).decode("ascii")
