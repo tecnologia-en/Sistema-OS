@@ -27,7 +27,7 @@ DEVICE = Path("/var/lib/enfoque-os/device-identity.json")
 LIVE_DEVICE = Path("/run/enfoque-os/device-identity.json")
 PROFILE = Path("/var/lib/enfoque-os/firstboot.json")
 STORE_SUFFIX = {"ilha-plaza":"1","copacabana":"2","itaipu":"3","icarai":"4","sao-goncalo":"5","centro":"6","deposito":"7","administracao":"8","papel-arte":"9"}
-AGENT_VERSION = "0.2.18-linux-limited"
+AGENT_VERSION = "0.2.19-linux-limited"
 SAFE_READ = frozenset(("/etc/enfoque-os-release", "/etc/os-release", "/proc/meminfo", "/proc/uptime"))
 SAFE_DIR = frozenset(("/usr/share/applications", "/usr/local/bin", "/etc/xdg"))
 SAFE_UNITS = frozenset((
@@ -199,10 +199,15 @@ def handle_action(action, args):
     return {"ok": False, "error": "Apenas leitura; use MeshCentral autorizado para controle interativo"}
 
 
-def request(suffix, payload, token=None, base=SERVER):
+def request(suffix, payload, token=None, base=SERVER, device_id=None):
     headers = {"Content-Type": "application/json"}
     if token is not None:
+        # The gateway requires BOTH the approved device ID and its individual
+        # token. Never treat a token alone as permission to poll commands.
+        if not isinstance(device_id, str) or not re.fullmatch(r"[A-Za-z0-9._:-]{6,160}", device_id):
+            raise ValueError("Identificador de dispositivo ausente ou invalido")
         headers["Authorization"] = "Bearer " + token
+        headers["X-PC-Device-ID"] = device_id
     encoded = json.dumps(payload, separators=(",", ":")).encode("utf8")
     req = urllib.request.Request(base + suffix, encoded, headers=headers, method="POST")
     with urllib.request.urlopen(req, timeout=10) as response:
@@ -220,7 +225,7 @@ def send_register(state, base=SERVER):
        "tokenHash": hashlib.sha256(state["token"].encode("ascii")).hexdigest(),
        "hostname": ("Enfoque OS " + short + " " + store)[:100],
        "username": "enfoque-agent",
-       "platform": "Linux Enfoque OS 0.2.18 XFCE"}, base=base)
+       "platform": "Linux Enfoque OS 0.2.19 XFCE"}, base=base)
 
 
 def run_cycle(state, base=SERVER):
@@ -231,11 +236,12 @@ def run_cycle(state, base=SERVER):
     inventory_name = ("Enfoque OS " + short + " " + store)[:100]
     pending = request("/poll", {"hostname": inventory_name,
         "username": "enfoque-agent", "platform": platform.platform(),
-        "agentVersion": AGENT_VERSION}, state["token"], base)
+        "agentVersion": AGENT_VERSION}, state["token"], base, state["deviceId"])
     cmd = pending.get("command")
     if isinstance(cmd, dict) and isinstance(cmd.get("id"), str):
         request("/result", {"id": cmd["id"],
-          "result": handle_action(cmd.get("action"), cmd.get("args"))}, state["token"], base)
+          "result": handle_action(cmd.get("action"), cmd.get("args"))},
+          state["token"], base, state["deviceId"])
     return True
 
 

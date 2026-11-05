@@ -157,7 +157,18 @@ def configure_system(disk, esp, root):
     localtime = TARGET / "etc/localtime"
     localtime.unlink(missing_ok=True)
     localtime.symlink_to("/usr/share/zoneinfo/America/Sao_Paulo")
-    (TARGET / "etc/default/locale").write_text("LANG=pt_BR.UTF-8\nLANGUAGE=pt_BR:pt\n")
+    # PAM can demand a password change BEFORE opening a session. Merely
+    # setting /etc/default/locale is too late for LightDM/PAM account prompts:
+    # systemd starts the display manager with the image's C.UTF-8 environment.
+    # Set global boot locale AND the LightDM process environment. Its PAM
+    # translation catalog already ships with the Debian base (Linux-PAM.mo).
+    pt_br = "LANG=pt_BR.UTF-8\nLANGUAGE=pt_BR:pt\n"
+    (TARGET / "etc/default/locale").write_text(pt_br)
+    (TARGET / "etc/locale.conf").write_text(pt_br)
+    lightdm_dropin = TARGET / "etc/systemd/system/lightdm.service.d/90-enfoque-portugues.conf"
+    lightdm_dropin.parent.mkdir(parents=True, exist_ok=True)
+    lightdm_dropin.write_text("[Service]\nEnvironment=LANG=pt_BR.UTF-8\n"
+                             "Environment=LANGUAGE=pt_BR:pt\n")
     locale_gen = TARGET / "etc/locale.gen"
     options = locale_gen.read_text(encoding="utf-8") if locale_gen.exists() else ""
     options = options.replace("# pt_BR.UTF-8 UTF-8", "pt_BR.UTF-8 UTF-8")

@@ -25,6 +25,8 @@ class EnrollmentHandler(BaseHTTPRequestHandler):
     log_message = lambda *_: None
     records = []
     approved = False
+    expected_device_id = None
+    expected_token = None
 
     def do_POST(self):
         amount = int(self.headers["Content-Length"])
@@ -32,6 +34,12 @@ class EnrollmentHandler(BaseHTTPRequestHandler):
         type(self).records.append((self.path, payload, dict(self.headers)))
         if self.path.endswith("/register"):
             response = {"approved": type(self).approved}
+        elif (self.headers.get("X-PC-Device-ID") != type(self).expected_device_id or
+              self.headers.get("Authorization") != "Bearer " + str(type(self).expected_token)):
+            # Same two-factor device identity contract enforced by the real
+            # administrative gateway for /poll and /result.
+            self.send_error(401)
+            return
         elif self.path.endswith("/poll"):
             response = {"command": {"id": "safe-1", "action": "run",
                 "args": {"program": "free", "args": ["-m"]}}}
@@ -85,7 +93,15 @@ class AgentAndTrustTests(unittest.TestCase):
         thread.start()
         try:
             state = {"deviceId": "enfoqueos-" + str(uuid4()), "token": "a" * 64}
+            EnrollmentHandler.expected_device_id = state["deviceId"]
+            EnrollmentHandler.expected_token = state["token"]
             base = f"http://127.0.0.1:{server.server_port}"
+            # Polling must never silently fall back to token-only auth.
+            for suffix in ("/poll", "/result"):
+                with self.assertRaises(ValueError):
+                    agent.request(suffix, {}, state["token"], base)
+                with self.assertRaises(ValueError):
+                    agent.request(suffix, {}, state["token"], base, "invalid id with spaces")
             with patch.object(agent, "display_identity", return_value=("123456789012-3", "Itaipu")):
                 self.assertFalse(agent.run_cycle(state, base))
                 self.assertEqual([r[0] for r in EnrollmentHandler.records], ["/register"])
@@ -104,6 +120,10 @@ class AgentAndTrustTests(unittest.TestCase):
             self.assertTrue(EnrollmentHandler.records[-1][1]["result"]["ok"])
             self.assertEqual(EnrollmentHandler.records[-1][1]["id"], "safe-1")
             self.assertEqual(EnrollmentHandler.records[-1][2]["Authorization"], "Bearer " + "a"*64)
+            self.assertEqual(EnrollmentHandler.records[-2][2]["X-Pc-Device-Id"], state["deviceId"])
+            self.assertEqual(EnrollmentHandler.records[-1][2]["X-Pc-Device-Id"], state["deviceId"])
+            self.assertNotIn("Authorization", EnrollmentHandler.records[-3][2])
+            self.assertNotIn("X-Pc-Device-Id", EnrollmentHandler.records[-3][2])
         finally:
             server.shutdown()
             thread.join(timeout=2)

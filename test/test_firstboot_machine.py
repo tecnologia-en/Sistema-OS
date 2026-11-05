@@ -61,3 +61,8 @@ class InstalledSessionSafetyTests(unittest.TestCase):
         self.assertIn('"LANG=pt_BR.UTF-8\\nLANGUAGE=pt_BR:pt\\n"', installer)
         self.assertIn('"pt_BR.UTF-8 UTF-8"', installer)
         self.assertIn('"/usr/sbin/locale-gen"', installer)
+        self.assertIn('TARGET / "etc/locale.conf"', installer)
+        self.assertIn('TARGET / "etc/systemd/system/lightdm.service.d/90-enfoque-portugues.conf"', installer)
+        self.assertIn('Environment=LANG=pt_BR.UTF-8', installer)
+        self.assertIn('Environment=LANGUAGE=pt_BR:pt', installer)
+        self.assertIn('"/usr/bin/chage", "-d", "0", "enfoque"', installer)
