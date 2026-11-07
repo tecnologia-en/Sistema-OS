@@ -1,0 +1,4 @@
+#!/bin/sh
+# GenMon displays an actual clickable search field in Xfce's bottom panel.
+# App Finder is part of XFCE, filters installed applications as the user types.
+printf '%s\n' '<txt><span font_desc="Noto Sans 10" foreground="#EDF6FF">  ⌕   Pesquisar                         </span></txt><txtclick>/usr/bin/xfce4-appfinder --collapsed</txtclick><tool>Pesquisar aplicativos e comandos (Win+S)</tool>'

@@ -1,9 +1,57 @@
-/* Enfoque OS: visual de menu padronizado */
-#whiskermenu-window, window#whiskermenu-window {
-  background-color: #17263c;
-  color: #edf6ff;
-  border: 1px solid #3c628f;
-  border-radius: 12px;
+/* Enfoque OS / Visual Lab: taskbar inspired by modern Fluent-style desktops.
+   No global window styling changes: retain the existing Arc window theme. */
+#XfcePanelWindow, .xfce4-panel {
+  background-color: transparent;
+  background-image: none;
+  border: none;
+  box-shadow: none;
 }
-#whiskermenu-window button:hover { background-color: #285d9f; }
-#whiskermenu-window entry { border-radius: 8px; }
+#XfcePanelWindow button {
+  color: #EDF5FF;
+  background: rgba(21, 35, 63, .73);
+  border: 1px solid rgba(178, 208, 242, .32);
+  border-radius: 11px;
+  box-shadow: 0 3px 12px rgba(10, 20, 41, .16);
+  padding: 2px 5px;
+  margin: 4px 1px;
+  min-width: 30px;
+  min-height: 33px;
+}
+#XfcePanelWindow button:hover {
+  background: rgba(43, 77, 124, .85);
+  border-color: rgba(187, 218, 252, .55);
+}
+#XfcePanelWindow button:checked, #XfcePanelWindow button:active {
+  background: rgba(52, 102, 175, .8);
+  border-bottom-color: #53C2FF;
+}
+#XfcePanelWindow #showdesktop-button {
+  min-width: 5px;
+  min-height: 33px;
+  padding: 0;
+  margin: 4px 0 4px 3px;
+  border-radius: 2px;
+  border-color: rgba(187, 208, 235, .47);
+  background: rgba(193, 220, 250, .25);
+}
+#XfcePanelWindow #showdesktop-button image { opacity: 0; }
+#XfcePanelWindow #genmon-14, #XfcePanelWindow .genmon {
+  border-radius: 11px;
+  background: rgba(25, 42, 73, .75);
+  border: 1px solid rgba(175, 201, 234, .31);
+  padding: 5px 10px;
+  margin: 5px 2px;
+}
+#XfcePanelWindow .tasklist button { min-width: 36px; }
+#XfcePanelWindow .systray button,
+#XfcePanelWindow #pulseaudio-button { min-width: 22px; padding: 2px; }
+
+/* Only the application menu adopts the desktop-style floating glass card. */
+#whiskermenu-window, window#whiskermenu-window {
+  background-color: rgba(18, 31, 54, .97);
+  color: #EDF6FF;
+  border: 1px solid rgba(138, 176, 228, .43);
+  border-radius: 15px;
+}
+#whiskermenu-window button:hover { background-color: #2C5E9B; }
+#whiskermenu-window entry { border-radius: 9px; }

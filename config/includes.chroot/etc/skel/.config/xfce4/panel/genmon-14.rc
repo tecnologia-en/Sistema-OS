@@ -1,0 +1,5 @@
+Command=/usr/local/bin/enfoque-busca-painel
+UseLabel=0
+Text=
+UpdatePeriod=60000
+Font=Noto Sans 10

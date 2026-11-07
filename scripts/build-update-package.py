@@ -36,6 +36,7 @@ def managed(name):
         "usr/local/lib/enfoque-",
         "usr/share/applications/enfoque-",
         "usr/share/backgrounds/enfoque-os/",
+        "usr/share/icons/EnfoqueFluent/",
         "usr/share/doc/enfoque-os/",
         "usr/share/plymouth/themes/enfoque-os/",
         "usr/share/keyrings/enfoque-os-archive-keyring.gpg",
@@ -125,7 +126,7 @@ def create(output):
             f"Package: {PACKAGE}\nVersion: {release}-1\n"
             "Section: admin\nPriority: optional\nArchitecture: all\n"
             "Maintainer: Enfoque TI <tecnologia@enfoquepapelaria.com.br>\n"
-            "Depends: python3, apt, systemd, ca-certificates, openssh-client, openssh-server\n"
+            "Depends: python3, apt, systemd, ca-certificates, openssh-client, openssh-server, xfce4-genmon-plugin, xfce4-appfinder, papirus-icon-theme\n"
             "Description: Enfoque OS corporate system components and updater\n"
             " Replaces custom Enfoque OS files on managed workstations using\n"
             " individually signed APT repository updates.\n",

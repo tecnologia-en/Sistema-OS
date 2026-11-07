@@ -41,7 +41,10 @@ class TaskbarTests(unittest.TestCase):
 
     def test_ordered_independent_launchers_and_tasklist(self):
         ids = [int(x.get("value")) for x in self.panel.find("./property[@name='plugin-ids']")]
-        self.assertEqual(ids, list(range(1, 9)) + [13] + list(range(9, 13)))
+        self.assertEqual(ids, [1, 14, 10, 7, 2, 3, 4, 5, 6, 15, 8, 13, 9, 12, 11])
+        self.assertLess(ids.index(10), ids.index(7), "Relogio permanece no grupo da esquerda")
+        self.assertLess(ids.index(1), ids.index(14))
+        self.assertEqual(ids[-1], 11, 'Mostrar desktop precisa ser o ultimo botao da direita')
         self.assertIsNotNone(self.plugins)
         self.assertEqual(self.plugins.find("./property[@name='plugin-1']").get("value"), "whiskermenu")
         for plugin_id, desktop in [(2,"google-chrome.desktop"), (3,"enfoque-sige.desktop"),
@@ -52,6 +55,8 @@ class TaskbarTests(unittest.TestCase):
             self.assertEqual(items, [desktop], "Atalhos precisam de botoes independentes")
         self.assertEqual(self.plugins.find("./property[@name='plugin-6']").get("value"), "tasklist")
         self.assertEqual(self.plugins.find("./property[@name='plugin-7']").get("value"), "separator")
+        self.assertEqual(self.plugins.find("./property[@name='plugin-15']").get("value"), "separator")
+        self.assertEqual(self.plugins.find("./property[@name='plugin-14']").get("value"), "genmon")
         self.assertEqual(self.plugins.find("./property[@name='plugin-8']").get("value"), "systray")
         self.assertEqual(self.plugins.find("./property[@name='plugin-9']").get("value"), "pulseaudio")
         self.assertEqual(self.plugins.find("./property[@name='plugin-10']").get("value"), "clock")
@@ -59,6 +64,41 @@ class TaskbarTests(unittest.TestCase):
         p = self.plugins.find("./property[@name='plugin-12']")
         self.assertEqual(p.get("value"), "launcher")
         self.assertEqual(p.find("./property[@name='items']/value").get("value"), "enfoque-id.desktop")
+
+    def test_windows_11_search_and_transparent_glass_taskbar(self):
+        panel = self.panel
+        background = panel.find("./property[@name='background-rgba']")
+        self.assertLess(float(background.findall("./value")[-1].get("value")), 0.08)
+        for plugin_id in (7, 15):
+            plugin = self.plugins.find(f"./property[@name='plugin-{plugin_id}']")
+            self.assertEqual(plugin.find("./property[@name='expand']").get("value"), "true")
+        search = ROOT / "config/includes.chroot/usr/local/bin/enfoque-busca-painel"
+        self.assertIn("<txtclick>/usr/bin/xfce4-appfinder --collapsed</txtclick>", search.read_text())
+        settings = ROOT / "config/includes.chroot/etc/skel/.config/xfce4/panel/genmon-14.rc"
+        self.assertIn("Command=/usr/local/bin/enfoque-busca-painel", settings.read_text())
+        css = ROOT / "config/includes.chroot/etc/skel/.config/gtk-3.0/gtk.css"
+        style = css.read_text()
+        self.assertIn("#XfcePanelWindow", style)
+        self.assertIn("#showdesktop-button", style)
+        self.assertIn("#whiskermenu-window", style)
+        package = (ROOT / "config/package-lists/enfoque-base.list.chroot").read_text()
+        self.assertIn("\nxfce4-genmon-plugin\n", package)
+        self.assertIn("\nxfce4-panel\n", package)
+
+    def test_original_fluent_style_icons_and_papirus_fallback(self):
+        base = ROOT / "config/includes.chroot/usr/share/icons/EnfoqueFluent"
+        theme = (base / "index.theme").read_text(encoding="utf-8")
+        self.assertIn("Inherits=Papirus,Adwaita,hicolor", theme)
+        settings = ET.parse(ROOT / "config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml").getroot()
+        p = settings.find("./property[@name='Net']/property[@name='IconThemeName']")
+        self.assertEqual(p.get("value"), "EnfoqueFluent")
+        for rel in ("scalable/places/folder.svg", "scalable/places/user-trash.svg",
+                    "scalable/apps/utilities-terminal.svg",
+                    "scalable/status/network-wireless-signal-excellent-symbolic.svg",
+                    "scalable/status/audio-volume-high-symbolic.svg"):
+            svg = ET.parse(base / rel).getroot()
+            self.assertTrue(svg.tag.endswith("svg"))
+            self.assertNotIn("script", ET.tostring(svg, encoding="unicode"))
 
     def test_windows_key_and_start_icon_only(self):
         menu = ROOT / "config/includes.chroot/etc/skel/.config/xfce4/panel/whiskermenu-1.rc"

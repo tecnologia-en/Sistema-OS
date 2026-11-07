@@ -75,7 +75,7 @@ jobs:
           pkg=$(find config/packages.chroot -maxdepth 1 -name 'enfoque-os-core_*.deb' -print -quit)
           test -s "$pkg"
           test "$(dpkg-deb -f "$pkg" Package)" = 'enfoque-os-core'
-          test "$(dpkg-deb -f "$pkg" Version)" = '0.2.23-1'
+          test "$(dpkg-deb -f "$pkg" Version)" = '0.2.24-1'
           dpkg-deb --contents "$pkg" > "$RUNNER_TEMP/enfoque-core-package-contents.txt"
           grep -Fq 'usr/local/sbin/enfoque-update' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
           grep -Fq 'usr/local/sbin/enfoque-zero-touch' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
