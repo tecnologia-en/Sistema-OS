@@ -11,3 +11,6 @@ config/packages.chroot/*.deb
 *.key
 *.pem
 __pycache__/
+
+# Compiled reproducibly inside the Debian 13 GitHub CI builder.
+config/includes.chroot/usr/local/lib/enfoque-docklike/libdocklike.so

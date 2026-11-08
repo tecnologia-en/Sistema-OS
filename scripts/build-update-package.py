@@ -50,6 +50,7 @@ def managed(name):
         "etc/default/grub.d/90-enfoque",
         "etc/enfoque-os/lojas-ip.json",
         "etc/tmpfiles.d/enfoque-remote.conf",
+        "etc/xdg/xfce4/panel/docklike.rc",
         "etc/ssh/sshd_config.d/95-enfoque-suporte.conf",
         "etc/enfoque-ssh/vps-known-hosts",
         "etc/sudoers.d/97-enfoque-ti",
@@ -98,6 +99,7 @@ def manifest():
         "etc/systemd/system/enfoque-update-apply.timer",
         "usr/local/sbin/enfoque-manutencao",
         "usr/local/sbin/enfoque-saude",
+        "usr/local/sbin/enfoque-docklike-install",
         "usr/local/bin/enfoque-recuperacao",
         "etc/systemd/system/enfoque-saude.timer",
         "etc/systemd/system/enfoque-backup.timer",
@@ -137,7 +139,7 @@ def create(output):
             f"Package: {PACKAGE}\nVersion: {release}-1\n"
             "Section: admin\nPriority: optional\nArchitecture: all\n"
             "Maintainer: Enfoque TI <tecnologia@enfoquepapelaria.com.br>\n"
-            "Depends: python3, python3-gi, gir1.2-gtk-3.0, apt, systemd, ca-certificates, openssh-client, openssh-server, xfce4-genmon-plugin, xfce4-appfinder, papirus-icon-theme, timeshift, rsync, restic, smartmontools, mate-polkit, pkexec\n"
+            "Depends: python3, python3-gi, gir1.2-gtk-3.0, apt, systemd, ca-certificates, openssh-client, openssh-server, xfce4-genmon-plugin, xfce4-appfinder, xfce4-docklike-plugin, papirus-icon-theme, timeshift, rsync, restic, smartmontools, mate-polkit, pkexec\n"
             "Description: Enfoque OS corporate system components and updater\n"
             " Replaces custom Enfoque OS files on managed workstations using\n"
             " individually signed APT repository updates.\n",
@@ -153,6 +155,7 @@ def create(output):
             "  getent group enfoque-remote >/dev/null 2>&1 || groupadd --system enfoque-remote\n"
             "  for u in enfoque enfoque-kiosk; do if id -u \"$u\" >/dev/null 2>&1; then usermod -a -G enfoque-remote \"$u\"; fi; done\n"
             "  systemd-tmpfiles --create /etc/tmpfiles.d/enfoque-remote.conf >/dev/null 2>&1 || true\n"
+            "  if [ -s /usr/local/lib/enfoque-docklike/libdocklike.so ]; then /usr/local/sbin/enfoque-docklike-install; fi\n"
             "  if ! id -u enfoque-ti >/dev/null 2>&1; then\n"
             "    useradd -m -s /bin/bash enfoque-ti\n"
             "  fi\n"

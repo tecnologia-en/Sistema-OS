@@ -1,0 +1,134 @@
+--- a/src/Group.hpp
++++ b/src/Group.hpp
+@@ -69,6 +69,7 @@
+ 	void onDraw(cairo_t* cr);
+ 	void onWindowActivate(GroupWindow* groupWindow);
+ 	void onWindowUnactivate();
++	void refreshAttention();
+ 	void onButtonPress(GdkEventButton* event);
+ 	void onButtonRelease(GdkEventButton* event);
+ 	void onMouseEnter();
+@@ -82,6 +83,8 @@
+ 
+ 	bool mPinned;
+ 	bool mActive;
++	bool mAttentionOn;
++	guint mAttentionTimerId;
+ 
+ 	uint mTolerablePointerDistance;
+ 	uint mTopWindowIndex;
+--- a/src/Group.cpp
++++ b/src/Group.cpp
+@@ -17,6 +17,8 @@
+ 	mPinned = pinned;
+ 	mTopWindowIndex = 0;
+ 	mActive = false;
++	mAttentionOn = false;
++	mAttentionTimerId = 0;
+ 
+ 	//--------------------------------------------------
+ 
+@@ -202,6 +204,11 @@
+ 
+ Group::~Group()
+ {
++	if (mAttentionTimerId != 0)
++	{
++		g_source_remove(mAttentionTimerId);
++		mAttentionTimerId = 0;
++	}
+ 	mLeaveTimeout.stop();
+ 	mMenuShowTimeout.stop();
+ 
+@@ -220,6 +227,7 @@
+ 	mWindowsCount.updateState();
+ 	mGroupMenu.add(window->mGroupMenuItem);
+ 	Help::Gtk::cssClassAdd(mButton, "open_group");
++	refreshAttention();
+ 
+ 	if (mWindowsCount == 1 && !mPinned)
+ 		gtk_box_reorder_child(GTK_BOX(Dock::mBox), mButton, -1);
+@@ -238,6 +246,7 @@
+ 
+ 	if (!mWindowsCount)
+ 		Help::Gtk::cssClassRemove(mButton, "open_group");
++	refreshAttention();
+ 
+ 	gtk_widget_queue_draw(mButton);
+ }
+@@ -816,9 +825,54 @@
+ 	}
+ }
+ 
++// Enfoque OS 0.2.26: subtle orange attention pulse for URGENT X11 windows.
++// This is an event-driven indicator, not a blink for every content change.
++// While the group is focused or there is no URGENT window, all timers stop.
++void Group::refreshAttention()
++{
++	bool needsAttention = false;
++	if (!mActive)
++	{
++		mWindows.findIf([&needsAttention](GroupWindow* window) -> bool {
++			if (window->getState(XFW_WINDOW_STATE_URGENT))
++			{
++				needsAttention = true;
++				return true;
++			}
++			return false;
++		});
++	}
++	if (!needsAttention)
++	{
++		if (mAttentionTimerId != 0)
++		{
++			g_source_remove(mAttentionTimerId);
++			mAttentionTimerId = 0;
++		}
++		mAttentionOn = false;
++		Help::Gtk::cssClassRemove(mButton, "enfoque_attention");
++		return;
++	}
++	if (mAttentionTimerId == 0)
++	{
++		mAttentionOn = true;
++		Help::Gtk::cssClassAdd(mButton, "enfoque_attention");
++		mAttentionTimerId = g_timeout_add(900, +[](gpointer context) -> gboolean {
++			Group* group = static_cast<Group*>(context);
++			group->mAttentionOn = !group->mAttentionOn;
++			if (group->mAttentionOn)
++				Help::Gtk::cssClassAdd(group->mButton, "enfoque_attention");
++			else
++				Help::Gtk::cssClassRemove(group->mButton, "enfoque_attention");
++			return G_SOURCE_CONTINUE;
++		}, this);
++	}
++}
++
+ void Group::onWindowActivate(GroupWindow* groupWindow)
+ {
+ 	mActive = true;
++	refreshAttention();
+ 	setTopWindow(groupWindow);
+ 	Help::Gtk::cssClassAdd(mButton, "active_group");
+ }
+@@ -826,6 +880,7 @@
+ void Group::onWindowUnactivate()
+ {
+ 	mActive = false;
++	refreshAttention();
+ 	Help::Gtk::cssClassRemove(mButton, "active_group");
+ }
+ 
+--- a/src/GroupWindow.cpp
++++ b/src/GroupWindow.cpp
+@@ -169,5 +169,10 @@
+ 	else
+ 		leaveGroup();
+ 
++	// State transitions include XFW_WINDOW_STATE_URGENT. Apply to the
++	// actual dock icon (including pinned apps), but not to the focused one.
++	if (mGroupAssociated)
++		mGroup->refreshAttention();
++
+ 	gtk_widget_show(GTK_WIDGET(mGroupMenuItem->mItem));
+ }

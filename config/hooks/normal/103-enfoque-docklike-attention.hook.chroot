@@ -1,0 +1,5 @@
+#!/bin/sh
+# Executado no chroot DEPOIS de instalar xfce4-docklike-plugin.
+# APT do Debian preservado em .distrib; o Enfoque usa um modulo testado.
+set -eu
+/usr/local/sbin/enfoque-docklike-install

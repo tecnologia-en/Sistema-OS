@@ -1,0 +1,17 @@
+[user]
+pinned=google-chrome;enfoque-sige;enfoque-intranet;thunar;
+showPreviews=false
+showWindowCount=true
+onlyDisplayVisible=false
+onlyDisplayScreen=false
+noWindowsListIfSingle=false
+indicatorOrientation=1
+indicatorStyle=0
+inactiveIndicatorStyle=0
+indicatorColorFromTheme=false
+indicatorColor=rgb(108,211,255)
+inactiveColor=rgb(75,168,233)
+forceIconSize=true
+iconSize=28
+keyComboActive=false
+keyAloneActive=false

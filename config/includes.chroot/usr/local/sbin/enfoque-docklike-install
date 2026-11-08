@@ -1,0 +1,15 @@
+#!/bin/sh
+# Apply the compiled XFCE Docklike with an Enfoque attention indicator.
+# The distribution's original plugin is preserved through dpkg-divert.
+set -eu
+SOURCE="/usr/local/lib/enfoque-docklike/libdocklike.so"
+DEST="/usr/lib/x86_64-linux-gnu/xfce4/panel/plugins/libdocklike.so"
+[ -s "$SOURCE" ] || { echo "Enfoque Docklike: modulo compilado ausente" >&2; exit 1; }
+[ -e "$DEST" ] || [ -e "$DEST.distrib" ] || {
+  echo "Enfoque Docklike: pacote xfce4-docklike-plugin nao instalado" >&2; exit 1;
+}
+if ! dpkg-divert --list "$DEST" | grep -Fq "$DEST.distrib"; then
+  dpkg-divert --local --rename --add --divert "$DEST.distrib" "$DEST"
+fi
+install -m 0755 "$SOURCE" "$DEST"
+echo "Enfoque Docklike: indicador instalado, preservando o modulo original"

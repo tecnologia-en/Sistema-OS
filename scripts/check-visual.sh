@@ -53,6 +53,12 @@ if ! grep -Fq 'wallpaper.jpg' "$ROOT/config/includes.chroot/usr/local/bin/enfoqu
 magic="$(od -An -tx1 -N3 "$ROOT/config/includes.chroot/usr/share/backgrounds/enfoque-os/wallpaper.jpg" | tr -d ' \n')"
 [ "$magic" = 'ffd8ff' ] || fail 'JPEG corporativo invalido'
 grep -Fq 'value="enfoque-menu.desktop"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'menu iniciar Enfoque OS ausente'
+grep -Fq 'name="plugin-18" type="string" value="docklike"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'dock de aplicativos nao ativo'
+need config/includes.chroot/etc/skel/.config/xfce4/panel/docklike-18.rc
+need config/includes.chroot/etc/xdg/xfce4/panel/docklike.rc
+need config/includes.chroot/usr/local/sbin/enfoque-docklike-install
+grep -Fxq 'xfce4-docklike-plugin' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'docklike ausente da ISO'
+grep -Fq '#docklike-plugin .group.enfoque_attention' "$ROOT/config/includes.chroot/etc/skel/.config/gtk-3.0/gtk.css" || fail 'piscar laranja ausente'
 grep -Fq 'name="plugin-13" type="string" value="battery"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'bateria ausente no painel'
 grep -Fq 'display_percentage=true' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/panel/battery-13.rc" || fail 'porcentagem da bateria nao habilitada'
 grep -Fxq xfce4-battery-plugin "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'plugin bateria ausente da ISO'
@@ -88,7 +94,7 @@ for f in \
 done
 grep -Fq 'google-chrome-stable' "$ROOT/config/includes.chroot/etc/skel/Desktop/SIGE.desktop" || fail 'SIGE nao abre no Chrome'
 grep -Fq 'google-chrome-stable' "$ROOT/config/includes.chroot/etc/skel/Desktop/Intranet.desktop" || fail 'Intranet nao abre no Chrome'
-grep -Fq 'google-chrome.desktop' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'Chrome ausente do painel'
+grep -Fq 'google-chrome;' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/panel/docklike-18.rc" || fail 'Chrome nao fixado no dock'
 grep -Fq 'dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb' "$ROOT/config/hooks/normal/090-google-chrome.hook.chroot" || fail 'Instalador Chrome ausente'
 if grep -E '^(firefox-esr|firefox-esr-l10n-pt-br)$' "$ROOT/config/package-lists/enfoque-base.list.chroot"; then
   fail 'Firefox ainda incluido na lista de pacotes'

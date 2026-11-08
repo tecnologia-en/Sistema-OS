@@ -38,6 +38,7 @@ logrotate
 xfce4-terminal
 xfce4-whiskermenu-plugin
 xfce4-genmon-plugin
+xfce4-docklike-plugin
 xfce4-appfinder
 xfce4-panel
 xfce4-pulseaudio-plugin

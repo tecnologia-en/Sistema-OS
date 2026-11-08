@@ -39,33 +39,29 @@ class TaskbarTests(unittest.TestCase):
         self.assertGreaterEqual(int(self.panel_value("size")), 40)
         self.assertEqual(self.panels.find("./property[@name='dark-mode']").get("value"), "true")
 
-    def test_ordered_independent_launchers_and_tasklist(self):
-        ids = [int(x.get("value")) for x in self.panel.find("./property[@name='plugin-ids']")]
-        self.assertEqual(ids, [1, 14, 7, 2, 3, 4, 5, 6, 15, 12, 8, 13, 9, 17, 16, 10, 11])
-        self.assertGreater(ids.index(10), ids.index(8), "Relógio e data ficam à direita")
-        self.assertLess(ids.index(17), ids.index(16), "Impressoras antes do sino")
-        self.assertEqual(ids[-2:], [10,11])
-        self.assertLess(ids.index(1), ids.index(14))
-        self.assertEqual(ids[-1], 11, 'Mostrar desktop precisa ser o ultimo botao da direita')
-        self.assertIsNotNone(self.plugins)
-        self.assertEqual(self.plugins.find("./property[@name='plugin-1']").get("value"), "launcher")
-        for plugin_id, desktop in [(2,"google-chrome.desktop"), (3,"enfoque-sige.desktop"),
-                                   (4,"enfoque-intranet.desktop"), (5,"thunar.desktop")]:
-            p = self.plugins.find(f"./property[@name='plugin-{plugin_id}']")
-            self.assertEqual(p.get("value"), "launcher")
-            items = [v.get("value") for v in p.find("./property[@name='items']")]
-            self.assertEqual(items, [desktop], "Atalhos precisam de botoes independentes")
-        self.assertEqual(self.plugins.find("./property[@name='plugin-6']").get("value"), "tasklist")
-        self.assertEqual(self.plugins.find("./property[@name='plugin-7']").get("value"), "separator")
-        self.assertEqual(self.plugins.find("./property[@name='plugin-15']").get("value"), "separator")
-        self.assertEqual(self.plugins.find("./property[@name='plugin-14']").get("value"), "genmon")
-        self.assertEqual(self.plugins.find("./property[@name='plugin-8']").get("value"), "systray")
-        self.assertEqual(self.plugins.find("./property[@name='plugin-9']").get("value"), "pulseaudio")
-        self.assertEqual(self.plugins.find("./property[@name='plugin-10']").get("value"), "genmon")
-        self.assertEqual(self.plugins.find("./property[@name='plugin-11']").get("value"), "genmon")
-        p = self.plugins.find("./property[@name='plugin-12']")
-        self.assertEqual(p.get("value"), "launcher")
-        self.assertEqual(p.find("./property[@name='items']/value").get("value"), "enfoque-id.desktop")
+    def test_unified_docklike_taskbar_and_attention(self):
+        ids=[int(x.get("value")) for x in self.panel.find("./property[@name='plugin-ids']")]
+        self.assertEqual(ids,[1,14,7,18,15,12,8,13,9,17,16,10,11])
+        self.assertLess(ids.index(1),ids.index(14))
+        self.assertLess(ids.index(14),ids.index(18))
+        self.assertGreater(ids.index(10),ids.index(8))
+        self.assertLess(ids.index(17),ids.index(16))
+        self.assertEqual(ids[-2:],[10,11])
+        self.assertEqual(self.plugins.find("./property[@name='plugin-1']").get("value"),"launcher")
+        self.assertEqual(self.plugins.find("./property[@name='plugin-18']").get("value"),"docklike")
+        for old in (2,3,4,5,6):
+            self.assertIsNone(self.plugins.find(f"./property[@name='plugin-{old}']"))
+        for plugin_id in (7,15):
+            self.assertEqual(self.plugins.find(f"./property[@name='plugin-{plugin_id}']").get("value"),"separator")
+        for plugin_id,typ in ((14,"genmon"),(8,"systray"),(9,"pulseaudio"),(10,"genmon"),(11,"genmon")):
+            self.assertEqual(self.plugins.find(f"./property[@name='plugin-{plugin_id}']").get("value"),typ)
+        p=self.plugins.find("./property[@name='plugin-12']")
+        self.assertEqual(p.get("value"),"launcher")
+        self.assertEqual(p.find("./property[@name='items']/value").get("value"),"enfoque-id.desktop")
+        pinned=(ROOT / "config/includes.chroot/etc/skel/.config/xfce4/panel/docklike-18.rc").read_text()
+        self.assertIn("pinned=google-chrome;enfoque-sige;enfoque-intranet;thunar;",pinned)
+        self.assertIn("showPreviews=false",pinned)
+        self.assertIn("indicatorColor=rgb(108,211,255)",pinned)
 
     def test_windows_11_search_and_transparent_glass_taskbar(self):
         panel = self.panel
@@ -86,6 +82,11 @@ class TaskbarTests(unittest.TestCase):
         package = (ROOT / "config/package-lists/enfoque-base.list.chroot").read_text()
         self.assertIn("\nxfce4-genmon-plugin\n", package)
         self.assertIn("\nxfce4-panel\n", package)
+        self.assertIn("\nxfce4-docklike-plugin\n",package)
+        self.assertIn("#docklike-plugin .group.open_group",style)
+        self.assertIn("#docklike-plugin .group.open_group.active_group",style)
+        self.assertIn("#docklike-plugin .group.enfoque_attention",style)
+        self.assertIn("rgba(255, 167, 64, .93)",style)
 
     def test_original_fluent_style_icons_and_papirus_fallback(self):
         base = ROOT / "config/includes.chroot/usr/share/icons/EnfoqueFluent"

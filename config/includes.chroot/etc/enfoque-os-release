@@ -1,5 +1,5 @@
 NAME="Enfoque OS"
-VERSION="0.2.25"
+VERSION="0.2.26"
 CHANNEL="piloto"
 BASE="Debian 13 (trixie)"
-STATUS="piloto-integrado-025"
+STATUS="piloto-taskbar-026"
