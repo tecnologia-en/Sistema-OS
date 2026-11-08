@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Assistente de primeira configuração
+Exec=/usr/local/bin/enfoque-primeiro-uso
+Icon=enfoque-recuperacao
+Terminal=false
+Categories=System;Settings;
+StartupNotify=true

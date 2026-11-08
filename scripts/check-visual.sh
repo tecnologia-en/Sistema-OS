@@ -52,13 +52,15 @@ if ! grep -Fq 'unlocked="root"' "$ROOT/config/includes.chroot/etc/xdg/xfce4/xfco
 if ! grep -Fq 'wallpaper.jpg' "$ROOT/config/includes.chroot/usr/local/bin/enfoque-aplicar-visual"; then fail 'wallpaper desatualizado'; fi
 magic="$(od -An -tx1 -N3 "$ROOT/config/includes.chroot/usr/share/backgrounds/enfoque-os/wallpaper.jpg" | tr -d ' \n')"
 [ "$magic" = 'ffd8ff' ] || fail 'JPEG corporativo invalido'
-grep -Fq 'value="whiskermenu"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'menu iniciar ausente'
+grep -Fq 'value="enfoque-menu.desktop"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'menu iniciar Enfoque OS ausente'
 grep -Fq 'name="plugin-13" type="string" value="battery"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'bateria ausente no painel'
 grep -Fq 'display_percentage=true' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/panel/battery-13.rc" || fail 'porcentagem da bateria nao habilitada'
 grep -Fxq xfce4-battery-plugin "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'plugin bateria ausente da ISO'
-grep -Fq 'show-button-title=false' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/panel/whiskermenu-1.rc" || fail 'menu inicial nao esta apenas com logo'
-grep -Fq 'button-icon=enfoque-start' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/panel/whiskermenu-1.rc" || fail 'logo do menu inicial ausente'
-grep -Fq 'name="Super_L" type="string" value="xfce4-popup-whiskermenu"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml" || fail 'tecla Windows nao abre menu'
+need config/includes.chroot/usr/share/applications/enfoque-menu.desktop
+need config/includes.chroot/usr/local/bin/enfoque-desktop-shell
+need config/includes.chroot/usr/local/bin/enfoque-super-key
+grep -Fq 'Super_L=Control_L|Escape' "$ROOT/config/includes.chroot/usr/local/bin/enfoque-super-key" || fail 'tecla Windows nao inicia menu'
+grep -Fq '&lt;Primary&gt;Escape' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml" || fail 'atalho do menu GTK ausente'
 grep -Fq 'p=10;' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'barra inferior ausente'
 grep -Fq 'https://enfoquepapelaria.meusige.com.br/' "$ROOT/config/includes.chroot/etc/skel/Desktop/SIGE.desktop" || fail 'atalho SIGE errado'
 grep -Fq 'https://intranet.enfoquepapelaria.com.br/' "$ROOT/config/includes.chroot/etc/skel/Desktop/Intranet.desktop" || fail 'atalho Intranet errado'
@@ -131,7 +133,7 @@ for name in xfce4-pulseaudio-plugin pulseaudio pavucontrol alsa-utils network-ma
   grep -Fxq "$name" "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail "pacote essencial ausente: $name"
 done
 grep -Fq 'value="pulseaudio"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'controle clicavel de audio ausente'
-grep -Fq '%d/%m/%Y' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'data nao aparece no relogio'
+grep -Fq 'strftime("%d/%m/%Y")' "$ROOT/config/includes.chroot/usr/local/bin/enfoque-relogio-painel" || fail 'data nao aparece no relogio'
 grep -Fq 'meusige.com.br/sistema' "$ROOT/config/includes.chroot/usr/share/applications/enfoque-sige.desktop" || fail 'SIGE aponta para pagina errada'
 for name in enfoque-start enfoque-central enfoque-suporte enfoque-diagnostico enfoque-sobre enfoque-inscrever; do
   need "config/includes.chroot/usr/share/icons/hicolor/scalable/apps/$name.svg"
@@ -160,6 +162,6 @@ if grep -Fxq 'calamares-settings-debian' "$ROOT/config/package-lists/enfoque-bas
 fi
 grep -Fq 'greeter-hide-users=false' "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-login-instalado" || fail 'login de usuario nao aparece'
 grep -Fq 'autologin-user=' "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-login-instalado" || fail 'login automatico nao desabilitado'
-grep -Fq 'digital-date-format' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'data deve aparecer no relogio'
+grep -Fq 'strftime("%H:%M")' "$ROOT/config/includes.chroot/usr/local/bin/enfoque-relogio-painel" || fail 'horario deve aparecer no relogio'
 
 echo 'OK: boot BIOS/EFI, Chrome, painel USB, CUPS, suporte e atalhos SIGE/Intranet.'

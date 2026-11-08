@@ -154,6 +154,12 @@ def configure_system(disk, esp, root):
     timezone_file = TARGET / "usr/share/zoneinfo/America/Sao_Paulo"
     if not timezone_file.is_file():
         raise RuntimeError("Fuso horario America/Sao_Paulo nao esta disponivel.")
+    # Primeiro-uso somente em novas instalacoes Enfoque OS. Nao iniciar em
+    # computadores atualizados pelo APT nem no ambiente Live.
+    onboarding = TARGET / "etc/enfoque-os/primeiro-uso-habilitado"
+    onboarding.parent.mkdir(parents=True,exist_ok=True)
+    onboarding.write_text("Assistente visual de primeiro uso nesta instalacao.\n",
+                           encoding="utf-8")
     (TARGET / "etc/timezone").write_text("America/Sao_Paulo\n")
     localtime = TARGET / "etc/localtime"
     localtime.unlink(missing_ok=True)
@@ -191,7 +197,7 @@ def configure_system(disk, esp, root):
     run(["chroot", str(TARGET), "/usr/bin/ssh-keygen", "-A"], timeout=90)
     run(["chroot", str(TARGET), "/usr/sbin/locale-gen"], timeout=150)
     run(["chroot", str(TARGET), "/usr/sbin/useradd", "-m", "-s", "/bin/bash",
-         "-G", "sudo,audio,video,plugdev,netdev,dialout,lp", "enfoque"], timeout=60)
+          "-G", "sudo,audio,video,plugdev,netdev,dialout,lp,enfoque-remote", "enfoque"], timeout=60)
     # The universal initial code is intentionally short-lived: PAM requires
     # changing it on the first installed login (never for remote control).
     run(["chroot", str(TARGET), "/usr/sbin/chpasswd"], input="enfoque:123456\n")

@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""XFCE tray printer icon (17 px): visible for configured queues or real detected USB/IPP printers."""
+import html
+import pathlib
+import re
+import subprocess
+
+def query(argv,timeout=4):
+    try:
+        p=subprocess.run(argv,capture_output=True,text=True,timeout=timeout)
+        return p.stdout if p.returncode==0 else ""
+    except (FileNotFoundError,subprocess.TimeoutExpired):
+        return ""
+
+def queues():
+    return [m.group(1) for line in query(["lpstat","-v"]).splitlines()
+            if (m:=re.match(r"device for ([A-Za-z0-9_.-]+):\s*(.+)",line))]
+
+def discover():
+    discovered=[]
+    for line in query(["lpinfo","-v"],timeout=5).splitlines():
+        values=line.split(maxsplit=1)
+        if len(values)!=2:continue
+        kind,uri=values
+        if uri.startswith(("usb://","ippusb://","dnssd://","ipp://localhost","ipps://localhost")):
+            discovered.append(uri[:140])
+    # USB class 07 (Printer): fallback even when CUPS is not running.
+    sysusb=pathlib.Path("/sys/bus/usb/devices")
+    try:
+        for interface in sysusb.glob("*/bInterfaceClass"):
+            if interface.read_text().strip().lower() in ("07","7"):
+                discovered.append("USB "+interface.parent.name)
+    except OSError:
+        pass
+    return list(dict.fromkeys(discovered))
+
+q=queues()
+d=discover()
+if q or d:
+    print("<img>/usr/share/icons/EnfoqueFluent/scalable/apps/enfoque-printer.svg</img>")
+    print("<txtclick>/usr/local/bin/enfoque-desktop-shell printers</txtclick>")
+    names=", ".join(q[:3]) if q else "Aguardando configuração de fila"
+    info=f"{len(q)} impressora(s) configurada(s); {len(d)} dispositivo(s) detectado(s): {names}"
+    print("<tool>"+html.escape(info)+"</tool>")
+else:
+    print("<txt></txt>")

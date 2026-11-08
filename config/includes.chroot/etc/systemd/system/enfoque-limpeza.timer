@@ -1,0 +1,12 @@
+[Unit]
+Description=Enfoque OS - vigiar cache a cada 6 horas
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=6h
+RandomizedDelaySec=20min
+Persistent=true
+Unit=enfoque-limpeza.service
+
+[Install]
+WantedBy=timers.target

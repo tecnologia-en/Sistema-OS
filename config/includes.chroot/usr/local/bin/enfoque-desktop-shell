@@ -1,0 +1,536 @@
+#!/usr/bin/env python3
+"""Enfoque OS: menu tipo Windows 11, notificacoes persistentes e painel de impressoras.
+GTK3/XFCE nativos; protocolo de controle via socket local do proprio usuario.
+Nao concede privilegios e nunca instala drivers por conta propria.
+"""
+import os
+import sys
+import json
+import socket
+import threading
+import subprocess
+import shutil
+import datetime
+import time
+from pathlib import Path
+import configparser
+import gi
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gtk, Gdk, GLib, Gio, Pango
+
+APP_IDS = [
+    ("google-chrome.desktop", "Google Chrome", "google-chrome"),
+    ("thunar.desktop", "Arquivos", "system-file-manager"),
+    ("enfoque-intranet.desktop", "Intranet", "enfoque-intranet"),
+    ("enfoque-sige.desktop", "SIGE", "enfoque-sige"),
+    ("libreoffice-writer.desktop", "Writer", "libreoffice-writer"),
+    ("libreoffice-calc.desktop", "Calc", "libreoffice-calc"),
+    ("xfce4-terminal.desktop", "Terminal", "utilities-terminal"),
+    ("mousepad.desktop", "Editor", "accessories-text-editor"),
+    ("system-config-printer.desktop", "Impressoras", "printer"),
+    ("enfoque-recuperacao.desktop", "Consertar meu PC", "enfoque-recuperacao"),
+    ("xfce-settings-manager.desktop", "Configurações", "preferences-system"),
+    ("ristretto.desktop", "Imagens", "ristretto"),
+    ("enfoque-central.desktop", "Central Enfoque", "enfoque-os"),
+]
+CSS = b"""
+.enfoque-surface {
+ background: rgba(20, 37, 68, 0.98);
+ border: 1px solid rgba(131, 182, 239, 0.65);
+ border-radius: 19px;
+ color: #f1f7ff;
+ box-shadow: 0 17px 39px rgba(5, 23, 54, .44);
+}
+.enfoque-surface label { color: #f1f7ff; }
+.enfoque-title {font-weight: 700; font-size: 15px; color: #f7fbff;}
+.enfoque-heading {font-size: 11px;font-weight: 700;color: #dcecff;}
+.enfoque-muted {font-size: 10px; color: #afc9e5;}
+.enfoque-search {
+  min-height: 37px;
+  border: 1px solid #7caedb;
+  border-radius: 10px;
+  background: #e9f4ff;
+  color: #24466f;
+}
+.enfoque-search text {color: #1e3c64;}
+.enfoque-tile {
+ background: transparent;
+ border: 1px solid transparent;
+ border-radius: 12px;
+ min-width: 92px;
+ min-height: 78px;
+ padding: 9px 4px 8px 4px;
+}
+.enfoque-tile:hover {background: rgba(125,177,244,.28);border-color: rgba(199,230,255,.2);}
+.enfoque-tile label {font-size: 10px;color: #f0f6ff;}
+.enfoque-row {border: 1px solid rgba(199,222,255,.13);border-radius: 11px;
+  background: rgba(207,232,255,.065);padding: 10px;}
+.enfoque-row:hover {background: rgba(182,211,250,.14);}
+.enfoque-action {
+ background: rgba(127,179,240,.18);
+ border: 1px solid rgba(163,214,255,.38);
+ border-radius: 10px; padding: 7px 13px;color:#e7f3ff;
+}
+.enfoque-action:hover {background: rgba(145,206,255,.32);}
+.enfoque-footer {background: rgba(3,20,51,.29);border-radius: 0 0 18px 18px;}
+progressbar trough {min-height:7px; background:#25446e;border-radius:6px;}
+progressbar progress {background:#6bc9ff;border-radius:6px;}
+"""
+def styled(widget, name):
+    widget.get_style_context().add_class(name)
+    return widget
+
+def label(text, kind=None, xalign=0):
+    w=Gtk.Label(label=text)
+    w.set_xalign(xalign)
+    if kind:
+        styled(w, kind)
+    return w
+
+def icon(name, size=32):
+    return Gtk.Image.new_from_icon_name(name or "application-x-executable", Gtk.IconSize.DIALOG if size>=32 else Gtk.IconSize.BUTTON)
+
+def command_exists(program):
+    return shutil.which(program) is not None
+
+def spawn_argv(args):
+    try:
+        subprocess.Popen(args, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except (OSError, ValueError):
+        return False
+
+def run_app(desktop_id):
+    if desktop_id.endswith(".desktop") and not any(c in desktop_id for c in "/\\\x00"):
+        # The app remains under the current, unprivileged Linux user.
+        return spawn_argv(["gtk-launch",desktop_id.removesuffix(".desktop")])
+    return False
+
+def status_file():
+    root=Path("/var/lib/enfoque-os/hardware-status.json")
+    if root.exists():
+        return root
+    return Path.home()/".local/state/enfoque-os/hardware-status.json"
+
+def hardware_status():
+    f=status_file()
+    try:
+        return json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"mode":"sem_dados", "video":{}, "printers":[], "events":[]}
+
+def disk_health_status():
+    path=Path("/var/lib/enfoque-os/health-status.json")
+    if not path.is_file():
+        path=Path.home()/".local/state/enfoque-os/health-status.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError,ValueError):
+        return {"warnings":[],"status":"indisponivel"}
+
+def known_queues():
+    if not command_exists("lpstat"):
+        return []
+    try:
+        r=subprocess.run(["lpstat","-v"],text=True,capture_output=True,timeout=3,check=False)
+        if r.returncode:
+            return []
+        import re
+        return [(m.group(1),m.group(2)) for line in r.stdout.splitlines()
+                if (m:=re.match(r"device for ([A-Za-z0-9_.-]+):\s*(.+)",line))]
+    except (OSError,subprocess.TimeoutExpired):
+        return []
+
+class DesktopShell:
+    def __init__(self):
+        self.open_panel=None
+        self.windows={}
+        self.menu_buttons=[]
+        self.search_text=None
+        self.init_css()
+        self.build_menu()
+        self.build_notifications()
+        self.build_printers()
+        self.build_calendar()
+        GLib.timeout_add(1800,self.refresh)
+    def init_css(self):
+        provider=Gtk.CssProvider()
+        provider.load_from_data(CSS)
+        Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(),provider,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+    def geometry(self,name):
+        scr=Gdk.Screen.get_default()
+        sw,sh=scr.get_width(),scr.get_height()
+        if name=="menu":
+            w,h=min(612,sw-20),min(585,sh-76)
+            x=max(7,(sw-w)//2)
+        elif name=="notifications":
+            w,h=min(422,sw-22),min(580,sh-76)
+            x=sw-w-12
+        elif name=="printers":
+            w,h=min(418,sw-22),min(465,sh-76)
+            x=sw-w-12
+        else:
+            w,h=min(354,sw-22),min(415,sh-76)
+            x=sw-w-12
+        return x,max(8,sh-h-63),w,h
+    def window(self,name,title):
+        win=Gtk.Window(Gtk.WindowType.TOPLEVEL)
+        win.set_title(title)
+        win.set_decorated(False)
+        win.set_skip_taskbar_hint(True)
+        win.set_skip_pager_hint(True)
+        win.set_keep_above(True)
+        win.set_resizable(False)
+        win.set_type_hint(Gdk.WindowTypeHint.UTILITY)
+        win.set_border_width(0)
+        styled(win,"enfoque-surface")
+        x,y,w,h=self.geometry(name)
+        win.set_default_size(w,h)
+        win.set_size_request(w,h)
+        win.move(x,y)
+        win.connect("focus-out-event", lambda *_:GLib.idle_add(win.hide))
+        win.connect("key-press-event", lambda _,event: win.hide() if event.keyval==Gdk.KEY_Escape else None)
+        self.windows[name]=win
+        return win
+    def header(self,heading,win):
+        row=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=12)
+        row.set_margin_start(20);row.set_margin_end(20)
+        row.set_margin_top(14);row.set_margin_bottom(9)
+        head=label(heading,"enfoque-title")
+        row.pack_start(head,True,True,0)
+        btn=styled(Gtk.Button(label="✕"),"enfoque-action")
+        btn.connect("clicked",lambda *_:win.hide())
+        row.pack_end(btn,False,False,0)
+        return row
+    def scroll(self,box):
+        sc=Gtk.ScrolledWindow()
+        sc.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC)
+        sc.set_shadow_type(Gtk.ShadowType.NONE)
+        sc.add(box)
+        return sc
+    def build_menu(self):
+        win=self.window("menu","Menu Enfoque OS")
+        outer=Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        win.add(outer)
+        search=styled(Gtk.SearchEntry(),"enfoque-search")
+        search.set_placeholder_text("Pesquisar aplicativos, arquivos e configurações")
+        search.set_margin_start(20);search.set_margin_end(20);search.set_margin_top(21);search.set_margin_bottom(15)
+        search.connect("search-changed",self.filter_apps)
+        search.connect("activate",self.launch_first)
+        outer.pack_start(search,False,False,0)
+        self.search_text=search
+        heading=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        heading.set_margin_start(23);heading.set_margin_end(22);heading.set_margin_bottom(10)
+        heading.pack_start(label("Fixados","enfoque-heading"),True,True,0)
+        btn=styled(Gtk.Button(label="Todos os aplicativos ›"),"enfoque-action")
+        btn.connect("clicked",lambda *_:self.filter_apps(None,show_all=True))
+        heading.pack_end(btn,False,False,0)
+        outer.pack_start(heading,False,False,0)
+        fl=Gtk.FlowBox()
+        fl.set_selection_mode(Gtk.SelectionMode.NONE)
+        fl.set_homogeneous(True)
+        fl.set_max_children_per_line(5)
+        fl.set_min_children_per_line(5)
+        fl.set_row_spacing(5)
+        fl.set_column_spacing(4)
+        fl.set_margin_start(20);fl.set_margin_end(20)
+        self.fl=fl
+        outer.pack_start(fl,False,False,0)
+        self.populate_apps()
+        spacer=Gtk.Box()
+        outer.pack_start(spacer,True,True,0)
+        recommended=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=7)
+        recommended.set_margin_start(22);recommended.set_margin_end(22);recommended.set_margin_bottom(12)
+        recommended.pack_start(label("Recomendados","enfoque-heading"),False,False,0)
+        for desktop_id,title,ico in [("enfoque-intranet.desktop","Portal Intranet","enfoque-intranet"),("thunar.desktop","Arquivos e pastas","system-file-manager")]:
+            b=styled(Gtk.Button(),"enfoque-row")
+            h=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=12)
+            h.pack_start(icon(ico,24),False,False,1)
+            h.pack_start(label(title),True,True,0)
+            b.add(h)
+            b.connect("clicked",lambda _,d=desktop_id:self.launch(d))
+            recommended.pack_start(b,False,False,0)
+        outer.pack_start(recommended,False,False,0)
+        footer=styled(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=12),"enfoque-footer")
+        footer.set_margin_top(4);footer.set_border_width(14)
+        footer.pack_start(icon("avatar-default-symbolic",24),False,False,2)
+        footer.pack_start(label("Enfoque OS  •  XFCE"),True,True,0)
+        power=styled(Gtk.Button(label="⏻"),"enfoque-action")
+        power.set_tooltip_text("Opções de sessão")
+        power.connect("clicked",lambda *_:self.launch_command(["xfce4-session-logout"]))
+        footer.pack_end(power,False,False,0)
+        outer.pack_end(footer,False,False,0)
+    def populate_apps(self,search="",show_all=False):
+        for c in list(self.fl.get_children()):
+            self.fl.remove(c)
+        self.menu_buttons.clear()
+        apps=APP_IDS
+        if show_all:
+            apps=[]
+            try:
+                from gi.repository import Gio
+                for info in Gio.AppInfo.get_all():
+                    if not info.should_show():
+                        continue
+                    ident=info.get_id()
+                    if ident:
+                        apps.append((ident,info.get_display_name() or ident,"application-x-executable"))
+                apps.sort(key=lambda a:a[1].casefold())
+            except Exception:
+                apps=APP_IDS
+        search=(search or "").casefold()
+        for ident,name,ico in apps:
+            if search and search not in name.casefold():
+                continue
+            b=styled(Gtk.Button(),"enfoque-tile")
+            box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=5)
+            box.set_halign(Gtk.Align.CENTER)
+            box.pack_start(icon(ico,42),False,False,0)
+            txt=label(name)
+            txt.set_justify(Gtk.Justification.CENTER)
+            txt.set_xalign(.5)
+            txt.set_max_width_chars(13)
+            txt.set_ellipsize(Pango.EllipsizeMode.END)
+            box.pack_start(txt,False,False,0)
+            b.add(box)
+            b.connect("clicked",lambda _,d=ident:self.launch(d))
+            b.set_tooltip_text(name)
+            self.fl.add(b)
+            self.menu_buttons.append((b,ident))
+        self.fl.show_all()
+    def filter_apps(self,widget,show_all=False):
+        text=self.search_text.get_text() if self.search_text else ""
+        self.populate_apps(text, show_all=show_all or bool(text))
+    def launch_first(self,_):
+        if self.menu_buttons:
+            self.launch(self.menu_buttons[0][1])
+    def launch(self,ident):
+        self.windows["menu"].hide()
+        if not run_app(ident):
+            self.message("Aplicativo indisponível","Este aplicativo não foi encontrado nesta sessão.")
+    def launch_command(self,argv):
+        self.hide_all()
+        if not spawn_argv(argv):
+            self.message("Não foi possível abrir","O programa não está instalado neste ambiente.")
+    def message(self,title,description):
+        dlg=Gtk.MessageDialog(transient_for=None,flags=Gtk.DialogFlags.MODAL,
+             message_type=Gtk.MessageType.INFO,buttons=Gtk.ButtonsType.OK,text=title)
+        dlg.format_secondary_text(description)
+        dlg.run()
+        dlg.destroy()
+    def build_notifications(self):
+        win=self.window("notifications","Central de notificações")
+        outer=Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        win.add(outer)
+        outer.pack_start(self.header("Central de notificações",win),False,False,0)
+        self.notif_details=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=9)
+        self.notif_details.set_border_width(15)
+        outer.pack_start(self.scroll(self.notif_details),True,True,0)
+        footer=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=7)
+        footer.set_margin_start(15);footer.set_margin_end(15);footer.set_margin_bottom(13)
+        b=styled(Gtk.Button(label="Atualizar"),"enfoque-action")
+        b.connect("clicked",lambda *_:self.refresh_notifications(force=True))
+        footer.pack_start(b,False,False,0)
+        b2=styled(Gtk.Button(label="Configurar impressoras"),"enfoque-action")
+        b2.connect("clicked",lambda *_:self.toggle("printers"))
+        footer.pack_end(b2,False,False,0)
+        outer.pack_end(footer,False,False,0)
+        self.last_snapshot=None
+        self.refresh_notifications(force=True)
+    def refresh_notifications(self,force=False):
+        data=hardware_status()
+        snapshot=json.dumps(data,sort_keys=True,ensure_ascii=False)
+        if not force and snapshot==self.last_snapshot:
+            return
+        self.last_snapshot=snapshot
+        for c in self.notif_details.get_children():
+            self.notif_details.remove(c)
+        if data.get("mode")=="laboratorio":
+            self.notif_details.pack_start(label("LABORATÓRIO — sem equipamentos físicos conectados","enfoque-muted"),False,False,1)
+        section=data.get("video",{})
+        if section:
+            self.add_notice("🎮  Vídeo",section.get("adapter","Hardware gráfico"),
+                 section.get("message") or section.get("state","Aguardando verificação"),
+                 section.get("progress"))
+        printers=data.get("printers",[])
+        if printers:
+            for item in printers[:9]:
+                self.add_notice("🖨  "+item.get("name","Impressora"),
+                    item.get("connection",""),item.get("message") or item.get("state","Detectada"),item.get("progress"))
+        for event in list(data.get("events",[]))[-16:][::-1]:
+            self.add_notice(event.get("title","Dispositivo"),event.get("detail",""),
+                            event.get("state",""),event.get("progress"))
+        health=disk_health_status()
+        for warning in health.get("warnings",[])[:8]:
+            self.add_notice("⚠  Saúde do computador",warning,"Atenção — contate a TI",None)
+        if not (section or printers or data.get("events") or health.get("warnings")):
+            self.notif_details.pack_start(label("Nenhuma instalação em andamento."),False,False,6)
+            self.notif_details.pack_start(label("A detecção de impressoras e vídeo aparecerá aqui.","enfoque-muted"),False,False,4)
+        self.notif_details.show_all()
+    def add_notice(self,title,detail,state,progress):
+        card=styled(Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=5),"enfoque-row")
+        card.pack_start(label(title,"enfoque-heading"),False,False,0)
+        if detail:
+            card.pack_start(label(str(detail)[:170],"enfoque-muted"),False,False,0)
+        if state:
+            w=label(str(state)[:230])
+            w.set_line_wrap(True)
+            card.pack_start(w,False,False,0)
+        if progress is not None:
+            try:
+                percent=max(0,min(100,int(progress)))
+                bar=Gtk.ProgressBar()
+                bar.set_fraction(percent/100.)
+                bar.set_show_text(True)
+                bar.set_text(f"{percent}% — progresso por etapas")
+                card.pack_start(bar,False,False,0)
+            except (ValueError,TypeError):
+                pass
+        self.notif_details.pack_start(card,False,False,0)
+    def build_printers(self):
+        win=self.window("printers","Impressoras")
+        outer=Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        win.add(outer)
+        outer.pack_start(self.header("Impressoras conectadas",win),False,False,0)
+        self.printer_content=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10)
+        self.printer_content.set_border_width(16)
+        outer.pack_start(self.scroll(self.printer_content),True,True,0)
+        footer=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=8)
+        footer.set_margin_start(16);footer.set_margin_end(16);footer.set_margin_bottom(16)
+        b=styled(Gtk.Button(label="Atualizar"),"enfoque-action")
+        b.connect("clicked",lambda *_:self.refresh_printers())
+        footer.pack_start(b,False,False,0)
+        settings=styled(Gtk.Button(label="Configurar impressoras"),"enfoque-action")
+        settings.connect("clicked",lambda *_:self.launch_command(["system-config-printer"]))
+        footer.pack_end(settings,False,False,0)
+        outer.pack_end(footer,False,False,0)
+    def refresh_printers(self):
+        for c in self.printer_content.get_children():
+            self.printer_content.remove(c)
+        queues=known_queues()
+        data=hardware_status()
+        discovered=[]
+        for item in data.get("printers",[]):
+            if item.get("state") in ("detectada","pendente"):
+                discovered.append((item.get("name","Impressora identificada"),item.get("connection","")))
+        if not queues:
+            self.printer_content.pack_start(label("Nenhuma impressora configurada no momento."),False,False,1)
+        for name,uri in queues:
+            row=styled(Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=4),"enfoque-row")
+            row.pack_start(label("🖨   "+name,"enfoque-heading"),False,False,0)
+            row.pack_start(label(uri[:120],"enfoque-muted"),False,False,0)
+            self.printer_content.pack_start(row,False,False,0)
+        for name,uri in discovered[:12]:
+            row=styled(Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=4),"enfoque-row")
+            row.pack_start(label("🖨   "+name+" — aguardando configuração","enfoque-heading"),False,False,0)
+            row.pack_start(label(uri[:120],"enfoque-muted"),False,False,0)
+            self.printer_content.pack_start(row,False,False,0)
+        if not (queues or discovered):
+            self.printer_content.pack_start(label("Conecte uma impressora IPP/USB e acompanhe a detecção nas notificações.","enfoque-muted"),False,False,2)
+        self.printer_content.show_all()
+    def build_calendar(self):
+        win=self.window("calendar","Calendário")
+        outer=Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        win.add(outer)
+        outer.pack_start(self.header("Data e horário",win),False,False,0)
+        cal=Gtk.Calendar()
+        cal.set_margin_start(15);cal.set_margin_end(15);cal.set_margin_top(15)
+        outer.pack_start(cal,True,True,0)
+        self.calendar_date=label(datetime.datetime.now().strftime("%d/%m/%Y"))
+        self.calendar_date.set_margin_bottom(14)
+        outer.pack_end(self.calendar_date,False,False,0)
+    def hide_all(self):
+        for w in self.windows.values():
+            w.hide()
+        self.open_panel=None
+    def toggle(self,name):
+        if name not in self.windows:
+            return
+        win=self.windows[name]
+        was=win.get_visible()
+        self.hide_all()
+        if was:
+            return
+        if name=="notifications":
+            self.refresh_notifications(force=True)
+        elif name=="printers":
+            self.refresh_printers()
+        elif name=="menu":
+            self.search_text.set_text("")
+            self.populate_apps()
+        elif name=="calendar":
+            self.calendar_date.set_text(datetime.datetime.now().strftime("%d/%m/%Y"))
+        x,y,w,h=self.geometry(name)
+        win.move(x,y)
+        win.show_all()
+        win.present()
+        if name=="menu":
+            self.search_text.grab_focus()
+        self.open_panel=name
+    def refresh(self):
+        if self.windows["notifications"].get_visible():
+            self.refresh_notifications()
+        if self.windows["printers"].get_visible():
+            self.refresh_printers()
+        return True
+
+def get_sock():
+    folder=Path(os.environ.get("XDG_RUNTIME_DIR") or (Path.home()/".cache/enfoque-os"))
+    folder.mkdir(parents=True,exist_ok=True)
+    return folder/f"enfoque-shell-{os.getuid()}.sock"
+
+def send_existing(sock_path,command):
+    try:
+        with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as c:
+            c.settimeout(.6)
+            c.connect(str(sock_path))
+            c.sendall(command.encode("ascii","ignore")[:100]+b"\n")
+            return True
+    except (ConnectionError,TimeoutError,OSError):
+        return False
+
+def main():
+    cmd=sys.argv[1] if len(sys.argv)>1 else "menu"
+    if cmd not in {"menu","notifications","printers","calendar","daemon","hide"}:
+        print("Uso: enfoque-desktop-shell {menu|notifications|printers|calendar|daemon|hide}")
+        return 2
+    path=get_sock()
+    if send_existing(path,cmd):
+        return 0
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        pass
+    srv=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+    try:
+        srv.bind(str(path))
+        os.chmod(path,0o600)
+        srv.listen(4)
+    except OSError as exc:
+        print("Nao foi possivel iniciar Enfoque Shell:",exc,file=sys.stderr)
+        return 1
+    gui=DesktopShell()
+    def accept_commands():
+        while True:
+            try:
+                con,_=srv.accept()
+                with con:
+                    data=con.recv(150).decode("ascii","ignore").strip()
+                if data=="hide":
+                    GLib.idle_add(gui.hide_all)
+                elif data in gui.windows:
+                    GLib.idle_add(gui.toggle,data)
+            except (OSError,ValueError):
+                break
+    threading.Thread(target=accept_commands,daemon=True).start()
+    if cmd in gui.windows:
+        GLib.idle_add(gui.toggle,cmd)
+    try:
+        Gtk.main()
+    finally:
+        srv.close()
+        path.unlink(missing_ok=True)
+    return 0
+
+if __name__=="__main__":
+    sys.exit(main())

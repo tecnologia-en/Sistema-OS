@@ -1,0 +1,26 @@
+#!/usr/bin/env python3
+"""Notification bell: persistent hardware stages are visible in native GTK panel."""
+import json, os, pathlib, html
+p=pathlib.Path("/var/lib/enfoque-os/hardware-status.json")
+if not p.is_file():
+    p=pathlib.Path.home()/".local/state/enfoque-os/hardware-status.json"
+count=0
+try:
+    d=json.loads(p.read_text())
+    count=sum(1 for e in d.get("events",[])[-15:] if e.get("state","").lower() in
+              ("instalando","detectando","erro","aguardando","enviando","atenção"))
+except (OSError,ValueError):
+    pass
+health=pathlib.Path("/var/lib/enfoque-os/health-status.json")
+if not health.exists():
+    health=pathlib.Path.home()/".local/state/enfoque-os/health-status.json"
+try:
+    d=json.loads(health.read_text())
+    count+=min(8,len(d.get("warnings",[])))
+except (OSError,ValueError):
+    pass
+print('<img>/usr/share/icons/EnfoqueFluent/scalable/apps/enfoque-bell.svg</img>')
+if count:
+    print('<txt><span font_desc="Noto Sans Bold 9" foreground="#BDE9FF">'+str(count)+'</span></txt>')
+print('<txtclick>/usr/local/bin/enfoque-desktop-shell notifications</txtclick>')
+print('<tool>Notificações da Enfoque · '+str(count)+' eventos em andamento</tool>')

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Impressoras Enfoque
+Exec=/usr/local/bin/enfoque-desktop-shell printers
+Icon=enfoque-printer
+Categories=HardwareSettings;Settings;
+Terminal=false

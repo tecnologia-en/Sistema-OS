@@ -1,0 +1,258 @@
+#!/usr/bin/env python3
+"""Central de Recuperacao Enfoque OS — GTK nativo. Acoes reais exigem pkexec."""
+import datetime as dt
+import json
+import os
+import pathlib
+import subprocess
+import sys
+import threading
+import gi
+gi.require_version("Gtk","3.0")
+from gi.repository import Gtk,GLib,Gdk,Gio,Pango
+
+HELPER="/usr/local/sbin/enfoque-manutencao"
+IS_LAB=pathlib.Path("/.dockerenv").exists()
+UI_STYLE=b"""
+.enfoque-recovery {background: #f4f8ff;color:#1d3b63;}
+.enfoque-recovery label {color:#223f62;}
+.title {font-size:23px;font-weight:800;color:#175fb0;}
+.subtitle {font-size:12px;color:#617c9c;}
+.section {font-size:15px;font-weight:700;color:#145ba8;}
+.status {background:#e7f1fc;border:1px solid #c4ddf8;border-radius:12px;padding:12px;}
+.action {background:#fff;border:1px solid #d5e5f5;border-radius:12px; padding:12px;}
+.action:hover {background:#e9f4ff;}
+.action label {color:#1c416e;}
+.success label {color:#187744;}
+.warning label {color:#9c5a17;}
+.enfoque-primary {background:#1d71ce;color:#fff;border-radius:10px;border:1px solid #1d71ce;padding:10px 15px;}
+.enfoque-primary label{color:white;}
+"""
+ACTIONS=[
+  ("limpeza-segura","Limpar arquivos temporários","Remove apenas cache seguro; não apaga documentos, Chrome ou arquivos do caixa.","user-trash-symbolic"),
+  ("impressao","Consertar impressora","Reinicia o serviço CUPS, sem apagar trabalhos de impressão.","printer-symbolic"),
+  ("rede-dns","Corrigir DNS e conexão","Recarrega configurações e limpa cache DNS; não desliga o Wi-Fi.","network-wireless-symbolic"),
+  ("som","Consertar áudio","Restaura controles de áudio ALSA.","audio-volume-high-symbolic"),
+  ("rede-completa","Reiniciar toda a rede","Pode desconectar o computador e encerrar o acesso remoto.","network-error-symbolic"),
+  ("fila-impressao","Limpar toda a fila de impressão","Cancela trabalhos pendentes; use só se tiver certeza.","edit-clear-all-symbolic"),
+]
+class Recovery(Gtk.Window):
+ def __init__(self):
+    super().__init__(title="Enfoque OS — Central de Recuperação")
+    self.set_default_size(895,645)
+    self.set_position(Gtk.WindowPosition.CENTER)
+    self.connect("destroy",Gtk.main_quit)
+    css=Gtk.CssProvider();css.load_from_data(UI_STYLE)
+    Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(),css,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+    self.get_style_context().add_class("enfoque-recovery")
+    outer=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=0)
+    self.add(outer)
+    head=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=5)
+    head.set_border_width(22)
+    tit=Gtk.Label(label="🛡  Central de Recuperação");tit.set_xalign(0);tit.get_style_context().add_class("title")
+    sub=Gtk.Label(label="Evitar problemas, diagnosticar e consertar o Enfoque OS sem complicações.")
+    sub.set_xalign(0);sub.get_style_context().add_class("subtitle")
+    head.pack_start(tit,False,False,0);head.pack_start(sub,False,False,0)
+    outer.pack_start(head,False,False,0)
+    self.info=Gtk.InfoBar()
+    self.info.set_message_type(Gtk.MessageType.INFO)
+    msg=Gtk.Label(label="LABORATÓRIO: o Linux aqui não tem discos, impressoras ou Wi-Fi físicos; nenhuma correção real é executada.")
+    msg.set_line_wrap(True);self.info.get_content_area().add(msg)
+    self.info.set_no_show_all(False)
+    outer.pack_start(self.info,False,False,0)
+    self.info.set_visible(IS_LAB)
+    tabs=Gtk.Notebook();tabs.set_tab_pos(Gtk.PositionType.TOP)
+    outer.pack_start(tabs,True,True,0)
+    self.pages={}
+    for key,title in [("home","Visão geral"),("repair","Consertar meu PC"),
+                      ("restore","Restauração"),("backup","Backup"),
+                      ("support","Pedir ajuda")]:
+        box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=13)
+        box.set_border_width(20)
+        sc=Gtk.ScrolledWindow();sc.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC)
+        sc.add(box);tabs.append_page(sc,Gtk.Label(label=title))
+        self.pages[key]=box
+    self.make_home();self.make_repair();self.make_restore();self.make_backup();self.make_support()
+    footer=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=10)
+    footer.set_border_width(12)
+    self.last=Gtk.Label(label="Pronto para verificar.")
+    self.last.set_xalign(0);self.last.get_style_context().add_class("subtitle")
+    footer.pack_start(self.last,True,True,0)
+    refresh=self.button("↻ Atualizar diagnóstico",self.load_status,primary=True)
+    footer.pack_end(refresh,False,False,0)
+    outer.pack_end(footer,False,False,0)
+    GLib.idle_add(self.load_status)
+ def text(self,word,section=False):
+    item=Gtk.Label(label=word)
+    item.set_xalign(0);item.set_line_wrap(True)
+    if section:item.get_style_context().add_class("section")
+    return item
+ def button(self,word,callback,primary=False):
+    b=Gtk.Button(label=word)
+    if primary:b.get_style_context().add_class("enfoque-primary")
+    b.connect("clicked",lambda *_:callback())
+    return b
+ def card(self,page,title,desc,icon):
+    row=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=13)
+    row.get_style_context().add_class("action")
+    try:image=Gtk.Image.new_from_icon_name(icon,Gtk.IconSize.DIALOG);image.set_pixel_size(29)
+    except Exception:image=Gtk.Image()
+    row.pack_start(image,False,False,0)
+    col=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=4)
+    col.pack_start(self.text(title,section=True),False,False,0)
+    col.pack_start(self.text(desc),False,False,0)
+    row.pack_start(col,True,True,0)
+    page.pack_start(row,False,False,0)
+    return row
+ def make_home(self):
+    page=self.pages["home"]
+    page.pack_start(self.text("Situação do computador",True),False,False,0)
+    self.health=self.text("Carregando diagnósticos...")
+    self.health.set_selectable(True)
+    card=self.card(page,"Proteção e saúde","Visão de memória, disco, backup e restauração.","computer-symbolic")
+    card.pack_end(self.health,False,False,0)
+    self.network=self.text("Rede: aguardando consulta.")
+    n=self.card(page,"Conexão de rede","Diagnóstico de gateway, DNS e internet.","network-wireless-symbolic")
+    n.pack_end(self.network,False,False,0)
+    page.pack_start(self.text("Importante: por enquanto a raiz do sistema é EXT4. Não existe rollback automático de boot nem sistema imutável neste projeto.",False),False,False,0)
+ def make_repair(self):
+    page=self.pages["repair"]
+    page.pack_start(self.text("Escolha o problema para corrigir",True),False,False,0)
+    page.pack_start(self.text("Cada operação requer autorização e confirmação. Não vamos executar todas as correções às cegas."),False,False,0)
+    for ident,title,desc,ico in ACTIONS:
+        card=self.card(page,title,desc,ico)
+        button=self.button("Executar",lambda action=ident,name=title:self.ask_repair(action,name))
+        card.pack_end(button,False,False,0)
+ def make_restore(self):
+    page=self.pages["restore"]
+    page.pack_start(self.text("Pontos de restauração",True),False,False,0)
+    self.snapshot_text=self.text("Procurando configuração do Timeshift...")
+    page.pack_start(self.snapshot_text,False,False,0)
+    action=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=8)
+    action.pack_start(self.button("Criar ponto de restauração",self.snapshot),False,False,0)
+    action.pack_start(self.button("Abrir Timeshift",self.open_timeshift),False,False,0)
+    page.pack_start(action,False,False,0)
+    page.pack_start(self.text("Antes de restaurar, o administrador deve confirmar a versão e salvar arquivos pessoais. Em EXT4, a recuperação de falha de boot pode precisar de um pendrive Live. A opção não faz rollback automático."),False,False,0)
+ def make_backup(self):
+    page=self.pages["backup"]
+    page.pack_start(self.text("Backup criptografado dos arquivos pessoais",True),False,False,0)
+    self.backup_text=self.text("Verificando se foi configurado um destino seguro...")
+    page.pack_start(self.backup_text,False,False,0)
+    page.pack_start(self.text("Inclui os arquivos do usuário e o perfil local do navegador quando configurado. O destino e a chave de backup não vêm gravados na ISO."),False,False,0)
+    page.pack_start(self.button("Executar backup agora",self.backup),False,False,0)
+    page.pack_start(self.text("Sincronização entre computadores: somente com conta autorizada e política da empresa; não é automático por padrão."),False,False,0)
+ def make_support(self):
+    page=self.pages["support"]
+    page.pack_start(self.text("Solicitar ajuda da TI",True),False,False,0)
+    page.pack_start(self.text("A solicitação informa à TI que você precisa de ajuda. Esta tela não libera controle remoto automaticamente."),False,False,0)
+    self.issue=Gtk.TextView()
+    self.issue.set_wrap_mode(Gtk.WrapMode.WORD)
+    self.issue.set_size_request(-1,130)
+    page.pack_start(self.issue,False,False,0)
+    page.pack_start(self.button("Pedir ajuda",self.help_request,primary=True),False,False,0)
+    page.pack_start(self.text("Acesso remoto só terá consentimento obrigatório depois que a validação também for implementada no agente e no servidor. Até lá, solicite ajuda por canais corporativos habituais."),False,False,0)
+ def dialog(self,title,detail,kind=Gtk.MessageType.INFO):
+    d=Gtk.MessageDialog(self,0,kind,Gtk.ButtonsType.OK,title)
+    d.format_secondary_text(detail);d.run();d.destroy()
+ def confirm(self,title,desc):
+    d=Gtk.MessageDialog(self,0,Gtk.MessageType.WARNING,Gtk.ButtonsType.NONE,title)
+    d.format_secondary_text(desc)
+    d.add_buttons("Cancelar",Gtk.ResponseType.CANCEL,"Confirmar",Gtk.ResponseType.OK)
+    accepted=d.run()==Gtk.ResponseType.OK;d.destroy()
+    return accepted
+ def run_async(self,args,on_finish=None):
+    self.last.set_text("Executando diagnóstico...")
+    def work():
+        try:
+            result=subprocess.run(args,capture_output=True,text=True,timeout=150)
+            try:data=json.loads(result.stdout or "{}")
+            except ValueError:data={"ok":False,"error":result.stderr[-600:] or "Resposta inválida"}
+            if result.returncode!=0:data.setdefault("ok",False)
+        except (OSError,subprocess.TimeoutExpired) as exc:
+            data={"ok":False,"error":str(exc)}
+        GLib.idle_add(self.done,data,on_finish)
+    threading.Thread(target=work,daemon=True).start()
+ def done(self,data,callback=None):
+    self.last.set_text("Diagnóstico concluído." if data.get("ok",True) else "Verificação pendente.")
+    if callback:callback(data)
+    return False
+ def load_status(self):
+    self.run_async([sys.executable,HELPER,"status","--dry-run"] if IS_LAB else
+                   [sys.executable,HELPER,"status"],self.update_home)
+    self.run_async([sys.executable,HELPER,"rede","--dry-run"] if IS_LAB else
+                   [sys.executable,HELPER,"rede"],self.update_network)
+ def update_home(self,data):
+    sp=data.get("snapshot",{})
+    bk=data.get("backup",{})
+    disk=data.get("disk",{})
+    mem=data.get("memory",{})
+    self.health.set_text(
+       "Disco ocupado: "+str(disk.get("disk_usage_pct","?"))+"%  •  RAM livre: "+
+       str(mem.get("free_mb","?"))+" MB\n"+
+       "Restauração: "+("configurada" if sp.get("ready") else "não configurada")+
+       "  •  Backup: "+("configurado" if bk.get("configured") else "não configurado"))
+    self.snapshot_text.set_text(sp.get("message","Configuração indisponível."))
+    self.backup_text.set_text(bk.get("message","Backup indisponível."))
+ def update_network(self,data):
+    self.network.set_text(data.get("message","Diagnóstico não disponível."))
+ def ask_repair(self,action,name):
+    desc=dict((a,b) for a,b,_,_ in ACTIONS)[action] if False else next((txt for ident,title,txt,ico in ACTIONS if ident==action),"")
+    if not self.confirm(name,desc+"\n\nDeseja executar esta correção?"):
+        return
+    args=[HELPER,"repair",action]
+    if action=="rede-completa":args.append("--aceito-desconectar")
+    if action=="fila-impressao":args.append("--aceito-cancelar")
+    if IS_LAB:args.extend(["--dry-run"]);args.insert(0,sys.executable)
+    else:args.insert(0,"pkexec")
+    self.run_async(args,self.action_done)
+ def action_done(self,data):
+    if data.get("ok") is False:
+        self.dialog("Não foi possível concluir",data.get("error","Verifique as permissões e o serviço."),Gtk.MessageType.WARNING)
+    else:
+        self.dialog("Operação de laboratório" if data.get("simulated") else "Reparo concluído",
+                    data.get("message","Simulação concluída; computador físico não alterado."))
+    self.load_status()
+ def snapshot(self):
+    if not self.confirm("Criar ponto de restauração",
+                        "O Timeshift precisa estar configurado em disco apropriado. O processo pode ocupar espaço e tempo."):
+        return
+    self.run_async(([sys.executable,HELPER,"snapshot","--dry-run"] if IS_LAB else
+                    ["pkexec",HELPER,"snapshot"]),self.action_done)
+ def open_timeshift(self):
+    if IS_LAB:
+        self.dialog("Laboratório isolado","Timeshift precisa de um computador instalado e um disco de backup configurado.")
+        return
+    try:subprocess.Popen(["pkexec","timeshift-gtk"],start_new_session=True)
+    except OSError:self.dialog("Timeshift não abriu","Verifique se está instalado e se a conta tem acesso de administrador.")
+ def backup(self):
+    if not self.confirm("Iniciar backup","O backup só será executado se a TI configurou destino e chave de criptografia."):
+        return
+    self.run_async(([sys.executable,HELPER,"backup","--dry-run"] if IS_LAB else
+                    ["pkexec",HELPER,"backup"]),self.action_done)
+ def help_request(self):
+    buf=self.issue.get_buffer();a,b=buf.get_bounds()
+    detail=buf.get_text(a,b,True).strip()
+    if not detail:
+        self.dialog("Descreva o problema","Escreva brevemente o que está acontecendo.")
+        return
+    if len(detail)>1000:
+        self.dialog("Texto longo demais","Use até 1000 caracteres para a solicitação.")
+        return
+    # Save local text only; never claim delivery to remote IT.
+    root=pathlib.Path.home()/".local/state/enfoque-os"
+    try:
+        root.mkdir(parents=True,exist_ok=True,mode=0o700)
+        f=root/"help-request.json"
+        obj={"created_at":dt.datetime.now(dt.timezone.utc).isoformat(),
+             "description":detail,"status":"pendente_de_envio"}
+        f.write_text(json.dumps(obj,ensure_ascii=False,indent=2),encoding="utf-8")
+        f.chmod(0o600)
+        self.dialog("Solicitação registrada neste computador",
+                    "O pedido ficou salvo localmente. A integração de entrega ao servidor ainda precisa ser concluída; contate a TI pelos canais habituais.")
+    except OSError as exc:
+        self.dialog("Não foi possível salvar",str(exc),Gtk.MessageType.WARNING)
+
+if __name__=="__main__":
+    app=Recovery();app.show_all()
+    app.info.set_visible(IS_LAB)
+    Gtk.main()

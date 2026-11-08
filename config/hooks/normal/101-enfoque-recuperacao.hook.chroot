@@ -1,0 +1,14 @@
+#!/bin/sh
+# Ativar verificacoes de saude e backup condicionado a configuracao posterior.
+# Nao ativa instantaneos/rollback sem destino de backup apropriado.
+set -eu
+for bin in /usr/local/sbin/enfoque-manutencao /usr/local/sbin/enfoque-saude /usr/local/sbin/enfoque-limpeza-auto /usr/local/bin/enfoque-recuperacao /usr/local/bin/enfoque-primeiro-uso; do
+  test -f "$bin" && test ! -L "$bin"
+  chown root:root "$bin"
+  chmod 0755 "$bin"
+done
+systemctl enable enfoque-saude.timer
+systemctl enable enfoque-limpeza.timer
+systemctl enable enfoque-backup.timer
+# Backup apenas quando /etc/enfoque-os/backup.json e restic-password existirem.
+# No primeiro uso, o Centro de Recuperacao informa o status da configuracao.

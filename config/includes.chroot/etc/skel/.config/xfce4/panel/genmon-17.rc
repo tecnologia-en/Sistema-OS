@@ -1,0 +1,5 @@
+Command=/usr/local/bin/enfoque-impressoras-painel
+UseLabel=0
+Text=
+UpdatePeriod=6000
+Font=Noto Sans 10

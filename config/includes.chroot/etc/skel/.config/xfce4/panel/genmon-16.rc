@@ -1,0 +1,5 @@
+Command=/usr/local/bin/enfoque-notificacoes-painel
+UseLabel=0
+Text=
+UpdatePeriod=4000
+Font=Noto Sans 10

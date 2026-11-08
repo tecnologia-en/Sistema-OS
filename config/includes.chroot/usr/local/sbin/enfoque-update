@@ -187,7 +187,7 @@ def update_state():
     return todo
 
 
-def perform(kind, values, *, automatic=False):
+def perform(kind, values, *, automatic=False, skip_snapshot=False):
     verify_environment()
     if automatic and not AUTO.exists():
         return {"skipped": "modo automatico nao habilitado pela TI"}
@@ -219,8 +219,27 @@ def perform(kind, values, *, automatic=False):
                        PACKAGE + "=" + values[0]]
             else:
                 raise ValueError("Acao de manutencao desconhecida")
-            # APT validates signed repository metadata before upgrading.
-            # Never run downloaded scripts or user-supplied shell commands.
+            # Fail closed: no unattended package mutation without a verified
+            # pre-change Timeshift/Snapper snapshot. The user can opt out only
+            # with a deliberate CLI flag in a manual administrative session.
+            if not skip_snapshot:
+                result = subprocess.run(
+                    ["/usr/local/sbin/enfoque-manutencao", "snapshot",
+                     "Antes do Enfoque Update: " + kind],
+                    text=True, capture_output=True, timeout=3700, check=False)
+                if result.returncode:
+                    detail = result.stdout[-350:] or result.stderr[-350:]
+                    log_event(kind, "blocked_without_snapshot", detail[-140:])
+                    raise RuntimeError(
+                        "Nao foi possivel criar ponto de restauracao. "
+                        "Configure o Timeshift no Centro de Recuperacao antes da atualizacao. "
+                        "Administrador: --sem-snapshot-por-autorizacao permite "
+                        "prosseguir manualmente por sua conta e risco.")
+                log_event(kind, "snapshot_created")
+            else:
+                log_event(kind, "snapshot_bypassed_by_admin")
+            # APT still validates signed repository metadata before upgrading.
+            # Never execute downloaded shell scripts or unsigned repositories.
             apt(*cmd)
             pending = update_state()
             log_event(kind, "success", "pacotes restantes=" + str(len(pending)))
@@ -239,6 +258,8 @@ def main():
     ])
     p.add_argument("values", nargs="*")
     p.add_argument("--automatic", action="store_true", help="Apenas para timer autorizado")
+    p.add_argument("--sem-snapshot-por-autorizacao", action="store_true",
+                   help="Apenas manualmente: assume explicitamente risco de atualizacao sem restauracao")
     args = p.parse_args()
     try:
         if args.operation == "status":
@@ -255,6 +276,17 @@ def main():
                 p.error("Use auto on ou auto off")
             AUTO.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             if args.values[0] == "on":
+                status = subprocess.run(
+                    ["/usr/local/sbin/enfoque-manutencao", "status"],
+                    capture_output=True, text=True, timeout=35, check=False)
+                try:
+                    ready = status.returncode == 0 and json.loads(status.stdout)["snapshot"]["ready"]
+                except (ValueError, KeyError, TypeError):
+                    ready = False
+                if not ready:
+                    raise RuntimeError(
+                        "Atualizacoes automaticas exigem Timeshift/Snapper configurado "
+                        "e destino de restauracao disponivel.")
                 fd = os.open(str(AUTO), os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
                 os.write(fd, b"Enfoque OS: automatic APT maintenance authorized by TI\n")
                 os.close(fd)
@@ -275,8 +307,12 @@ def main():
             p.error("Esta acao nao aceita nomes de pacotes")
         if args.automatic and args.operation != "apply":
             p.error("--automatic so e valido com apply")
+        if args.sem_snapshot_por_autorizacao:
+            if args.automatic or args.operation not in ("apply","install","remove","rollback-core"):
+                p.error("Ignorar snapshot so e permitido em alteracoes APT manuais")
         print(json.dumps(perform(args.operation, args.values,
-                                 automatic=args.automatic),
+                                 automatic=args.automatic,
+                                 skip_snapshot=args.sem_snapshot_por_autorizacao),
                          indent=2, ensure_ascii=False))
         return 0
     except (OSError, RuntimeError, PermissionError, subprocess.SubprocessError) as error:

@@ -1,0 +1,5 @@
+Command=/usr/local/bin/enfoque-barra-desktop
+UseLabel=0
+Text=
+UpdatePeriod=15000
+Font=Noto Sans 12

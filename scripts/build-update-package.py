@@ -49,6 +49,7 @@ def managed(name):
         "etc/systemd/journald.conf.d/90-enfoque",
         "etc/default/grub.d/90-enfoque",
         "etc/enfoque-os/lojas-ip.json",
+        "etc/tmpfiles.d/enfoque-remote.conf",
         "etc/ssh/sshd_config.d/95-enfoque-suporte.conf",
         "etc/enfoque-ssh/vps-known-hosts",
         "etc/sudoers.d/97-enfoque-ti",
@@ -95,6 +96,16 @@ def manifest():
         "etc/apt/sources.list.d/enfoque-os.sources",
         "etc/systemd/system/enfoque-update-check.timer",
         "etc/systemd/system/enfoque-update-apply.timer",
+        "usr/local/sbin/enfoque-manutencao",
+        "usr/local/sbin/enfoque-saude",
+        "usr/local/bin/enfoque-recuperacao",
+        "etc/systemd/system/enfoque-saude.timer",
+        "etc/systemd/system/enfoque-backup.timer",
+        "etc/systemd/system/enfoque-limpeza.timer",
+        "usr/local/bin/enfoque-session-agent",
+        "usr/local/lib/enfoque-session/bridge.py",
+        "etc/tmpfiles.d/enfoque-remote.conf",
+        "etc/xdg/autostart/enfoque-session-agent.desktop",
     )
     included = {rel for rel, _ in paths}
     for name in required:
@@ -126,7 +137,7 @@ def create(output):
             f"Package: {PACKAGE}\nVersion: {release}-1\n"
             "Section: admin\nPriority: optional\nArchitecture: all\n"
             "Maintainer: Enfoque TI <tecnologia@enfoquepapelaria.com.br>\n"
-            "Depends: python3, apt, systemd, ca-certificates, openssh-client, openssh-server, xfce4-genmon-plugin, xfce4-appfinder, papirus-icon-theme\n"
+            "Depends: python3, python3-gi, gir1.2-gtk-3.0, apt, systemd, ca-certificates, openssh-client, openssh-server, xfce4-genmon-plugin, xfce4-appfinder, papirus-icon-theme, timeshift, rsync, restic, smartmontools, mate-polkit, pkexec\n"
             "Description: Enfoque OS corporate system components and updater\n"
             " Replaces custom Enfoque OS files on managed workstations using\n"
             " individually signed APT repository updates.\n",
@@ -139,10 +150,13 @@ def create(output):
             "#!/bin/sh\nset -e\n"
             "if [ \"$1\" = configure ] && command -v systemctl >/dev/null 2>&1; then\n"
             "  systemctl daemon-reload >/dev/null 2>&1 || true\n"
+            "  getent group enfoque-remote >/dev/null 2>&1 || groupadd --system enfoque-remote\n"
+            "  for u in enfoque enfoque-kiosk; do if id -u \"$u\" >/dev/null 2>&1; then usermod -a -G enfoque-remote \"$u\"; fi; done\n"
+            "  systemd-tmpfiles --create /etc/tmpfiles.d/enfoque-remote.conf >/dev/null 2>&1 || true\n"
             "  if ! id -u enfoque-ti >/dev/null 2>&1; then\n"
             "    useradd -m -s /bin/bash enfoque-ti\n"
             "  fi\n"
-            "  systemctl enable enfoque-update-check.timer enfoque-update-apply.timer enfoque-zero-touch.timer >/dev/null 2>&1 || true\n"
+            "  systemctl enable enfoque-update-check.timer enfoque-update-apply.timer enfoque-zero-touch.timer enfoque-saude.timer enfoque-backup.timer enfoque-limpeza.timer >/dev/null 2>&1 || true\n"
             "  if [ ! -s /etc/enfoque-ssh/authorized_keys ]; then\n"
             "    systemctl disable --now ssh.service ssh.socket >/dev/null 2>&1 || true\n"
             "  fi\n"

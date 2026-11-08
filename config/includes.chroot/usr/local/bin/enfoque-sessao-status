@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+"""Verificador local, sem acesso a segredos da conexão VPS."""
+import os, pathlib, socket, stat, subprocess, sys
+if os.geteuid()==0:
+    print("Abra como usuario comum.");sys.exit(1)
+path=pathlib.Path("/run/enfoque-remote/session-"+str(os.getuid())+".sock")
+print("Agente do usuário:", "Conectado" if path.exists() and stat.S_ISSOCK(path.lstat().st_mode) else "Não iniciado")
+output=subprocess.run(["systemctl","is-active","enfoque-remote-agent.service"],
+                      capture_output=True,text=True,timeout=6)
+print("Conexão com a TI:", "Serviço ativo" if output.stdout.strip()=="active" else "Serviço inativo ou pendente")
+print("A sessão executa comandos sem privilégio root; operações ficam registradas.")
+print("Para suspender a sessão, finalize o login. Contate a TI para revogar pareamento.")

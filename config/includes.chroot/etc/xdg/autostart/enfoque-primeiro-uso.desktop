@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Enfoque OS - Primeira configuração
+Exec=/usr/local/bin/enfoque-primeiro-uso --once
+OnlyShowIn=XFCE;
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

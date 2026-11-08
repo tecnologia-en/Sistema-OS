@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Consertar meu PC
+Name[pt_BR]=Consertar meu PC
+Comment=Diagnosticos, restauracao, backup, reparos e suporte Enfoque OS
+Exec=/usr/local/bin/enfoque-recuperacao
+Icon=enfoque-recuperacao
+Terminal=false
+Categories=System;Settings;Utility;
+StartupNotify=true

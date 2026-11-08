@@ -1,0 +1,12 @@
+[Unit]
+Description=Enfoque OS - monitor de saude cada 20 minutos
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=20min
+RandomizedDelaySec=2min
+Persistent=true
+Unit=enfoque-saude.service
+
+[Install]
+WantedBy=timers.target

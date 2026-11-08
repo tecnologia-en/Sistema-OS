@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+"""Periodic local health metrics; no customer data, no network upload."""
+import datetime, json, os, pathlib, runpy, sys, tempfile
+MODULE="/usr/local/sbin/enfoque-manutencao"
+DEST=pathlib.Path("/var/lib/enfoque-os/health-status.json")
+def main():
+    if os.geteuid()!=0:
+        print("Executar via systemd como root",file=sys.stderr);return 2
+    if pathlib.Path("/run/live/medium").exists() or pathlib.Path("/.dockerenv").exists():
+        print("Live/container: checagem de hardware físico ignorada.");return 0
+    m=runpy.run_path(MODULE,run_name="enfoque_saude_modulo")
+    disk=m["disk_health"]()
+    mem=m["memory_status"]()
+    usage=disk.get("disk_usage_pct")
+    warnings=[]
+    if isinstance(usage,(int,float)) and usage>=90:
+        warnings.append("O disco está quase cheio. Use a limpeza segura e verifique espaço livre.")
+    elif isinstance(usage,(int,float)) and usage>=85:
+        warnings.append("Pouco espaço no disco. Planeje limpeza antes de instalar programas.")
+    for item in disk.get("disks",[]):
+        if item.get("health")=="atencao":
+            warnings.append("A saúde de um disco indica falha. Faça backup e chame a TI.")
+        if isinstance(item.get("temperature_c"),int) and item["temperature_c"]>=65:
+            warnings.append("Temperatura elevada em um dispositivo de armazenamento.")
+    state={"checked_at":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+           "disk":disk,"memory":mem,"warnings":warnings[:8],
+           "status":"atencao" if warnings else "ok"}
+    m["atomic"](DEST,state)
+    print(json.dumps({"status":state["status"],"warnings":state["warnings"]},ensure_ascii=False))
+    return 0
+if __name__=="__main__":
+    raise SystemExit(main())

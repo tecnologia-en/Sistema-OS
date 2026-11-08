@@ -1,0 +1,358 @@
+#!/usr/bin/env python3
+"""Enfoque OS 0.2.x - agente da sessão gráfica.
+
+Inicia com XFCE como usuário NORMAL (nunca root), não abre conexões externas,
+não armazena token da VPS. Recebe comandos do agente de serviço em socket
+Unix local autenticado por grupo e credenciais do kernel.
+"""
+import argparse
+import getpass
+import grp
+import json
+import os
+from pathlib import Path
+import pwd
+import re
+import selectors
+import shutil
+import signal
+import socket
+import stat
+import struct
+import subprocess
+import sys
+import threading
+import time
+from urllib.parse import urlsplit
+
+VERSION = "enfoque-session-0.3"
+GROUP = "enfoque-remote"
+BASE = Path("/run/enfoque-remote")
+MAX_MSG = 96 * 1024
+MAX_OUTPUT = 12 * 1024
+MAX_STDERR = 3 * 1024
+MAX_WAIT = 90
+MAX_PARALLEL = 4
+SLOTS = threading.BoundedSemaphore(MAX_PARALLEL)
+
+def allowed_group_id():
+    return grp.getgrnam(GROUP).gr_gid
+
+def peer_credentials(conn):
+    raw = conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
+    return struct.unpack("3i", raw) # pid, uid, gid
+
+def peer_in_group(pid, uid, peer_gid, group):
+    """A caller must be THIS user, root, or the authorized systemd agent.
+
+    POSIX group membership alone is NOT authority to run commands under
+    another user's desktop: ordinary users also need this group to create
+    their sockets. The agent service is independently identified by its
+    kernel-assigned systemd cgroup path.
+    """
+    if uid == os.getuid() or uid == 0:
+        return True
+    try:
+        if peer_gid != group:
+            status = Path("/proc") / str(pid) / "status"
+            groups = next(line.split(":", 1)[1].split()
+                          for line in status.read_text().splitlines()
+                          if line.startswith("Groups:"))
+            if str(group) not in groups:
+                return False
+        cgroup = (Path("/proc") / str(pid) / "cgroup").read_text()
+        return bool(re.search(r"(?:^|/)enfoque-remote-agent\.service(?:/|$)",
+                              cgroup, flags=re.MULTILINE))
+    except (OSError, ValueError, StopIteration):
+        return False
+
+def short(text,limit):
+    value = text.decode("utf-8","replace") if isinstance(text,bytes) else str(text)
+    return value[:limit]
+
+def notify(title,description):
+    if shutil.which("notify-send"):
+        try:
+            subprocess.Popen(["notify-send","-a","Enfoque OS • TI",
+                              "-u","normal","-t","7000",title,description[:140]],
+                stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,start_new_session=True)
+        except OSError:
+            pass
+
+def log_audit(action, ok):
+    path = Path.home()/".local/state/enfoque-os/remote-session.jsonl"
+    try:
+        path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+        if path.exists() and path.stat().st_size > 3_000_000:
+            path.rename(path.with_suffix(".previous"))
+        with path.open("a",encoding="utf-8") as f:
+            f.write(json.dumps({"ts":int(time.time()),"action":action,
+                                "ok":bool(ok)},separators=(",",":"))+"\n")
+        path.chmod(0o600)
+    except OSError:
+        pass
+
+def command(argv,cwd=None,timeout_ms=30000):
+    if not isinstance(argv,list) or not 1<=len(argv)<=64:
+        return {"ok":False,"error":"Argumentos inválidos"}
+    if any(not isinstance(x,str) or len(x)>2048 or "\x00" in x for x in argv):
+        return {"ok":False,"error":"Argumento fora do limite"}
+    try:
+        seconds=max(1,min(int(timeout_ms)//1000,MAX_WAIT))
+        if cwd is not None:
+            if not isinstance(cwd,str) or len(cwd)>1000 or "\x00" in cwd:
+                return {"ok":False,"error":"Diretório inválido"}
+            working = str(Path(cwd).expanduser().resolve(strict=True))
+            if not Path(working).is_dir():
+                return {"ok":False,"error":"Diretório inexistente"}
+        else:
+            working = str(Path.home())
+        # Stream pipes with a strict bounded buffer. subprocess.run(capture_output)
+        # could consume arbitrary RAM from a command printing without a limit.
+        process=subprocess.Popen(argv,cwd=working,stdin=subprocess.DEVNULL,
+              stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+              env=os.environ.copy(),start_new_session=True,close_fds=True)
+        selector=selectors.DefaultSelector()
+        collected={"stdout":bytearray(),"stderr":bytearray()}
+        limits={"stdout":MAX_OUTPUT,"stderr":MAX_STDERR}
+        more=False
+        deadline=time.monotonic()+seconds
+        try:
+            for key in ("stdout","stderr"):
+                stream=getattr(process,key)
+                os.set_blocking(stream.fileno(),False)
+                selector.register(stream,selectors.EVENT_READ,key)
+            while selector.get_map() or process.poll() is None:
+                if time.monotonic()>deadline:
+                    try:os.killpg(process.pid,signal.SIGKILL)
+                    except ProcessLookupError:pass
+                    process.wait(timeout=4)
+                    return {"ok":False,"error":"Tempo máximo de execução excedido",
+                            "stdout":short(bytes(collected["stdout"]),MAX_OUTPUT),
+                            "stderr":short(bytes(collected["stderr"]),MAX_STDERR)}
+                ready=selector.select(.35)
+                for item,_ in ready:
+                    stream=item.fileobj
+                    data=os.read(stream.fileno(),4096)
+                    if not data:
+                        selector.unregister(stream)
+                        continue
+                    name=item.data
+                    remaining=limits[name]-len(collected[name])
+                    if remaining>0:
+                        collected[name].extend(data[:remaining])
+                    if len(data)>remaining:
+                        more=True
+                if process.poll() is not None and not selector.get_map():
+                    break
+            code=process.wait(timeout=3)
+            return {"ok":code==0,"exitCode":code,
+                    "stdout":bytes(collected["stdout"]).decode("utf-8","replace"),
+                    "stderr":bytes(collected["stderr"]).decode("utf-8","replace"),
+                    "truncated":more,"executedAs":getpass.getuser(),
+                    "scope":"sessao-usuario"}
+        finally:
+            selector.close()
+            if process.poll() is None:
+                try:os.killpg(process.pid,signal.SIGKILL)
+                except ProcessLookupError:pass
+                process.wait(timeout=4)
+    except (OSError,ValueError,TypeError) as exc:
+        return {"ok":False,"error":short(type(exc).__name__+": "+str(exc),250)}
+
+def is_local_or_https(target):
+    if not isinstance(target,str) or not target or len(target)>2048:
+        return False
+    link = urlsplit(target)
+    return not link.scheme or link.scheme in ("http","https","file")
+
+def open_item(args):
+    app=args.get("app","default")
+    target=args.get("target")
+    extras=args.get("args",[])
+    if not isinstance(app,str) or app not in ("default","browser","explorer","vscode","app"):
+        return {"ok":False,"error":"Tipo de abertura não permitido"}
+    if not isinstance(extras,list) or len(extras)>32 or any(not isinstance(v,str) or
+             len(v)>1000 or "\x00" in v for v in extras):
+        return {"ok":False,"error":"Parâmetros inválidos"}
+    if not is_local_or_https(target):
+        return {"ok":False,"error":"Destino inválido"}
+    if app=="app":
+        if "://" in target:
+            return {"ok":False,"error":"Programa deve ser executável local"}
+        path = shutil.which(target) or target
+        if not Path(path).is_file() or not os.access(path,os.X_OK):
+            return {"ok":False,"error":"Programa não encontrado"}
+        cmd=[path,*extras]
+    elif app=="explorer":
+        if urlsplit(target).scheme:
+            return {"ok":False,"error":"Explorador exige pasta ou arquivo"}
+        path=Path(target).expanduser()
+        if not path.exists():
+            return {"ok":False,"error":"Arquivo ou pasta não encontrado"}
+        cmd=["thunar",str(path)]
+    elif app=="vscode":
+        path=Path(target).expanduser()
+        if not path.exists():return {"ok":False,"error":"Caminho não encontrado"}
+        cmd=["code",str(path)]
+    else:
+        if not urlsplit(target).scheme and not Path(target).expanduser().exists():
+            return {"ok":False,"error":"Arquivo não encontrado"}
+        cmd=["xdg-open",str(Path(target).expanduser())] if not urlsplit(target).scheme else ["xdg-open",target]
+    try:
+        notify("Suporte TI: abrindo aplicativo",Path(target).name[:80] if not urlsplit(target).scheme else "Endereço autorizado")
+        proc=subprocess.Popen(cmd,cwd=str(Path.home()),stdin=subprocess.DEVNULL,
+                              stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+                              start_new_session=True,close_fds=True)
+        return {"ok":True,"opened":app,"target":target[:280],
+                "pid":proc.pid,"executedAs":getpass.getuser(),
+                "scope":"sessao-usuario","message":"Abertura solicitada à sessão gráfica"}
+    except OSError as exc:
+        return {"ok":False,"error":"Não foi possível abrir: "+short(str(exc),200)}
+
+def processes(args):
+    if args.get("op")=="list":
+        return command(["ps","-u",getpass.getuser(),"-o","pid,comm,%cpu,%mem","--no-headers"])
+    if args.get("op")=="kill":
+        try:
+            pid=int(args.get("pid"))
+            if pid<=1 or pid==os.getpid():
+                return {"ok":False,"error":"Processo protegido"}
+            status=Path("/proc")/str(pid)/"status"
+            text=status.read_text()
+            match=re.search(r"^Uid:\s*(\d+)",text,re.M)
+            if not match or int(match.group(1))!=os.getuid():
+                return {"ok":False,"error":"Processo pertence a outro usuário"}
+            os.kill(pid,signal.SIGTERM)
+            return {"ok":True,"pid":pid,"message":"Sinal de término solicitado"}
+        except (ValueError,TypeError,OSError) as exc:
+            return {"ok":False,"error":short(str(exc),130)}
+    return {"ok":False,"error":"Ação de processo não reconhecida"}
+
+def dispatch(data):
+    if not isinstance(data,dict):
+        return {"ok":False,"error":"Requisição inválida"}
+    action=data.get("action")
+    args=data.get("args")
+    if not isinstance(args,dict):
+        args={}
+    if action=="status":
+        return {"ok":True,"user":getpass.getuser(),"uid":os.getuid(),
+                "display":os.environ.get("DISPLAY",""),"desktop":os.environ.get("XDG_CURRENT_DESKTOP","XFCE"),
+                "version":VERSION}
+    if action=="shell":
+        script=args.get("command")
+        if not isinstance(script,str) or not 0<len(script)<=6000 or "\x00" in script:
+            return {"ok":False,"error":"Comando inválido"}
+        notify("Suporte TI: comando no terminal","Executando comando na sessão do usuário")
+        return command(["/bin/bash","-lc",script],args.get("cwd"),args.get("timeoutMs",30000))
+    if action=="run":
+        program=args.get("program")
+        argv=args.get("args",[])
+        if not isinstance(program,str) or not program or not isinstance(argv,list):
+            return {"ok":False,"error":"Programa/argumentos inválidos"}
+        notify("Suporte TI: execução de programa",Path(program).name)
+        return command([program,*argv],args.get("cwd"),args.get("timeoutMs",30000))
+    if action=="open":
+        return open_item(args)
+    if action=="process":
+        return processes(args)
+    if action=="session":
+        return {"ok":True,"user":getpass.getuser()}
+    return {"ok":False,"error":"Esta ação não pertence à sessão gráfica"}
+
+def service(conn):
+    with conn:
+        conn.settimeout(95)
+        try:
+            pid,uid,gid=peer_credentials(conn)
+            if not peer_in_group(pid,uid,gid,allowed_group_id()):
+                conn.sendall(b'{"ok":false,"error":"Acesso local recusado"}\n')
+                return
+            buf=bytearray()
+            while len(buf)<=MAX_MSG and b"\n" not in buf:
+                part=conn.recv(4096)
+                if not part:break
+                buf.extend(part)
+            if len(buf)>MAX_MSG or b"\n" not in buf:
+                result={"ok":False,"error":"Mensagem excessiva"}
+            else:
+                payload=json.loads(bytes(buf).split(b"\n",1)[0].decode("utf-8"))
+                result=dispatch(payload)
+        except (ValueError,OSError,socket.timeout,json.JSONDecodeError) as exc:
+            result={"ok":False,"error":"Erro IPC: "+type(exc).__name__}
+        try:
+            action=payload.get("action","invalid") if isinstance(locals().get("payload"),dict) else "invalid"
+            log_audit(action,result.get("ok",False))
+            conn.sendall(json.dumps(result,ensure_ascii=False,separators=(",",":")).encode("utf-8")[:64000]+b"\n")
+        except OSError:
+            pass
+
+def main():
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--socket-dir",default=str(BASE))
+    opts=ap.parse_args()
+    if Path("/run/live/medium").exists():
+        print("Agente da sessão somente após instalação da ISO.")
+        return 0
+    if os.geteuid()==0:
+        print("Recusado: agente gráfico jamais deve executar como root.",file=sys.stderr)
+        return 3
+    if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        print("Sem sessão gráfica ativa. O agente não será iniciado.",file=sys.stderr)
+        return 2
+    directory=Path(opts.socket_dir)
+    if not directory.is_dir() or directory.is_symlink():
+        print("Diretório seguro de IPC ausente.",file=sys.stderr)
+        return 2
+    if directory.stat().st_mode & 0o007:
+        print("Diretório IPC acessível a outros usuários.",file=sys.stderr)
+        return 2
+    group=allowed_group_id()
+    if group not in os.getgroups() and group!=os.getgid():
+        print("Usuário não autorizado para grupo Enfoque remoto.",file=sys.stderr)
+        return 2
+    path=directory / ("session-"+str(os.getuid())+".sock")
+    if path.is_symlink():
+        print("Socket simbólico não permitido.",file=sys.stderr)
+        return 2
+    if path.exists():
+        existing=path.stat()
+        if existing.st_uid!=os.getuid() or not stat.S_ISSOCK(existing.st_mode):
+            print("Socket do usuário inválido.",file=sys.stderr)
+            return 2
+        try:
+            with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as client:
+                client.settimeout(.3)
+                client.connect(str(path))
+            print("Agente de sessão já ativo.",file=sys.stderr)
+            return 0
+        except OSError:
+            path.unlink(missing_ok=True)
+    server=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+    server.bind(str(path))
+    os.chmod(path,0o660)
+    server.listen(8)
+    print("Agente de sessão Enfoque pronto. Nenhuma conexão externa.",flush=True)
+    try:
+        while True:
+            conn,_=server.accept()
+            if not SLOTS.acquire(blocking=False):
+                try:conn.sendall(b'{"ok":false,"error":"Agente ocupado"}\n')
+                except OSError:pass
+                conn.close()
+                continue
+            def handle(c):
+                try:service(c)
+                finally:SLOTS.release()
+            threading.Thread(target=handle,args=(conn,),daemon=True).start()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.close()
+        path.unlink(missing_ok=True)
+    return 0
+
+if __name__=="__main__":
+    raise SystemExit(main())

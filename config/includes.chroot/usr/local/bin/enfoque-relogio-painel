@@ -1,0 +1,9 @@
+#!/usr/bin/env python3
+"""Clock and date at the far right of the XFCE panel (GenMon)."""
+import html, datetime
+now=datetime.datetime.now()
+clock=now.strftime("%H:%M")
+date=now.strftime("%d/%m/%Y")
+print('<txt><span font_desc="Noto Sans Bold 10" foreground="#EFF8FF">'+html.escape(clock)+'</span>\n<span font_desc="Noto Sans 8" foreground="#D6EBFF">'+html.escape(date)+'</span></txt>')
+print('<txtclick>/usr/local/bin/enfoque-desktop-shell calendar</txtclick>')
+print('<tool>'+html.escape(now.strftime("%A, %d/%m/%Y"))+'</tool>')

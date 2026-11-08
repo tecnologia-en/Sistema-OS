@@ -1,0 +1,7 @@
+#!/bin/sh
+# Pequena barra de "Mostrar área de trabalho", com comportamento alternável.
+status=$(/usr/bin/xprop -root _NET_SHOWING_DESKTOP 2>/dev/null || :)
+case "$status" in
+  *"= 1"*) exec /usr/bin/wmctrl -k off ;;
+  *) exec /usr/bin/wmctrl -k on ;;
+esac

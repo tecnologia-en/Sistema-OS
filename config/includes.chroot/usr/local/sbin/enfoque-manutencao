@@ -1,0 +1,318 @@
+#!/usr/bin/env python3
+"""Enfoque OS - Manutencao com comandos limitados e diagnosticos em portugues.
+
+--dry-run: nenhuma alteracao, nenhum restart, nenhum backup ou exclusao.
+MODO REAL: executado via pkexec, sem aceitar shell/paths do usuario.
+"""
+import argparse
+import datetime as dt
+import json
+import os
+import pathlib
+import re
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
+import urllib.request
+
+STATE=pathlib.Path("/var/lib/enfoque-os")
+LOG=pathlib.Path("/var/log/enfoque-os/manutencao.jsonl")
+BACKUP=pathlib.Path("/etc/enfoque-os/backup.json")
+TIMESHIFT=pathlib.Path("/etc/timeshift/timeshift.json")
+REPAIRS={
+    "limpeza-segura":"Limpar apenas cache APT e arquivos temporarios antigos do Enfoque",
+    "impressao":"Reiniciar o serviço CUPS, sem descartar trabalhos",
+    "rede-dns":"Limpar cache DNS e recarregar configuração de rede, sem desligar Wi-Fi",
+    "som":"Reiniciar serviços de áudio do sistema",
+    "rede-completa":"Reiniciar NetworkManager; desconecta rede e acesso remoto",
+    "fila-impressao":"Cancelar trabalhos de impressão pendentes; exige confirmar explicitamente",
+}
+DANGEROUS={"rede-completa","fila-impressao"}
+
+def now():
+    return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+def cmd(args,timeout=14,env=None):
+    try:
+        p=subprocess.run(args,text=True,capture_output=True,timeout=timeout,env=env,check=False)
+        return p.returncode,p.stdout.strip(),p.stderr.strip()
+    except (OSError,subprocess.TimeoutExpired) as e:
+        return 124,"",str(e)
+def jsonfile(path,default=None):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError,OSError):
+        return default if default is not None else {}
+def atomic(path,obj,perm=0o644):
+    path.parent.mkdir(parents=True,exist_ok=True)
+    fd,tmp=tempfile.mkstemp(dir=path.parent,prefix=".enfoque-")
+    try:
+        with os.fdopen(fd,"w",encoding="utf-8") as f:
+            json.dump(obj,f,ensure_ascii=False,indent=2)
+            f.flush();os.fsync(f.fileno())
+        os.chmod(tmp,perm)
+        os.replace(tmp,path)
+    finally:
+        pathlib.Path(tmp).unlink(missing_ok=True)
+def record(action,ok,detail):
+    if os.geteuid()!=0 or not IS_REAL:
+        return
+    try:
+        LOG.parent.mkdir(parents=True,exist_ok=True)
+        with LOG.open("a",encoding="utf-8") as f:
+            f.write(json.dumps({"timestamp":now(),"action":action,"ok":ok,
+                                "detail":str(detail)[:220]},ensure_ascii=False)+"\n")
+    except OSError:
+        pass
+def fs_type():
+    code,out,_=cmd(["findmnt","-n","-o","FSTYPE","--target","/"])
+    return out.strip() if code==0 else "indisponivel"
+def snapshot_backend():
+    fs=fs_type()
+    if fs=="btrfs" and pathlib.Path("/etc/snapper/configs/root").is_file() and shutil.which("snapper"):
+        return {"ready":True,"backend":"snapper","file_system":fs,
+                "message":"Snapper configurado para raiz Btrfs. Restauracao ainda requer boot testado."}
+    cfg=jsonfile(TIMESHIFT)
+    # Timeshift's rsync mode requires an explicitly configured snapshot target,
+    # never guess the root disk or create large backups silently.
+    uuid=str(cfg.get("backup_device_uuid") or cfg.get("snapshot_device_uuid") or "")
+    mode=str(cfg.get("btrfs_mode","false")).lower()
+    if shutil.which("timeshift") and re.fullmatch(r"[0-9a-fA-F-]{12,40}",uuid) and mode in ("false","0"):
+        rc,out,_=cmd(["blkid","-U",uuid],timeout=8)
+        if rc==0 and out.startswith("/dev/"):
+            return {"ready":True,"backend":"timeshift-rsync","file_system":fs,
+                    "message":"Timeshift configurado. A restauracao exige verificacao e pode precisar da ISO Live.",
+                    "backup_device":out}
+    return {"ready":False,"backend":"nao_configurado","file_system":fs,
+            "message":"Pontos de restauracao nao configurados. Escolha um disco de backup no Timeshift antes de atualizar."}
+def list_snapshots():
+    info=snapshot_backend()
+    if not info["ready"]:
+        return {"configured":False,"items":[],"message":info["message"]}
+    command=(["snapper","-c","root","list","--columns","number,date,description"] if
+             info["backend"]=="snapper" else ["timeshift","--list"])
+    code,out,err=cmd(command,timeout=26)
+    return {"configured":code==0,"items":out.splitlines()[-30:] if code==0 else [],
+            "message":info["message"] if code==0 else "Nao foi possivel listar os pontos de restauracao."}
+def make_snapshot(reason="Antes de alteracao de sistema"):
+    info=snapshot_backend()
+    if not info["ready"]:
+        raise RuntimeError(info["message"])
+    if info["backend"]=="snapper":
+        argv=["snapper","-c","root","create","-t","single","-d",reason[:80]]
+    else:
+        argv=["timeshift","--create","--comments",reason[:80],"--tags","O"]
+    code,out,err=cmd(argv,timeout=3600)
+    if code:
+        raise RuntimeError("Falha ao criar ponto de restauracao: "+(err or out)[-220:])
+    return {"ok":True,"message":"Ponto de restauracao criado e registrado.",
+            "backend":info["backend"],"output":out[-300:]}
+def disk_health():
+    result={"checked_at":now(),"disks":[],"disk_usage_pct":None,"disk_warning":False}
+    used=shutil.disk_usage("/")
+    result["disk_usage_pct"]=round(100*used.used/max(used.total,1),1)
+    result["disk_warning"]=result["disk_usage_pct"]>=85
+    if not shutil.which("lsblk") or not shutil.which("smartctl"):
+        result["message"]="SMART indisponivel neste ambiente. Instale smartmontools."
+        return result
+    code,out,_=cmd(["lsblk","-J","-d","-o","PATH,TYPE,TRAN,SIZE"],timeout=8)
+    if code:return result
+    try:items=json.loads(out).get("blockdevices",[])
+    except ValueError:return result
+    for item in items:
+        path=item.get("path","")
+        if item.get("type")!="disk" or not re.fullmatch(r"/dev/[a-z0-9._+-]+",path):
+            continue
+        rc,raw,_=cmd(["smartctl","-j","-H",path],timeout=15)
+        try:data=json.loads(raw)
+        except ValueError:data={}
+        passed=data.get("smart_status",{}).get("passed")
+        critical=data.get("nvme_smart_health_information_log",{}).get("critical_warning",0)
+        temp=data.get("temperature",{}).get("current")
+        health=("atencao" if (passed is False or critical) else
+                "bom" if passed is True else "nao_verificado")
+        result["disks"].append({"device":path,"size":item.get("size",""),
+          "health":health,"temperature_c":temp if isinstance(temp,int) else None})
+    return result
+def net_status():
+    rc,out,_=cmd(["nmcli","-t","-f","GENERAL.STATE","general"],timeout=8)
+    nm=out if rc==0 else "NetworkManager nao respondeu"
+    rc,route,_=cmd(["ip","-4","route","show","default"],timeout=8)
+    gateway=bool(route.strip())
+    try:
+        socket.getaddrinfo("debian.org",443)
+        dns=True
+    except OSError:dns=False
+    online=False
+    if dns:
+        try:
+            req=urllib.request.Request("https://www.debian.org/",method="HEAD")
+            with urllib.request.urlopen(req,timeout=5) as rsp:
+                online=200<=rsp.status<500
+        except Exception:pass
+    if not gateway:message="Rede conectada sem gateway IPv4. Confira Wi-Fi ou cabo."
+    elif not dns:message="A rede possui gateway, mas o DNS nao esta funcionando."
+    elif not online:message="Wi-Fi ou cabo aparentemente conectado, mas sem acesso HTTPS a internet."
+    else:message="Internet, DNS e gateway responderam normalmente."
+    return {"network_manager":nm,"gateway":gateway,"dns":dns,"internet":online,"message":message}
+def memory_status():
+    fields={}
+    try:
+        for line in pathlib.Path("/proc/meminfo").read_text().splitlines():
+            k,_,v=line.partition(":")
+            fields[k]=int(v.strip().split()[0])
+    except (OSError,IndexError,ValueError):return {}
+    return {"total_mb":fields.get("MemTotal",0)//1024,
+            "free_mb":fields.get("MemAvailable",0)//1024}
+def backup_status():
+    cfg=jsonfile(BACKUP)
+    repo=cfg.get("repository","")
+    secret=pathlib.Path("/etc/enfoque-os/restic-password")
+    try:
+        config_stat=BACKUP.stat()
+        secret_stat=secret.stat()
+        permission_ok=(config_stat.st_uid==0 and not config_stat.st_mode & 0o077 and
+                       secret_stat.st_uid==0 and not secret_stat.st_mode & 0o077)
+    except OSError:
+        permission_ok=False
+    ready=(isinstance(repo,str) and bool(repo.strip()) and permission_ok and
+           shutil.which("restic") is not None)
+    return {"configured":ready,
+            "message":"Backup criptografado configurado." if ready else
+                      "Backup nao configurado. Informe destino e chave de criptografia da TI.",
+            "last_run":jsonfile(STATE/"backup-status.json",{}).get("last_success","")}
+def current_status():
+    return {
+       "timestamp":now(),"snapshot":snapshot_backend(),"backup":backup_status(),
+       "disk":disk_health(),"memory":memory_status(),
+       "protected_mode":"quiosque_sem_sudo" if pathlib.Path("/etc/enfoque-os/kiosk.enabled").is_file()
+                         else "conta_administrativa_padrao",
+       "auto_rollback_boot":False,
+       "base_immutable":False,
+       "remote_control_consent_enforced":False,
+       "actions_available":list(REPAIRS),
+       "lab_simulation":not IS_REAL,
+    }
+def purge_enfoque_old_files():
+    # Only a dedicated cache is eligible. Do not touch /tmp, user files, browser
+    # profiles or CUPS/TEF spool and never follow symlinks.
+    root=pathlib.Path("/var/cache/enfoque-os")
+    if not root.is_dir() or root.is_symlink():
+        return 0
+    cutoff=dt.datetime.now().timestamp()-30*86400
+    removed=0
+    for parent,dirs,files in os.walk(root,followlinks=False):
+        dirs[:]=[d for d in dirs if not (pathlib.Path(parent)/d).is_symlink()]
+        for name in files:
+            p=pathlib.Path(parent)/name
+            try:
+                stat=p.lstat()
+                if p.is_symlink() or not p.is_file() or stat.st_mtime>=cutoff:continue
+                p.unlink();removed+=1
+            except OSError:pass
+    return removed
+def checked_run(args,label,limit=30,allow_failure=False):
+    code,out,err=cmd(args,timeout=limit)
+    if code and not allow_failure:
+        raise RuntimeError(label+" falhou: "+(err or out)[-180:])
+    return {"step":label,"ok":code==0,"detail":(out or err)[-180:]}
+def repair(action,accept_disconnection=False,accept_cancel=False):
+    if action not in REPAIRS:raise RuntimeError("Acao nao permitida")
+    if action=="rede-completa" and not accept_disconnection:
+        raise RuntimeError("A reinicializacao da rede exige confirmacao explicita.")
+    if action=="fila-impressao" and not accept_cancel:
+        raise RuntimeError("O cancelamento de trabalhos exige confirmacao explicita.")
+    steps=[]
+    if action=="limpeza-segura":
+        steps.append(checked_run(["apt-get","clean"],"Limpeza de cache APT",45))
+        count=purge_enfoque_old_files()
+        steps.append({"step":"Cache temporario Enfoque","ok":True,"detail":f"{count} arquivo(s) antigos removidos."})
+    elif action=="impressao":
+        steps.append(checked_run(["systemctl","restart","cups.service"],"Reiniciar servico de impressao"))
+    elif action=="fila-impressao":
+        # Never execute in background. Only with an explicit local confirmation.
+        steps.append(checked_run(["cancel","-a"],"Cancelar todos os trabalhos CUPS",30))
+    elif action=="rede-dns":
+        if shutil.which("resolvectl"):
+            steps.append(checked_run(["resolvectl","flush-caches"],"Limpar cache DNS",20,True))
+        steps.append(checked_run(["nmcli","general","reload"],"Recarregar NetworkManager",20))
+    elif action=="rede-completa":
+        steps.append(checked_run(["systemctl","restart","NetworkManager.service"],
+                                 "Reiniciar rede (pode desconectar suporte remoto)",65))
+    elif action=="som":
+        # Restart the system state only, avoid killing every user's PulseAudio.
+        if shutil.which("alsactl"):
+            steps.append(checked_run(["alsactl","restore"],"Recarregar controles ALSA",20,True))
+        else:
+            raise RuntimeError("Utilitario ALSA indisponivel.")
+    return {"ok":all(item["ok"] for item in steps),"actions":steps,
+            "message":"Reparo concluido. Verifique se o problema foi resolvido."}
+def backup_now():
+    conf=backup_status()
+    if not conf["configured"]:raise RuntimeError(conf["message"])
+    config=jsonfile(BACKUP)
+    repo=config["repository"]
+    if not isinstance(repo,str) or not repo.startswith(("sftp:","rest:","/mnt/")):
+        raise RuntimeError("Destino de backup deve ser SFTP, REST autenticado ou volume montado autorizado.")
+    users=config.get("users",["enfoque"])
+    if not isinstance(users,list) or not 1<=len(users)<=8:
+        raise RuntimeError("Lista de usuarios de backup invalida.")
+    paths=[]
+    for user in users:
+        if not re.fullmatch(r"[a-z_][a-z0-9_-]{0,30}",str(user)):raise RuntimeError("Nome de usuario invalido")
+        import pwd
+        try:pw=pwd.getpwnam(user)
+        except KeyError:continue
+        home=pathlib.Path(pw.pw_dir)
+        if home.is_dir() and not home.is_symlink():paths.append(str(home))
+    if not paths:raise RuntimeError("Nenhuma pasta pessoal foi encontrada.")
+    env={**os.environ,"RESTIC_PASSWORD_FILE":"/etc/enfoque-os/restic-password"}
+    argv=["restic","-r",repo,"backup","--one-file-system",
+          "--exclude","**/Cache","--exclude","**/.cache",
+          "--exclude","**/Code Cache","--exclude","**/GPUCache",*paths]
+    result=cmd(argv,timeout=7200,env=env)
+    if result[0]:raise RuntimeError("Backup falhou: "+result[2][-200:])
+    atomic(STATE/"backup-status.json",{"last_success":now(),"result":"concluido"})
+    return {"ok":True,"message":"Backup criptografado concluido. Verifique a integridade periodicamente."}
+def guarded_real():
+    if os.geteuid()!=0:raise RuntimeError("Ação exige senha administrativa.")
+    if not IS_REAL:raise RuntimeError("Disponivel apenas no Enfoque OS instalado. Laboratorio nao altera equipamentos.")
+def main():
+    global IS_REAL
+    ap=argparse.ArgumentParser(description="Enfoque OS - Manutencao segura")
+    ap.add_argument("operation",choices=("status","rede","snapshots","snapshot","repair","backup"),
+                    help="status, rede, snapshots, snapshot, repair ou backup")
+    ap.add_argument("option",nargs="?",default="")
+    ap.add_argument("--dry-run",action="store_true")
+    ap.add_argument("--aceito-desconectar",action="store_true")
+    ap.add_argument("--aceito-cancelar",action="store_true")
+    args=ap.parse_args()
+    IS_REAL=(not args.dry_run and not pathlib.Path("/run/live/medium").exists()
+             and not pathlib.Path("/.dockerenv").exists())
+    try:
+        if args.operation=="status":result=current_status()
+        elif args.operation=="rede":result=net_status()
+        elif args.operation=="snapshots":result=list_snapshots()
+        else:
+            if args.dry_run:
+                result={"ok":True,"simulated":True,"operation":args.operation,
+                        "message":"Simulacao concluida. Nenhuma alteracao realizada."}
+            else:
+                guarded_real()
+                if args.operation=="snapshot":
+                    result=make_snapshot(args.option or "Antes de manutencao")
+                elif args.operation=="repair":
+                    result=repair(args.option,args.aceito_desconectar,args.aceito_cancelar)
+                elif args.operation=="backup":
+                    result=backup_now()
+                record(args.operation,True,result.get("message","concluido"))
+        print(json.dumps(result,ensure_ascii=False,indent=2))
+        return 0
+    except (OSError,RuntimeError,ValueError,KeyError) as error:
+        record(args.operation,False,type(error).__name__)
+        print(json.dumps({"ok":False,"error":str(error)},ensure_ascii=False))
+        return 2
+IS_REAL=False
+if __name__=="__main__":
+    raise SystemExit(main())

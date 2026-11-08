@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Pedir ajuda à TI
+Exec=/usr/local/bin/enfoque-recuperacao
+Icon=enfoque-recuperacao
+Terminal=false
+Categories=System;Utility;
+StartupNotify=true

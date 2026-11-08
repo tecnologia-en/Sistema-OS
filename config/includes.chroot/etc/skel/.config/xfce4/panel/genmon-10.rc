@@ -1,0 +1,5 @@
+Command=/usr/local/bin/enfoque-relogio-painel
+UseLabel=0
+Text=
+UpdatePeriod=15000
+Font=Noto Sans 10

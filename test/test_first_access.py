@@ -93,11 +93,10 @@ class FirstAccessTests(unittest.TestCase):
     def test_date_separate_formats_and_no_intrusive_hub_autostart(self):
         panel=ET.parse(CONFIG/"etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml").getroot()
         clock=panel.find("./property[@name='plugins']/property[@name='plugin-10']")
-        self.assertEqual(clock.get("value"),"clock")
-        fmt={p.get("name"):p.get("value") for p in clock}
-        self.assertEqual(fmt.get("digital-date-format"),"%d/%m/%Y")
-        self.assertEqual(fmt.get("digital-time-format"),"%H:%M")
-        self.assertEqual(fmt.get("digital-layout"),"3")
+        self.assertEqual(clock.get("value"),"genmon")
+        text=(CONFIG/"usr/local/bin/enfoque-relogio-painel").read_text()
+        self.assertIn('strftime("%d/%m/%Y")',text)
+        self.assertIn('strftime("%H:%M")',text)
         central=(CONFIG/"etc/xdg/autostart/enfoque-central.desktop").read_text()
         self.assertIn("X-GNOME-Autostart-enabled=false",central)
         self.assertIn("Hidden=true",central)

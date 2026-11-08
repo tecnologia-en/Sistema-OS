@@ -55,3 +55,6 @@
 }
 #whiskermenu-window button:hover { background-color: #2C5E9B; }
 #whiskermenu-window entry { border-radius: 9px; }
+
+/* Compact Windows-style Show Desktop bar: only a thin clickable line. */
+#XfcePanelWindow #genmon-11 {min-width: 4px; padding: 0; margin: 0; background: transparent; border: none;}

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Tecla Windows para menu Enfoque
+Exec=/usr/local/bin/enfoque-super-key
+OnlyShowIn=XFCE;
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

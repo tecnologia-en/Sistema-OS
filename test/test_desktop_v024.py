@@ -34,12 +34,12 @@ class DesktopV024Tests(unittest.TestCase):
         self.assertIn("exec nm-applet", shell)
 
     def test_clock_has_date_and_time(self):
-        self.assertEqual(plugin(10).get("value"), "clock")
-        t = plugin(10).find("./property[@name='digital-time-format']").get("value")
-        d = plugin(10).find("./property[@name='digital-date-format']").get("value")
-        self.assertIn("%H:%M", t)
-        self.assertIn("%d/%m/%Y", d)
-        self.assertEqual(plugin(11).get("value"), "showdesktop")
+        self.assertEqual(plugin(10).get("value"), "genmon")
+        clock = (CONFIG / "usr/local/bin/enfoque-relogio-painel").read_text()
+        self.assertIn('strftime("%H:%M")', clock)
+        self.assertIn('strftime("%d/%m/%Y")', clock)
+        self.assertEqual(plugin(11).get("value"), "genmon")
+        self.assertTrue((CONFIG / "usr/local/bin/enfoque-barra-desktop").is_file())
 
     def test_launchers_use_exact_sige_system_url(self):
         url = "https://enfoquepapelaria.meusige.com.br/sistema"

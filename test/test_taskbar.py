@@ -41,12 +41,14 @@ class TaskbarTests(unittest.TestCase):
 
     def test_ordered_independent_launchers_and_tasklist(self):
         ids = [int(x.get("value")) for x in self.panel.find("./property[@name='plugin-ids']")]
-        self.assertEqual(ids, [1, 14, 10, 7, 2, 3, 4, 5, 6, 15, 8, 13, 9, 12, 11])
-        self.assertLess(ids.index(10), ids.index(7), "Relogio permanece no grupo da esquerda")
+        self.assertEqual(ids, [1, 14, 7, 2, 3, 4, 5, 6, 15, 12, 8, 13, 9, 17, 16, 10, 11])
+        self.assertGreater(ids.index(10), ids.index(8), "Relógio e data ficam à direita")
+        self.assertLess(ids.index(17), ids.index(16), "Impressoras antes do sino")
+        self.assertEqual(ids[-2:], [10,11])
         self.assertLess(ids.index(1), ids.index(14))
         self.assertEqual(ids[-1], 11, 'Mostrar desktop precisa ser o ultimo botao da direita')
         self.assertIsNotNone(self.plugins)
-        self.assertEqual(self.plugins.find("./property[@name='plugin-1']").get("value"), "whiskermenu")
+        self.assertEqual(self.plugins.find("./property[@name='plugin-1']").get("value"), "launcher")
         for plugin_id, desktop in [(2,"google-chrome.desktop"), (3,"enfoque-sige.desktop"),
                                    (4,"enfoque-intranet.desktop"), (5,"thunar.desktop")]:
             p = self.plugins.find(f"./property[@name='plugin-{plugin_id}']")
@@ -59,8 +61,8 @@ class TaskbarTests(unittest.TestCase):
         self.assertEqual(self.plugins.find("./property[@name='plugin-14']").get("value"), "genmon")
         self.assertEqual(self.plugins.find("./property[@name='plugin-8']").get("value"), "systray")
         self.assertEqual(self.plugins.find("./property[@name='plugin-9']").get("value"), "pulseaudio")
-        self.assertEqual(self.plugins.find("./property[@name='plugin-10']").get("value"), "clock")
-        self.assertEqual(self.plugins.find("./property[@name='plugin-11']").get("value"), "showdesktop")
+        self.assertEqual(self.plugins.find("./property[@name='plugin-10']").get("value"), "genmon")
+        self.assertEqual(self.plugins.find("./property[@name='plugin-11']").get("value"), "genmon")
         p = self.plugins.find("./property[@name='plugin-12']")
         self.assertEqual(p.get("value"), "launcher")
         self.assertEqual(p.find("./property[@name='items']/value").get("value"), "enfoque-id.desktop")
@@ -73,7 +75,7 @@ class TaskbarTests(unittest.TestCase):
             plugin = self.plugins.find(f"./property[@name='plugin-{plugin_id}']")
             self.assertEqual(plugin.find("./property[@name='expand']").get("value"), "true")
         search = ROOT / "config/includes.chroot/usr/local/bin/enfoque-busca-painel"
-        self.assertIn("<txtclick>/usr/bin/xfce4-appfinder --collapsed</txtclick>", search.read_text())
+        self.assertIn("<txtclick>/usr/local/bin/enfoque-desktop-shell menu</txtclick>", search.read_text())
         settings = ROOT / "config/includes.chroot/etc/skel/.config/xfce4/panel/genmon-14.rc"
         self.assertIn("Command=/usr/local/bin/enfoque-busca-painel", settings.read_text())
         css = ROOT / "config/includes.chroot/etc/skel/.config/gtk-3.0/gtk.css"
@@ -101,18 +103,19 @@ class TaskbarTests(unittest.TestCase):
             self.assertNotIn("script", ET.tostring(svg, encoding="unicode"))
 
     def test_windows_key_and_start_icon_only(self):
-        menu = ROOT / "config/includes.chroot/etc/skel/.config/xfce4/panel/whiskermenu-1.rc"
-        text = menu.read_text(encoding="utf-8")
-        self.assertIn("button-icon=enfoque-start", text)
-        self.assertIn("show-button-icon=true", text)
-        self.assertIn("show-button-title=false", text)
-        self.assertNotIn("button-title=Enfoque OS", text)
-        keymap = ROOT / "config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml"
-        tree = ET.parse(keymap).getroot()
-        self.assertEqual(tree.attrib.get("name"), "xfce4-keyboard-shortcuts")
-        binding = tree.find("./property[@name='commands']/property[@name='custom']/property[@name='Super_L']")
+        launcher=self.plugins.find("./property[@name='plugin-1']")
+        self.assertEqual(launcher.get("value"),"launcher")
+        self.assertEqual(launcher.find("./property[@name='items']/value").get("value"),"enfoque-menu.desktop")
+        app=(ROOT/"config/includes.chroot/usr/share/applications/enfoque-menu.desktop").read_text()
+        self.assertIn("Icon=enfoque-start",app)
+        self.assertIn("Exec=/usr/local/bin/enfoque-desktop-shell menu",app)
+        hotkey=(ROOT/"config/includes.chroot/usr/local/bin/enfoque-super-key").read_text()
+        self.assertIn("Super_L=Control_L|Escape",hotkey)
+        keymap=ROOT/"config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml"
+        tree=ET.parse(keymap).getroot()
+        binding=tree.find("./property[@name='commands']/property[@name='custom']/property[@name='<Primary>Escape']")
         self.assertIsNotNone(binding)
-        self.assertEqual(binding.get("value"), "xfce4-popup-whiskermenu")
+        self.assertEqual(binding.get("value"),"/usr/local/bin/enfoque-desktop-shell menu")
 
     def test_laptop_battery_indicator_and_charge(self):
         p = self.plugins.find("./property[@name='plugin-13']")

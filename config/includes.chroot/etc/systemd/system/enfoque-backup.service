@@ -1,0 +1,18 @@
+[Unit]
+Description=Enfoque OS - backup criptografado configurado pela TI
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=!/run/live/medium
+ConditionVirtualization=!container
+ConditionPathExists=/etc/enfoque-os/backup.json
+ConditionPathExists=/etc/enfoque-os/restic-password
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/enfoque-manutencao backup
+TimeoutStartSec=3600
+Nice=15
+IOSchedulingClass=idle
+PrivateTmp=true
+UMask=0077
+ProtectHome=false

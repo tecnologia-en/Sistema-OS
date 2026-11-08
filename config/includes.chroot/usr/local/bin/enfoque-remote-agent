@@ -27,7 +27,7 @@ DEVICE = Path("/var/lib/enfoque-os/device-identity.json")
 LIVE_DEVICE = Path("/run/enfoque-os/device-identity.json")
 PROFILE = Path("/var/lib/enfoque-os/firstboot.json")
 STORE_SUFFIX = {"ilha-plaza":"1","copacabana":"2","itaipu":"3","icarai":"4","sao-goncalo":"5","centro":"6","deposito":"7","administracao":"8","papel-arte":"9"}
-AGENT_VERSION = "0.2.24-linux-limited"
+AGENT_VERSION = "0.2.25-linux-dual-agent"
 SAFE_READ = frozenset(("/etc/enfoque-os-release", "/etc/os-release", "/proc/meminfo", "/proc/uptime"))
 SAFE_DIR = frozenset(("/usr/share/applications", "/usr/local/bin", "/etc/xdg"))
 SAFE_UNITS = frozenset((
@@ -166,8 +166,60 @@ def exact_path(value, permitted):
     return source
 
 
+def session_request(action, args):
+    # DynamicUser continues to own only the outbound TLS connection.
+    # Actual GUI programs and user shell run under the logged-in user through
+    # the local Unix socket, never as root and never with server secrets.
+    library = Path(__file__).resolve().parent.parent / "lib/enfoque-session"
+    if str(library) not in sys.path:
+        sys.path.insert(0, str(library))
+    try:
+        from bridge import session_command
+        return session_command(action, args)
+    except (ImportError, OSError, ValueError) as error:
+        return {"ok": False, "error": "Agente da sessão indisponível: " +
+                type(error).__name__}
+
+
+def audit_remote(command_id, action, args, result):
+    if not isinstance(command_id, str):
+        return
+    # Deliberately do not log commands or outputs, which can contain secrets.
+    log = STATE / "command-audit.jsonl"
+    record = {
+        "time": time.time(), "id": command_id[:80],
+        "action": str(action)[:35], "ok": result.get("ok") is True,
+        "context": result.get("scope", "servico-restrito"),
+        "sessionUser": result.get("sessionUser", ""),
+    }
+    try:
+        log.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if log.exists() and log.stat().st_size > 2_000_000:
+            log.replace(log.with_suffix(".previous"))
+        with log.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        log.chmod(0o600)
+    except OSError:
+        pass
+
+
 def handle_action(action, args):
     args = args if isinstance(args, dict) else {}
+    if action == "open":
+        return session_request("open", args)
+    if action in ("shell", "run"):
+        # Optional /diagnostic mode retains the existing tightly scoped
+        # headless read-only tools; normal terminal uses the USER session.
+        if args.get("scope") != "diagnostic":
+            return session_request(action, args)
+    if action == "process":
+        outcome = session_request("process", args)
+        if outcome.get("ok") is True or args.get("op") != "list":
+            return outcome
+        return command_result("ps", ["-eo", "pid,comm,%cpu,%mem"])
+    if action == "session_status":
+        return session_request("status", {})
+
     if action == "shell":
         script = args.get("command")
         if not isinstance(script, str) or len(script) > 200 or any(ch in METACHARS for ch in script):
@@ -239,25 +291,84 @@ def run_cycle(state, base=SERVER):
         "agentVersion": AGENT_VERSION}, state["token"], base, state["deviceId"])
     cmd = pending.get("command")
     if isinstance(cmd, dict) and isinstance(cmd.get("id"), str):
-        request("/result", {"id": cmd["id"],
-          "result": handle_action(cmd.get("action"), cmd.get("args"))},
-          state["token"], base, state["deviceId"])
+        result = handle_action(cmd.get("action"), cmd.get("args"))
+        audit_remote(cmd["id"], cmd.get("action"), cmd.get("args"), result)
+        request("/result", {"id": cmd["id"], "result": result},
+                state["token"], base, state["deviceId"])
     return True
 
 
+def websocket_cycle(state, base=SERVER, *, max_commands=None):
+    """Outgoing WSS only; HTTP polling remains fallback for older network paths."""
+    library = Path(__file__).resolve().parent.parent / "lib/enfoque-session"
+    if str(library) not in sys.path:
+        sys.path.insert(0, str(library))
+    from channel import WebSocket
+    from urllib.parse import urlsplit
+    parsed = urlsplit(base)
+    if parsed.scheme != "https":
+        raise ValueError("WebSocket corporativo exige HTTPS/TLS")
+    uri = "wss://" + parsed.netloc + parsed.path.rstrip("/") + "/ws"
+    short, store = display_identity()
+    ws = WebSocket(uri, state["deviceId"], state["token"])
+    count = 0
+    try:
+        ws.connect()
+        ws.send_json({"type":"hello",
+             "hostname":("Enfoque OS "+short+" "+store)[:100],
+             "username":"enfoque-agent",
+             "platform":platform.platform(),"agentVersion":AGENT_VERSION})
+        while True:
+            packet = ws.recv_json()
+            if packet.get("type") != "command":
+                continue
+            task = packet.get("command")
+            if not isinstance(task,dict):
+                continue
+            ident = task.get("id")
+            if not isinstance(ident,str) or not 1<=len(ident)<=80:
+                continue
+            result = handle_action(task.get("action"),task.get("args"))
+            audit_remote(ident, task.get("action"), task.get("args"), result)
+            ws.send_json({"type":"result","id":ident,"result":result})
+            count += 1
+            if max_commands is not None and count>=max_commands:
+                return count
+    finally:
+        ws.close()
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--once", action="store_true", help="Apenas um ciclo de verificacao")
+    parser.add_argument("--once", action="store_true", help="Apenas um ciclo HTTP autenticado")
     options = parser.parse_args()
     while True:
         try:
             state = local_state()
-            approved = run_cycle(state)
             if options.once:
-                return 0 if approved else 2
-            time.sleep(4 if approved else 25)
-        except (OSError, ValueError, RuntimeError, urllib.error.URLError, json.JSONDecodeError) as error:
-            print("Enfoque agente remoto: " + type(error).__name__, file=sys.stderr)
+                return 0 if run_cycle(state) else 2
+            registered = send_register(state)
+            if registered.get("approved") is not True:
+                time.sleep(25)
+                continue
+            # Normal operation: persistent outgoing websocket, no port at PC.
+            # If blocked by a firewall/proxy, use proven HTTP polling temporarily.
+            try:
+                websocket_cycle(state)
+            except (OSError, ValueError, RuntimeError, ConnectionError,
+                    urllib.error.URLError, json.JSONDecodeError) as error:
+                print("Enfoque WebSocket: "+type(error).__name__+
+                      ". Usando fallback HTTP.",file=sys.stderr)
+                for _ in range(4):
+                    try:
+                        if not run_cycle(state):
+                            break
+                    except (OSError, ValueError, RuntimeError, urllib.error.URLError,
+                            json.JSONDecodeError):
+                        break
+                    time.sleep(4)
+        except (OSError, ValueError, RuntimeError, urllib.error.URLError,
+                json.JSONDecodeError) as error:
+            print("Enfoque agente remoto: "+type(error).__name__,file=sys.stderr)
             if options.once:
                 return 1
             time.sleep(20)

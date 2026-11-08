@@ -1,0 +1,56 @@
+--- chatgpt-mcp/server.js
++++ chatgpt-mcp/server.js
+@@ -5 +5 @@
+-import { createHash, randomUUID } from "node:crypto";
++import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+@@ -2695,0 +2696,7 @@
++// Staged hardening: the intranet backend must authenticate its operator BEFORE
++// calling this local endpoint. A separate secret is configured only in the VPS
++// environment and is never distributed to Enfoque OS computers.
++const PC_CONTROL_SECRET = String(process.env.ENFOQUE_PC_CONTROL_SECRET || "");
++const PC_ALLOWED_ACTIONS = new Set(["status","list_directory","read_file",
++  "write_file","run","shell","open","process","zip","screenshot","window",
++  "uia","observe","gui","workflow"]);
+@@ -2696,0 +2704,21 @@
++  const remote = String(req.socket?.remoteAddress || "");
++  if (!remote.includes("127.0.0.1") && remote !== "::1") {
++    return res.status(403).json({ ok: false, error: "local only" });
++  }
++  if (PC_CONTROL_SECRET.length < 32) {
++    return res.status(503).json({ ok: false, error: "pc internal control not configured" });
++  }
++  const received = Buffer.from(String(req.headers["x-enfoque-pc-control-secret"] || ""));
++  const required = Buffer.from(PC_CONTROL_SECRET);
++  if (received.length !== required.length || !timingSafeEqual(received, required)) {
++    return res.status(403).json({ ok: false, error: "unauthorized" });
++  }
++  const deviceId = normalizeDeviceId(req.body?.deviceId);
++  const action = String(req.body?.action || "");
++  const args = req.body?.args || {};
++  const timeoutMs = Math.min(120000,Math.max(1000, Number(req.body?.timeoutMs)||60000));
++  const forcePoll = Boolean(req.body?.forcePoll);
++  if (!deviceId || !PC_ALLOWED_ACTIONS.has(action)) {
++    return res.status(400).json({ ok: false, error: "invalid request" });
++  }
++  let ok=false;
+@@ -2698,10 +2725,0 @@
+-    const remote = String(req.socket?.remoteAddress || "");
+-    if (!remote.includes("127.0.0.1") && remote !== "::1") {
+-      return res.status(403).json({ ok: false, error: "local only" });
+-    }
+-    const deviceId = normalizeDeviceId(req.body?.deviceId);
+-    const action = String(req.body?.action || "");
+-    const args = req.body?.args || {};
+-    const timeoutMs = Number(req.body?.timeoutMs || 60000);
+-    const forcePoll = Boolean(req.body?.forcePoll);
+-    if (!deviceId || !action) return res.status(400).json({ ok: false, error: "invalid request" });
+@@ -2710,0 +2729 @@
++    ok=result?.ok !== false;
+@@ -2713 +2732,6 @@
+-    res.status(500).json({ ok: false, error: error.message });
++    res.status(500).json({ ok: false, error: "command failed" });
++  } finally {
++    // Audit deliberately excludes commands, output, tokens and personal files.
++    await fs.appendFile("/var/log/enfoque-pc-command-audit.jsonl",
++      JSON.stringify({ at:new Date().toISOString(), deviceId, action, ok })+"\n"
++    ).catch(() => {});

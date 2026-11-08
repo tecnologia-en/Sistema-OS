@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Central de notificações
+Exec=/usr/local/bin/enfoque-desktop-shell notifications
+Icon=enfoque-bell
+Categories=Settings;System;
+Terminal=false

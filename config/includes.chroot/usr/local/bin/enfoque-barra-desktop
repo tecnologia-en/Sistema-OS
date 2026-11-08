@@ -1,0 +1,4 @@
+#!/usr/bin/env python3
+print('<txt><span font_desc="Noto Sans 12" foreground="#E5F3FF">│</span></txt>')
+print('<txtclick>/usr/local/bin/enfoque-mostrar-desktop-painel</txtclick>')
+print('<tool>Mostrar área de trabalho</tool>')

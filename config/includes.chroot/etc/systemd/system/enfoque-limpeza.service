@@ -1,0 +1,17 @@
+[Unit]
+Description=Enfoque OS - limpeza somente de cache proprio com pouco disco
+ConditionPathExists=!/run/live/medium
+ConditionVirtualization=!container
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/enfoque-limpeza-auto
+TimeoutStartSec=120
+Nice=15
+IOSchedulingClass=idle
+NoNewPrivileges=true
+ProtectSystem=strict
+CacheDirectory=enfoque-os
+ProtectHome=true
+ReadWritePaths=/var/cache/enfoque-os
+PrivateTmp=true

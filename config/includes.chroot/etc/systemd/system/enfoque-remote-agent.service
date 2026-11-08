@@ -1,8 +1,8 @@
 [Unit]
-Description=Enfoque OS - agente remoto de diagnostico autenticado (aguarda aprovacao TI)
+Description=Enfoque OS - canal autenticado de comandos e diagnosticos (sessao separada)
 Documentation=https://github.com/tecnologia-en/Sistema-OS
 Wants=network-online.target
-After=network-online.target enfoque-device-id.service
+After=network-online.target enfoque-device-id.service systemd-tmpfiles-setup.service
 Requires=enfoque-device-id.service
 ConditionPathExists=!/run/live/medium
 ConditionPathExists=/var/lib/enfoque-os/firstboot.json
@@ -10,6 +10,7 @@ ConditionPathExists=/var/lib/enfoque-os/firstboot.json
 [Service]
 Type=simple
 DynamicUser=yes
+SupplementaryGroups=enfoque-remote
 StateDirectory=enfoque-agent
 StateDirectoryMode=0700
 ExecStart=/usr/bin/python3 /usr/local/bin/enfoque-remote-agent

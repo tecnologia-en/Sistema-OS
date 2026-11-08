@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Menu Enfoque OS
+Name[pt_BR]=Menu Enfoque OS
+Comment=Menu visual de aplicativos e pesquisa
+Exec=/usr/local/bin/enfoque-desktop-shell menu
+Icon=enfoque-start
+Categories=System;Utility;
+Terminal=false

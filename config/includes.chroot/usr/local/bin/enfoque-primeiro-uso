@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""Enfoque OS - assistente opcional de primeiro uso do usuario (sem coletar senha)."""
+import argparse
+import os
+import pathlib
+import subprocess
+import time
+import gi
+gi.require_version("Gtk","3.0")
+from gi.repository import Gtk
+MARKER=pathlib.Path.home()/".config/enfoque-os/primeiro-uso-concluido"
+PROGRAMS=[
+    ("Wi-Fi e internet","Conectar a rede disponível",["nm-connection-editor"]),
+    ("Impressoras","Configurar driver e papel correto",["system-config-printer"]),
+    ("Navegador","Abrir Google Chrome sem acessar suas senhas",["google-chrome-stable"]),
+    ("Proteção","Configurar pontos de restauração no Timeshift",["timeshift-launcher"]),
+    ("Saúde e suporte","Abrir a Central de Recuperação",["/usr/local/bin/enfoque-recuperacao"]),
+]
+class FirstUse(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="Enfoque OS — Primeira configuração")
+        self.set_default_size(570,470)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.set_border_width(23)
+        box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12)
+        self.add(box)
+        title=Gtk.Label(label="Bem-vindo ao Enfoque OS")
+        title.set_xalign(0)
+        title.set_markup("<span size='x-large' weight='bold'>Bem-vindo ao Enfoque OS</span>")
+        box.pack_start(title,False,False,0)
+        subtitle=Gtk.Label(label="Vamos preparar os recursos essenciais antes do primeiro dia de trabalho.")
+        subtitle.set_xalign(0)
+        subtitle.set_line_wrap(True)
+        box.pack_start(subtitle,False,False,0)
+        for name,detail,argv in PROGRAMS:
+            row=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=12)
+            label=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=3)
+            h=Gtk.Label(label=name);h.set_xalign(0)
+            s=Gtk.Label(label=detail);s.set_xalign(0);s.set_line_wrap(True)
+            label.pack_start(h,False,False,0);label.pack_start(s,False,False,0)
+            row.pack_start(label,True,True,0)
+            button=Gtk.Button(label="Abrir")
+            button.connect("clicked",lambda _,args=argv:self.launch(args))
+            row.pack_end(button,False,False,0)
+            box.pack_start(row,False,False,0)
+        box.pack_start(Gtk.Separator(),False,False,4)
+        note=Gtk.Label(label="Nenhuma senha é lida pelo assistente. Configuração de backup e acesso remoto exigem autorização da TI.")
+        note.set_xalign(0);note.set_line_wrap(True)
+        box.pack_start(note,False,False,0)
+        button=Gtk.Button(label="Concluir e não mostrar novamente")
+        button.connect("clicked",self.complete)
+        box.pack_end(button,False,False,0)
+    def launch(self,argv):
+        try:subprocess.Popen(argv,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)
+        except OSError:
+            dialog=Gtk.MessageDialog(self,0,Gtk.MessageType.WARNING,Gtk.ButtonsType.OK,"Recurso não disponível neste computador.")
+            dialog.run();dialog.destroy()
+    def complete(self,_):
+        try:
+            MARKER.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+            MARKER.write_text("O usuário concluiu o assistente.\n",encoding="utf-8")
+            MARKER.chmod(0o600)
+        except OSError:
+            pass
+        self.destroy()
+def main():
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--once",action="store_true")
+    ap.add_argument("--preview",action="store_true")
+    args=ap.parse_args()
+    if args.once and (pathlib.Path("/run/live/medium").exists() or
+                      pathlib.Path("/.dockerenv").exists() or MARKER.exists() or
+                      not pathlib.Path("/etc/enfoque-os/primeiro-uso-habilitado").exists()):
+        return 0
+    if args.once:time.sleep(12)
+    win=FirstUse();win.show_all()
+    win.connect("destroy",Gtk.main_quit)
+    Gtk.main()
+    return 0
+if __name__=="__main__":
+    raise SystemExit(main())

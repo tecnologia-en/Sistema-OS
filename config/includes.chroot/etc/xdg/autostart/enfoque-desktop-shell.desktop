@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Menu e notificações da Enfoque
+Exec=/usr/local/bin/enfoque-desktop-shell daemon
+OnlyShowIn=XFCE;
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

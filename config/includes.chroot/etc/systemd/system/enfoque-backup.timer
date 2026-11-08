@@ -1,0 +1,11 @@
+[Unit]
+Description=Enfoque OS - backup semanal autorizado (se configurado)
+
+[Timer]
+OnCalendar=Sun *-*-* 02:30:00
+RandomizedDelaySec=15min
+Persistent=true
+Unit=enfoque-backup.service
+
+[Install]
+WantedBy=timers.target

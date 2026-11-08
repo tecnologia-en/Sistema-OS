@@ -14,7 +14,7 @@ on:
       - '.github/workflows/build-iso.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: build-iso
@@ -75,7 +75,8 @@ jobs:
           pkg=$(find config/packages.chroot -maxdepth 1 -name 'enfoque-os-core_*.deb' -print -quit)
           test -s "$pkg"
           test "$(dpkg-deb -f "$pkg" Package)" = 'enfoque-os-core'
-          test "$(dpkg-deb -f "$pkg" Version)" = '0.2.24-1'
+          version=$(sed -n 's/^VERSION="\([^"]*\)"/\1/p' config/includes.chroot/etc/enfoque-os-release)
+          test "$(dpkg-deb -f "$pkg" Version)" = "${version}-1"
           dpkg-deb --contents "$pkg" > "$RUNNER_TEMP/enfoque-core-package-contents.txt"
           grep -Fq 'usr/local/sbin/enfoque-update' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
           grep -Fq 'usr/local/sbin/enfoque-zero-touch' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
@@ -89,98 +90,64 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
-      - name: Upload ISO and checksums
-        uses: actions/upload-artifact@v4
-        with:
-          name: enfoque-os-iso-${{ github.run_number }}
-          path: |
-            dist/*.iso
-            dist/SHA256SUMS
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: Split verified ISO into 350 MiB chunks
+      - name: Split verified ISO into variable-count 350 MiB chunks
         run: |
           set -euo pipefail
           iso=$(find dist -maxdepth 1 -type f -name '*.iso' -print -quit)
           test -n "$iso" && test -s "$iso"
           (cd dist && sha256sum -c SHA256SUMS)
           mkdir -p parts
-          split --bytes=350m --numeric-suffixes=0 --suffix-length=2 "$iso" parts/chunk-
-          test "$(find parts -maxdepth 1 -type f -name 'chunk-*' | wc -l)" -eq 7
+          split --bytes=350m --numeric-suffixes=0 --suffix-length=3 "$iso" parts/chunk-
+          count=$(find parts -maxdepth 1 -type f -name 'chunk-*' | wc -l)
+          test "$count" -ge 1 && test "$count" -le 99
           cp dist/SHA256SUMS parts/SHA256SUMS
           (cd parts && sha256sum chunk-* > SHA256_PARTS && sha256sum -c SHA256_PARTS)
+          version=$(sed -n 's/^VERSION="\([^"]*\)"/\1/p' config/includes.chroot/etc/enfoque-os-release)
+          cat > parts/LEIA-ME.txt <<EOF
+          ENFOQUE OS ${version} — ISO completa em partes (GitHub Releases)
+          A ISO foi gerada e verificada no GitHub Actions, sem baixar em nenhum PC.
 
-      - name: Upload split manifest
+          Os arquivos chunk-000, chunk-001, ... compoem UMA unica ISO.
+          Mantenha todas as partes na mesma pasta e, no Linux, execute:
+            cat chunk-* > enfoque-os-${version}-piloto-amd64.iso
+            sha256sum -c SHA256SUMS
+          Verifique tambem:
+            sha256sum -c SHA256_PARTS
+
+          ISO de teste/piloto: exige validacao em maquina descartavel antes de lojas.
+          Backup, drivers, recuperacao e agente remoto dependem de configuracoes
+          e autorizacoes individuais; rollback de boot automatico NAO foi homologado.
+          EOF
+
+      - name: Upload full ISO and checksums to GitHub Actions artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: enfoque-os-parts-manifest-${{ github.run_number }}
+          name: enfoque-os-iso-full-${{ github.run_number }}
           path: |
-            parts/SHA256SUMS
-            parts/SHA256_PARTS
-          compression-level: 0
-          retention-days: 7
+            dist/*.iso
+            dist/SHA256SUMS
+          retention-days: 14
           if-no-files-found: error
 
-      - name: Upload chunk 00
+      - name: Upload every ISO chunk and integrity manifest
         uses: actions/upload-artifact@v4
         with:
-          name: enfoque-os-chunk-00-${{ github.run_number }}
-          path: parts/chunk-00
+          name: enfoque-os-iso-parts-${{ github.run_number }}
+          path: parts/
           compression-level: 0
-          retention-days: 7
+          retention-days: 30
           if-no-files-found: error
 
-      - name: Upload chunk 01
-        uses: actions/upload-artifact@v4
-        with:
-          name: enfoque-os-chunk-01-${{ github.run_number }}
-          path: parts/chunk-01
-          compression-level: 0
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: Upload chunk 02
-        uses: actions/upload-artifact@v4
-        with:
-          name: enfoque-os-chunk-02-${{ github.run_number }}
-          path: parts/chunk-02
-          compression-level: 0
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: Upload chunk 03
-        uses: actions/upload-artifact@v4
-        with:
-          name: enfoque-os-chunk-03-${{ github.run_number }}
-          path: parts/chunk-03
-          compression-level: 0
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: Upload chunk 04
-        uses: actions/upload-artifact@v4
-        with:
-          name: enfoque-os-chunk-04-${{ github.run_number }}
-          path: parts/chunk-04
-          compression-level: 0
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: Upload chunk 05
-        uses: actions/upload-artifact@v4
-        with:
-          name: enfoque-os-chunk-05-${{ github.run_number }}
-          path: parts/chunk-05
-          compression-level: 0
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: Upload chunk 06
-        uses: actions/upload-artifact@v4
-        with:
-          name: enfoque-os-chunk-06-${{ github.run_number }}
-          path: parts/chunk-06
-          compression-level: 0
-          retention-days: 7
-          if-no-files-found: error
+      - name: Publish complete ISO chunks permanently as a GitHub prerelease
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/lowram-kiosk-028'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^VERSION="\([^"]*\)"/\1/p' config/includes.chroot/etc/enfoque-os-release)
+          tag="enfoque-os-v${version}-run${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" parts/chunk-* parts/SHA256SUMS parts/SHA256_PARTS parts/LEIA-ME.txt \
+            --target "$GITHUB_SHA" \
+            --title "Enfoque OS ${version} — ISO Piloto (build ${GITHUB_RUN_NUMBER})" \
+            --notes "ISO de teste compilada no GitHub Actions e distribuida em partes verificaveis. Leia LEIA-ME.txt antes de reconstruir. Nao distribuir para PCs de caixa sem homologacao." \
+            --prerelease

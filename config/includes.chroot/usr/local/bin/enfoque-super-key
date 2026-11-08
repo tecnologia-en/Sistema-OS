@@ -1,0 +1,18 @@
+#!/bin/sh
+# Abrir o menu Enfoque quando a tecla Windows for solta.
+# Mantem Win+E, Win+R e outros atalhos combinados sem interceptar as combinacoes.
+# O XFCE pode restaurar defaults na inicializacao; definir depois do xfconf ativo.
+menu_command=/usr/local/bin/enfoque-desktop-shell
+for attempt in 1 2 3 4 5; do
+  /usr/bin/xfconf-query -c xfce4-keyboard-shortcuts \
+    -p '/commands/custom/<Primary>Escape' \
+    -s "$menu_command menu" >/dev/null 2>&1 && break
+  sleep 1
+done
+/usr/bin/xfconf-query -c xfce4-keyboard-shortcuts \
+  -p '/commands/custom/<Super>space' \
+  -n -t string -s "$menu_command menu" >/dev/null 2>&1 ||
+  /usr/bin/xfconf-query -c xfce4-keyboard-shortcuts \
+  -p '/commands/custom/<Super>space' \
+  -s "$menu_command menu" >/dev/null 2>&1 || true
+exec /usr/bin/xcape -e 'Super_L=Control_L|Escape;Super_R=Control_L|Escape'

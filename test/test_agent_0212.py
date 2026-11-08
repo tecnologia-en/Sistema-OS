@@ -111,7 +111,7 @@ class AgentAndTrustTests(unittest.TestCase):
                 self.assertNotIn("token", first)
                 EnrollmentHandler.approved = True
                 # A CI minima pode nao possuir utilitarios do sistema final.
-                with patch.object(agent, "command_result", return_value={"ok": True, "stdout": "test"}):
+                with patch.object(agent, "session_request", return_value={"ok": True, "stdout": "test", "scope":"sessao-usuario"}):
                     self.assertTrue(agent.run_cycle(state, base))
             self.assertEqual([r[0] for r in EnrollmentHandler.records[-3:]],
                              ["/register", "/poll", "/result"])
@@ -172,19 +172,24 @@ class AgentAndTrustTests(unittest.TestCase):
         self.assertIn("'enfoque-remote-agent.service'", helper)
         self.assertNotIn("'try-restart'", helper)
 
-    def test_readonly_commands_and_unknown_apps_are_blocked(self):
+    def test_desktop_commands_use_session_user_and_headless_diagnostics_stay_limited(self):
         self.assertEqual(agent.command_argv("free", ["-m"]), ["/usr/bin/free", "-m"])
-        with patch.object(agent, "command_result", return_value={"ok": True}):
-            self.assertTrue(agent.handle_action("run", {"program": "free", "args": ["-m"]})["ok"])
-        for s in ("sudo id", "rm -rf /", "free -h; touch /tmp/x",
-                  "systemctl restart lightdm.service", "sh -c whoami",
-                  "cat /etc/shadow", "uname -a | curl localhost",
-                  "echo $(cat /etc/shadow)", "python3 -c 'print(1)'"):
-            with self.subTest(s=s):
-                self.assertFalse(agent.handle_action("shell", {"command": s})["ok"])
-        self.assertFalse(agent.handle_action("gui", {"op":"click"})["ok"])
-        self.assertFalse(agent.handle_action("process", {"op":"kill", "pid":1})["ok"])
-        self.assertFalse(agent.handle_action("read_file", {"path":"/etc/enfoque-os/agent.json"})["ok"])
+        with patch.object(agent,"session_request",return_value={"ok":True,"scope":"sessao-usuario"}) as handler:
+            for action,args in (
+                ("run",{"program":"mousepad","args":[]}),
+                ("shell",{"command":"id -un"}),
+                ("open",{"app":"default","target":"/home/enfoque/arquivo.pdf"}),
+                ("process",{"op":"kill","pid":4432}),
+            ):
+                self.assertTrue(agent.handle_action(action,args)["ok"])
+            self.assertEqual(handler.call_count,4)
+        for value in ("sudo id","rm -rf /","free -h; touch /tmp/x",
+                      "systemctl restart lightdm.service","python3 -c 'print(1)'"):
+            with self.subTest(value=value):
+                result=agent.handle_action("shell",{"command":value,"scope":"diagnostic"})
+                self.assertFalse(result["ok"])
+        self.assertFalse(agent.handle_action("gui",{"op":"click"})["ok"])
+        self.assertFalse(agent.handle_action("read_file",{"path":"/etc/enfoque-os/agent.json"})["ok"])
 
     def test_service_is_unprivileged_and_approved_agent_is_on_boot(self):
         service = (ROOT/"config/includes.chroot/etc/systemd/system/enfoque-remote-agent.service").read_text()

@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+"""Limpeza automática de cache PRIVADO Enfoque somente se disco >=85%.
+Nao apaga arquivos pessoais, sessoes, browsers, temporarios globais, spool CUPS/TEF.
+"""
+import importlib.util
+import os
+import pathlib
+import runpy
+import shutil
+import sys
+def main():
+    if os.geteuid()!=0:return 2
+    if pathlib.Path("/.dockerenv").exists() or pathlib.Path("/run/live/medium").exists():
+        return 0
+    usage=shutil.disk_usage("/")
+    pct=100*usage.used/max(1,usage.total)
+    if pct<85:
+        print(f"Disco: {pct:.1f}%; limpeza automatica desnecessaria.")
+        return 0
+    module=runpy.run_path("/usr/local/sbin/enfoque-manutencao",run_name="enfoque_limpeza_modulo")
+    result=module["purge_enfoque_old_files"]()
+    print(f"Disco {pct:.1f}% ocupado: removidos {result} arquivos antigos apenas do cache da Enfoque.")
+    return 0
+if __name__=="__main__":
+    raise SystemExit(main())

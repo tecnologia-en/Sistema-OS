@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Enfoque OS — Agente da sessão
+Comment=Abre programas e executa comandos no usuário logado; sem comunicação externa
+Exec=/usr/local/bin/enfoque-session-agent
+TryExec=/usr/local/bin/enfoque-session-agent
+OnlyShowIn=XFCE;
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

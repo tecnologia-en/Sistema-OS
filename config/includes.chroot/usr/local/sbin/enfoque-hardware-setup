@@ -1,0 +1,294 @@
+#!/usr/bin/env python3
+"""Enfoque OS: instalacao assistida de drivers genéricos e teste de impressoras.
+Executa somente no Linux instalado, como root. --dry-run nao instala nem imprime.
+IPP Everywhere e CUPS sao o caminho automatico preferido; filas RAW/termicas sem
+formato confirmado geram aviso, nunca impressao arbitraria.
+"""
+import argparse, datetime, fcntl, hashlib, ipaddress, json, os, pathlib
+import re, shutil, socket, subprocess, sys, tempfile, urllib.parse, select, time
+
+ROOT=pathlib.Path("/var/lib/enfoque-os")
+STATE=ROOT/"hardware-status.json"
+SENT=ROOT/"test-pages-sent.json"
+BASE=("libgl1-mesa-dri","mesa-vulkan-drivers","xserver-xorg-video-all")
+PRINTERS=("cups","cups-client","cups-filters","cups-browsed","ipp-usb",
+          "printer-driver-gutenprint","printer-driver-escpr","system-config-printer")
+DRY=False
+INFO={}
+
+def now():
+    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+def cmd(argv,limit=30):
+    try:
+        p=subprocess.run(argv,text=True,capture_output=True,timeout=limit)
+        return p.returncode,p.stdout,p.stderr
+    except (OSError,subprocess.TimeoutExpired) as exc:
+        return 124,"",str(exc)
+def load(path,default):
+    try:return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError,ValueError):return default
+def store(path,value):
+    if DRY:return
+    path.parent.mkdir(parents=True,exist_ok=True)
+    fd,tmp=tempfile.mkstemp(prefix=path.name+"-",dir=path.parent)
+    try:
+        with os.fdopen(fd,"w",encoding="utf-8") as f:
+            json.dump(value,f,indent=2,ensure_ascii=False)
+            f.flush();os.fsync(f.fileno())
+        os.chmod(tmp,0o644)
+        os.replace(tmp,path)
+    finally:
+        try:os.unlink(tmp)
+        except FileNotFoundError:pass
+def event(title,detail,state="detectando",progress=None,device=""):
+    e={"title":title,"detail":str(detail)[:280],"state":state,
+       "progress":progress,"time":now(),"device":device}
+    INFO.setdefault("events",[]).append(e)
+    INFO["events"]=INFO["events"][-100:]
+    store(STATE,INFO)
+    print(f"{now()} {title}: {detail} ({state}, {progress})",flush=True)
+def installed(name):
+    rc,out,_=cmd(["dpkg-query","-W","-f="+"$"+"{Status}",name],10)
+    return rc==0 and "install ok installed" in out
+def parse_apt_line(line):
+    """Parse apt's native status-fd; only report percentages emitted by APT itself."""
+    columns=line.strip().split(":",3)
+    if len(columns)<4 or columns[0] not in ("dlstatus","pmstatus"):
+        return None
+    try:
+        number=int(float(columns[2]))
+    except (ValueError,OverflowError):
+        return None
+    if not 0<=number<=100:
+        return None
+    phase="Baixando pacotes" if columns[0]=="dlstatus" else "Instalando pacotes"
+    return phase,number,columns[3][:130]
+
+def apt_progress(packages,title,env):
+    """Nonblocking status pipe; logs redirected to tempfile; bounded by 600s."""
+    rd,wr=os.pipe()
+    process=None
+    start=time.monotonic()
+    last=(-1,"")
+    buffer=b""
+    reason=""
+    with tempfile.TemporaryFile(mode="w+t",encoding="utf-8",errors="replace") as log:
+        try:
+            process=subprocess.Popen(
+                ["apt-get","-y","-o","Dpkg::Lock::Timeout=25",
+                 "-o",f"APT::Status-Fd={wr}","install","--no-install-recommends",*packages],
+                env=env,stdout=log,stderr=subprocess.STDOUT,pass_fds=(wr,))
+            os.close(wr)
+            wr=-1
+            while True:
+                remaining=600-(time.monotonic()-start)
+                if remaining<=0:
+                    process.kill()
+                    reason="Tempo máximo de instalação excedido."
+                    break
+                read_ready,_,_=select.select([rd],[],[],min(1.5,remaining))
+                if read_ready:
+                    piece=os.read(rd,4096)
+                    if not piece:
+                        break
+                    buffer+=piece
+                    while b"\n" in buffer:
+                        line,buffer=buffer.split(b"\n",1)
+                        parsed=parse_apt_line(line.decode("utf-8","replace"))
+                        if not parsed:
+                            continue
+                        phase,percent,message=parsed
+                        if phase!=last[1] or percent>=last[0]+5 or percent==100:
+                            event(title,phase+": "+message,"instalando",percent)
+                            last=(percent,phase)
+                elif process.poll() is not None:
+                    break
+            try:
+                code=process.wait(timeout=8)
+            except subprocess.TimeoutExpired:
+                process.kill();code=124
+            log.seek(0)
+            output=log.read()
+            if reason:
+                return 124,"",reason+" "+output[-320:]
+            return code,output,""
+        except OSError as exc:
+            return 124,"",str(exc)
+        finally:
+            if wr!=-1:os.close(wr)
+            os.close(rd)
+            if process and process.poll() is None:
+                process.kill();process.wait()
+
+def install(names,title):
+    needed=[name for name in names if not installed(name)]
+    if not needed:
+        event(title,"Componentes já instalados.","concluido",100)
+        return True
+    event(title,"Pacotes pendentes: "+", ".join(needed),"detectando",10)
+    if DRY:
+        event(title,"Simulação: nenhuma instalação foi executada.","simulacao",None)
+        return False
+    if not shutil.which("apt-get"):
+        event(title,"APT não disponível.","erro",None);return False
+    try:socket.getaddrinfo("deb.debian.org",80)
+    except OSError:
+        event(title,"Sem internet para baixar drivers. Tentará novamente.","aguardando",None);return False
+    rc,_,err=cmd(["apt-get","-o","Dpkg::Lock::Timeout=25","-qq","update"],150)
+    if rc:
+        event(title,"Não foi possível atualizar catálogos do APT: "+err[-180:],"erro",None);return False
+    event(title,"APT iniciando; aguardando progresso real de download e instalação.","instalando",None)
+    env={**os.environ,"DEBIAN_FRONTEND":"noninteractive"}
+    rc,out,err=apt_progress(needed,title,env)
+    if rc:
+        event(title,"Falha APT: "+(err or out)[-230:],"erro",None);return False
+    missing=[x for x in needed if not installed(x)]
+    if missing:
+        event(title,"Pacotes não confirmados: "+", ".join(missing),"erro",None);return False
+    event(title,"Componentes instalados; kernel/Xorg selecionará o driver compatível.","concluido",100)
+    return True
+def video():
+    _,out,_=cmd(["lspci","-nn"],15)
+    adapters=[l.strip() for l in out.splitlines()
+              if re.search(r"VGA compatible|Display controller|3D controller",l,re.I)]
+    adapter=adapters[0] if adapters else "Adaptador gráfico PCI não identificado"
+    INFO["video"]={"adapter":adapter[:200],"state":"detectando","progress":5}
+    store(STATE,INFO)
+    event("Vídeo",adapter,"detectando",5)
+    fw=[]
+    if re.search(r"AMD|ATI|Radeon",adapter,re.I):fw=["firmware-amd-graphics"]
+    elif re.search("Intel",adapter,re.I):fw=["firmware-intel-graphics"]
+    elif re.search("NVIDIA",adapter,re.I):
+        event("Vídeo","Usando Nouveau/Mesa. NVIDIA proprietário exige validação manual.","atenção",None)
+    ok=install([*BASE,*fw],"Vídeo: drivers genéricos")
+    INFO["video"].update({"state":"concluido" if ok else "pendente",
+                          "message":"Drivers genéricos disponíveis." if ok else "Instalação pendente; veja notificações.",
+                          "progress":100 if ok else None})
+    store(STATE,INFO)
+    if ok and fw:event("Vídeo","Firmware instalado. Talvez seja necessário reiniciar para ativar.","atenção",None)
+def queues():
+    rc,out,_=cmd(["lpstat","-v"],12)
+    if rc:return []
+    return [(m.group(1),m.group(2)) for l in out.splitlines()
+            if (m:=re.match(r"device for ([A-Za-z0-9_.-]+):\s*(.+)",l))]
+def found():
+    rc,out,_=cmd(["lpinfo","-v"],15)
+    if rc:return []
+    result=[]
+    for l in out.splitlines():
+        a=l.split(maxsplit=1)
+        if len(a)==2 and a[0] in ("direct","network"):result.append(a[1].strip())
+    return result
+def local_ipp(uri):
+    if uri.startswith("dnssd://"):return True
+    if not uri.startswith(("ipp://","ipps://")):return False
+    host=(urllib.parse.urlsplit(uri).hostname or "").strip("[]").lower()
+    if host in ("localhost","127.0.0.1") or host.endswith(".local"):return True
+    try:
+        ip=ipaddress.ip_address(host)
+        return ip.is_private or ip.is_loopback or ip.is_link_local
+    except ValueError:return False
+def test_compat(queue,uri):
+    if not local_ipp(uri) and not uri.startswith("usb://"):
+        return False,"Impressora remota fora da rede local; teste bloqueado."
+    rc,opts,_=cmd(["lpoptions","-p",queue,"-l"],10)
+    if rc or not opts.strip():
+        return False,"Driver da fila não fornece capacidades de impressão (RAW/indefinido)."
+    low=opts.lower()
+    if any(x in low for x in ("a4","letter","na_letter")):
+        return True,"Documento A4/Letter"
+    if re.search(r"custom\.(58|80)(mm|x)",low) and any(
+            x in low for x in ("thermal","receipt","roll","esc/pos")):
+        return True,"Papel térmico compatível"
+    return False,"Impressora térmica ou etiquetas: driver/tamanho não confirmado para teste seguro."
+def send_test(queue,uri,sent):
+    key=hashlib.sha256((queue+"|"+uri).encode()).hexdigest()
+    if key in sent:return
+    compatible,reason=test_compat(queue,uri)
+    if not compatible:
+        event("Impressora "+queue,reason,"atenção",None,queue)
+        sent[key]={"state":"driver_incompativel","time":now()};store(SENT,sent);return
+    if DRY:
+        event("Impressora "+queue,"Simulação: teste compatível seria enviado.","simulacao",None,queue);return
+    with tempfile.NamedTemporaryFile("w",encoding="utf-8",prefix="enfoque-teste-",suffix=".txt",delete=False) as tmp:
+        tmp.write("ENFOQUE OS — TESTE DE IMPRESSAO\n")
+        tmp.write("Fila: "+queue+"\nData: "+now()+"\n")
+        path=tmp.name
+    try:
+        event("Impressora "+queue,"Enviando página de teste do CUPS.","enviando",75,queue)
+        rc,out,err=cmd(["lp","-d",queue,"-t","Enfoque - teste automatico",path],30)
+        if rc:
+            event("Impressora "+queue,"Erro CUPS: "+err[-180:],"erro",None,queue)
+            return
+        sent[key]={"state":"enviado_fila_cups","time":now(),"job":out[:110]}
+        store(SENT,sent)
+        event("Impressora "+queue,"Página enviada à fila CUPS; confirme a saída física.","concluido",100,queue)
+    finally:
+        pathlib.Path(path).unlink(missing_ok=True)
+def printer_setup():
+    event("Impressoras","Detecção de USB e IPP iniciada.","detectando",5)
+    install(PRINTERS,"Impressoras: suporte genérico")
+    if not DRY:
+        cmd(["systemctl","start","cups.service"],10)
+        cmd(["systemctl","start","cups-browsed.service"],10)
+    available=queues()
+    uris={uri for _,uri in available}
+    devices=found()
+    for uri in devices[:24]:
+        if uri in uris or not local_ipp(uri):continue
+        name="enfoque-ipp-"+hashlib.sha256(uri.encode()).hexdigest()[:9]
+        if DRY:
+            event("Impressora",f"Criaria fila IPP {name}","simulacao",None);continue
+        rc,_,err=cmd(["lpadmin","-p",name,"-E","-v",uri,"-m","everywhere"],50)
+        if rc:
+            event("Impressora",f"IPP {name} exige configuração manual: {err[-120:]}","atenção",None)
+        else:
+            event("Impressora",f"IPP Everywhere: fila {name} criada.","concluido",100)
+            uris.add(uri)
+    available=queues()
+    configured={uri for _,uri in available}
+    configured_rows=[{"name":n,"connection":u,"state":"configurada","progress":100}
+                     for n,u in available[:25]]
+    pending_rows=[{"name":"Dispositivo USB/IPP identificado","connection":uri,
+                   "state":"detectada","message":"Configuração pendente","progress":None}
+                  for uri in devices[:24] if uri not in configured and
+                  (local_ipp(uri) or uri.startswith("usb://"))]
+    INFO["printers"]=(configured_rows+pending_rows)[:40]
+    store(STATE,INFO)
+    sent=load(SENT,{})
+    if not isinstance(sent,dict):sent={}
+    for name,uri in available[:20]:
+        send_test(name,uri,sent)
+    if not available:
+        event("Impressoras",f"{len(devices)} dispositivo(s) anunciados, nenhuma fila pronta.","aguardando",None)
+    else:
+        event("Impressoras",f"{len(available)} fila(s) pronta(s) e teste automático quando compatível.","concluido",100)
+def main():
+    global DRY,INFO
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--dry-run",action="store_true")
+    ap.add_argument("--only",choices=["all","video","printers"],default="all")
+    args=ap.parse_args()
+    DRY=args.dry_run
+    if not DRY and os.geteuid()!=0:
+        print("Execute como root via systemd.",file=sys.stderr);return 2
+    if not DRY and pathlib.Path("/run/live/medium").exists():
+        print("Sessão Live: instalação adiada até o Linux estar instalado.");return 0
+    if not DRY:ROOT.mkdir(parents=True,exist_ok=True)
+    if not DRY:
+        lock=os.open(ROOT/"hardware-agent.lock",os.O_CREAT|os.O_RDWR,0o600)
+        try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:
+            print("Verificação de hardware já está executando");return 0
+    INFO=load(STATE,{"events":[],"printers":[],"video":{}})
+    if not isinstance(INFO,dict):INFO={"events":[],"printers":[],"video":{}}
+    INFO.setdefault("events",[]);INFO.setdefault("printers",[]);INFO.setdefault("video",{})
+    INFO["mode"]="simulacao_segura" if DRY else "equipamento_real"
+    event("Enfoque OS","Verificação de vídeo e impressoras iniciada.","detectando",5)
+    if args.only in ("all","video"):video()
+    if args.only in ("all","printers"):printer_setup()
+    INFO["last_scan"]=now()
+    store(STATE,INFO)
+    return 0
+if __name__=="__main__":
+    sys.exit(main())

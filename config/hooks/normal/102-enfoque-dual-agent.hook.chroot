@@ -1,0 +1,17 @@
+#!/bin/sh
+# Enfoque OS: inicializar IPC restrito entre serviço de rede e sessão X11.
+# O agente de sessão roda sob o usuário efetivamente logado e nunca como root.
+set -eu
+getent group enfoque-remote >/dev/null 2>&1 || groupadd --system enfoque-remote
+for filename in /usr/local/bin/enfoque-remote-agent \
+                /usr/local/bin/enfoque-session-agent \
+                /usr/local/bin/enfoque-sessao-status; do
+  test -f "$filename" && test ! -L "$filename"
+  chown root:root "$filename"
+  chmod 0755 "$filename"
+done
+test -f /etc/tmpfiles.d/enfoque-remote.conf
+chmod 0644 /etc/tmpfiles.d/enfoque-remote.conf
+chmod 0644 /etc/xdg/autostart/enfoque-session-agent.desktop
+# No Live credentials, password or reusable SSH key is placed in the ISO.
+# Original hook 099 enables the outbound network agent after enrollment.

@@ -78,9 +78,11 @@ def prepare():
     check_root()
     run("groupadd", "-f", "nopasswdlogin")
     ensure_user("enfoque-kiosk", Path("/var/lib/enfoque-kiosk"),
-                "audio,video,nopasswdlogin", system=False, shell="/bin/bash")
+                "audio,video,nopasswdlogin,enfoque-remote", system=False, shell="/bin/bash")
     ensure_user("enfoque-tef", Path("/var/lib/paygo-tef"),
                 "dialout", system=True, shell="/usr/sbin/nologin")
+    # Existing kiosk installations keep the login but receive only GUI IPC.
+    run("usermod", "-a", "-G", "enfoque-remote", "enfoque-kiosk")
     ensure_access_policy()
     print("Contas separadas criadas: navegador e TEF sem sudo; acesso SSH negado")
 
