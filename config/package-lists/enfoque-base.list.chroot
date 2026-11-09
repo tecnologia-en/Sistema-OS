@@ -15,6 +15,9 @@ wbrazilian
 parted
 squashfs-tools
 dosfstools
+# Read Windows NTFS and exFAT files offline for safe pre-install backup.
+ntfs-3g
+exfatprogs
 e2fsprogs
 grub2-common
 grub-pc-bin
