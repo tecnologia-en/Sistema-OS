@@ -84,6 +84,16 @@ jobs:
           grep -Fq 'usr/local/sbin/enfoque-update' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
           grep -Fq 'usr/local/sbin/enfoque-zero-touch' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
           grep -Fq 'usr/local/sbin/enfoque-tunnel' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
+          grep -Fq 'usr/local/sbin/enfoque-live-session' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
+          grep -Fq 'etc/systemd/system/enfoque-live-session.service' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
+          # The .deb is installed into the chroot before the Live boot; do not
+          # consume UID 1000 by creating an admin account from its postinst.
+          dpkg-deb --ctrl-tarfile "$pkg" | tar -xOf - ./postinst > "$RUNNER_TEMP/enfoque-core-postinst"
+          if grep -Eq '(^|[[:space:]])(useradd|adduser|newusers)[[:space:]]' "$RUNNER_TEMP/enfoque-core-postinst"; then
+            echo 'ERROR: core postinst creates a user before Live boot' >&2
+            exit 1
+          fi
+          grep -Fq 'systemctl enable enfoque-live-session.service' config/hooks/normal/104-enfoque-live-autologin.hook.chroot
 
       - name: Upload signed-repo-ready APT core package
         uses: actions/upload-artifact@v4

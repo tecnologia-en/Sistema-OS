@@ -1,0 +1,76 @@
+#!/bin/sh
+# Enfoque OS 0.2.27: modo Live deve criar a conta temporaria e abrir XFCE
+# automaticamente. Esta rotina NUNCA configura autologin numa instalacao em disco.
+set -eu
+
+log() {
+    logger -t enfoque-live-session -- "$1" 2>/dev/null || :
+    printf '%s\n' "$1"
+}
+
+# Protecao dupla: parametro do kernel + meio Live montado. Instalada = sem autologin.
+case " $(cat /proc/cmdline) " in
+    *" boot=live "*) ;;
+    *) log "Boot instalado: sem login automatico"; exit 0 ;;
+esac
+if [ ! -d /run/live/medium ]; then
+    log "Boot Live sem /run/live/medium; nao configurar autologin"
+    exit 1
+fi
+
+# live-config criara normalmente 'user' UID 1000. Fallback se o Debian nao criar.
+if ! id -u user >/dev/null 2>&1; then
+    log "live-config nao criou user; aplicando fallback de conta Live"
+    useradd --create-home --shell /bin/bash user
+fi
+
+# Confirma usuario real, nao conta de sistema ou shell nologin.
+shell="$(getent passwd user | cut -d: -f7)"
+case "$shell" in
+    /bin/bash|/bin/sh|/usr/bin/bash) ;;
+    *) log "Conta Live tem shell inesperado: $shell"; exit 1 ;;
+esac
+uid="$(id -u user)"
+if [ "$uid" -lt 1000 ]; then
+    log "Conta Live com UID de sistema: $uid"
+    exit 1
+fi
+
+if [ ! -d /home/user ]; then
+    install -d -o user -g "$(id -gn user)" -m 0755 /home/user
+fi
+
+# Senha padrao publica do Debian Live, util apenas para fallback no terminal.
+# O usuario deve ser logado automaticamente pelo LightDM, sem pedido de senha.
+printf 'user:live\n' | chpasswd
+
+for group in audio cdrom dip floppy video plugdev sudo; do
+    if getent group "$group" >/dev/null 2>&1; then
+        usermod -a -G "$group" user
+    fi
+done
+
+if [ ! -f /usr/share/xsessions/xfce.desktop ]; then
+    log "Sessao Xfce X11 nao encontrada; abortando para diagnostico"
+    exit 1
+fi
+if [ ! -x /usr/sbin/lightdm ] && [ ! -x /usr/bin/lightdm ]; then
+    log "LightDM nao instalado"
+    exit 1
+fi
+
+mkdir -p /etc/lightdm/lightdm.conf.d
+# Arquivo montado na sobreposicao da ISO Live; nao persiste no SSD.
+cat > /etc/lightdm/lightdm.conf.d/95-enfoque-live-autologin.conf <<'EOF'
+[Seat:*]
+greeter-session=lightdm-gtk-greeter
+user-session=xfce
+autologin-session=xfce
+autologin-user=user
+autologin-user-timeout=0
+allow-guest=false
+EOF
+chmod 0644 /etc/lightdm/lightdm.conf.d/95-enfoque-live-autologin.conf
+
+log "Conta Live pronta: $(id -un user) UID $(id -u user); LightDM iniciara XFCE sem pedir senha"
+exit 0

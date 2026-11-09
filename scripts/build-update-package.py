@@ -97,6 +97,8 @@ def manifest():
         "etc/apt/sources.list.d/enfoque-os.sources",
         "etc/systemd/system/enfoque-update-check.timer",
         "etc/systemd/system/enfoque-update-apply.timer",
+        "usr/local/sbin/enfoque-live-session",
+        "etc/systemd/system/enfoque-live-session.service",
         "usr/local/sbin/enfoque-manutencao",
         "usr/local/sbin/enfoque-saude",
         "usr/local/sbin/enfoque-docklike-install",
@@ -156,9 +158,10 @@ def create(output):
             "  for u in enfoque enfoque-kiosk; do if id -u \"$u\" >/dev/null 2>&1; then usermod -a -G enfoque-remote \"$u\"; fi; done\n"
             "  systemd-tmpfiles --create /etc/tmpfiles.d/enfoque-remote.conf >/dev/null 2>&1 || true\n"
             "  if [ -s /usr/local/lib/enfoque-docklike/libdocklike.so ]; then /usr/local/sbin/enfoque-docklike-install; fi\n"
-            "  if ! id -u enfoque-ti >/dev/null 2>&1; then\n"
-            "    useradd -m -s /bin/bash enfoque-ti\n"
-            "  fi\n"
+            # Important: never create a regular account from a package postinst.
+            # live-build installs this .deb into the image chroot; creating
+            # enfoque-ti here consumes UID 1000, breaking Debian Live's user.
+            # The disk installer explicitly provisions enfoque-ti afterward.
             "  systemctl enable enfoque-update-check.timer enfoque-update-apply.timer enfoque-zero-touch.timer enfoque-saude.timer enfoque-backup.timer enfoque-limpeza.timer >/dev/null 2>&1 || true\n"
             "  if [ ! -s /etc/enfoque-ssh/authorized_keys ]; then\n"
             "    systemctl disable --now ssh.service ssh.socket >/dev/null 2>&1 || true\n"

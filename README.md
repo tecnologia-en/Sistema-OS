@@ -48,6 +48,7 @@ QA 0.2.3: [dois boots e navegador padrao no laboratorio](docs/TESTE_2026-10-16_0
 
 - 0.2.4: interface renovada com wallpaper da marca, barra inferior com data/hora, controle real de volume, indicador NetworkManager de rede/Wi-Fi, menu didatico, SVGs dos aplicativos internos e atalho do SIGE para /sistema. [Detalhes](docs/GUI_0.2.4.md).
 
+- 0.2.27: corrigido o login automatico do Live no XFCE. O .deb nao cria mais o usuario administrativo enfoque-ti durante a montagem da ISO (a conta consumia UID 1000 e impedia a conta user). Um servico exclusivo do Live prepara a conta e entra diretamente no XFCE; instalacoes no SSD seguem exigindo senha. A troca de VT fica restrita ao VirtualBox. A build falha se o UID 1000 estiver ocupado no chroot. Teste fisico de boot ainda pendente.
 - 0.2.5: login persistente com usuario e senha no instalador Debian (Calamares) e seletor de empresa no primeiro login, tela LightDM exigindo senha nos proximos acessos; correcoes finais de data e contraste na interface.
 
 - 0.2.7 (piloto): Wine 32/64 bits e PayGo Windows sem Warsaw incorporados; atalhos PayGo e Compatibilidade Windows na area de trabalho. Compatibilidade efetiva ainda nao foi testada. [Documentacao](docs/PAYGO_WINE_PILOTO.md).

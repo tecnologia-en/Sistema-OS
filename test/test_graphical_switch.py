@@ -10,13 +10,14 @@ SCRIPT = Path(__file__).resolve().parents[1] / "config/includes.chroot/usr/local
 
 
 class GraphicalSwitchTests(unittest.TestCase):
-    def run_mock(self, current, fail_vt=None):
+    def run_mock(self, current, fail_vt=None, virtualbox=True):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             fakebin = root / "bin"
             fakebin.mkdir()
             commands = {
                 "pgrep": "#!/bin/sh\nexit 0\n",
+                "grep": "#!/bin/sh\nexit 0\n" if virtualbox else "#!/bin/sh\nexit 1\n",
                 "ps": "#!/bin/sh\nprintf '%s\\n' '/usr/lib/xorg/Xorg :0 -seat seat0 vt7 -novtswitch'\n",
                 "fgconsole": "#!/bin/sh\nprintf '%s\\n' '" + str(current) + "'\n",
                 "chvt": "#!/bin/sh\nprintf '%s\\n' \"$1\" >> \"$TEST_CHVT_LOG\"\n"
@@ -41,6 +42,9 @@ class GraphicalSwitchTests(unittest.TestCase):
 
     def test_refreshes_when_fgconsole_cannot_report_console(self):
         self.assertEqual(self.run_mock(""), (0, "1\n7"))
+
+    def test_never_switches_graphical_vt_on_physical_hardware(self):
+        self.assertEqual(self.run_mock("1", virtualbox=False), (0, ""))
 
     def test_fails_when_graphic_vt_cannot_be_activated(self):
         self.assertEqual(self.run_mock("7", fail_vt="7"), (1, "1\n7"))

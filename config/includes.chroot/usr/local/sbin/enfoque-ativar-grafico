@@ -3,6 +3,10 @@
 # Forcar uma troca completa de VT, mesmo se fgconsole ja indicar o VT grafico,
 # garante que o console recarregue a imagem no VirtualBox.
 set -eu
+# On physical computers never switch the active graphical VT.
+if ! grep -qi -E 'virtualbox|oracle' /sys/class/dmi/id/product_name /sys/class/dmi/id/sys_vendor 2>/dev/null; then
+  exit 0
+fi
 attempt=0
 while [ "$attempt" -lt 45 ]; do
   attempt=$((attempt + 1))
@@ -33,5 +37,5 @@ while [ "$attempt" -lt 45 ]; do
   fi
   sleep 1
 done
-logger -t enfoque-os "Sessao grafica nao encontrada apos 45 segundos"
-exit 1
+logger -t enfoque-os "Ajuste VirtualBox ignorado: XFCE nao iniciou em 45 segundos"
+exit 0

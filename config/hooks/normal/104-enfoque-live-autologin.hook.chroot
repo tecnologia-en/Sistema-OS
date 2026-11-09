@@ -1,0 +1,13 @@
+#!/bin/sh
+# Habilita fallback de usuario Live ANTES do LightDM, nunca apos instalacao.
+set -eu
+test -x /usr/local/sbin/enfoque-live-session
+test -f /etc/systemd/system/enfoque-live-session.service
+systemctl enable enfoque-live-session.service
+# O pacote personalizado jamais deve consumir UID 1000 no chroot.
+if awk -F: '$3 == 1000 { print "Conta indevida UID 1000 na ISO: " $1 > "/dev/stderr"; bad=1 } END { exit bad ? 1 : 0 }' /etc/passwd; then
+  echo "ISO Live preparada sem contas precriadas UID 1000"
+else
+  echo "ERRO: UID 1000 deve estar livre para a conta user do Debian Live" >&2
+  exit 1
+fi

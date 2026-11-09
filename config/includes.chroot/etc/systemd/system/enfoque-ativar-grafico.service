@@ -4,6 +4,9 @@ Documentation=https://github.com/tecnologia-en/Sistema-OS
 After=lightdm.service
 Requires=lightdm.service
 ConditionPathExists=/run/live/medium
+# VT switching is exclusively a VirtualBox framebuffer workaround.
+# On physical computers it can blank the screen and is unnecessary.
+ConditionVirtualization=oracle
 
 [Service]
 Type=oneshot

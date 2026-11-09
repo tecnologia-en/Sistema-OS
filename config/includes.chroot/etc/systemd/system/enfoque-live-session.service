@@ -1,0 +1,17 @@
+[Unit]
+Description=Enfoque OS Live - criar conta temporaria e iniciar XFCE sem login
+Documentation=https://github.com/tecnologia-en/Sistema-OS
+After=live-config.service local-fs.target
+Before=lightdm.service display-manager.service
+ConditionKernelCommandLine=boot=live
+ConditionPathExists=/run/live/medium
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/enfoque-live-session
+TimeoutStartSec=40
+NoNewPrivileges=false
+ProtectHome=false
+
+[Install]
+WantedBy=graphical.target

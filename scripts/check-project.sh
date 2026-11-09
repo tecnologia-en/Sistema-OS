@@ -24,6 +24,20 @@ grep -Eq '^[[:space:]]*user-setup[[:space:]]*$' "$ROOT/config/package-lists/enfo
   echo 'ERRO: pacote user-setup ausente; modo Live nao criara o usuario.' >&2
   exit 1
 }
+
+# The admin support account is provisioned ONLY by the disk installer; the
+# Live image chroot must keep UID 1000 free for Debian's temporary user.
+for file in \
+    "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-live-session" \
+    "$ROOT/config/hooks/normal/104-enfoque-live-autologin.hook.chroot"; do
+  test -x "$file" || { echo "ERRO: Live autologin nao-executavel: $file" >&2; exit 1; }
+  sh -n "$file"
+done
+test -s "$ROOT/config/includes.chroot/etc/systemd/system/enfoque-live-session.service"
+grep -Fq 'After=live-config.service' "$ROOT/config/includes.chroot/etc/systemd/system/enfoque-live-session.service"
+grep -Fq 'Before=lightdm.service display-manager.service' "$ROOT/config/includes.chroot/etc/systemd/system/enfoque-live-session.service"
+grep -Fq 'ConditionKernelCommandLine=boot=live' "$ROOT/config/includes.chroot/etc/systemd/system/enfoque-live-session.service"
+grep -Fq 'username=user user-default-groups=' "$ROOT/scripts/build-iso.sh"
 grep -Eq '^[[:space:]]*sudo[[:space:]]*$' "$ROOT/config/package-lists/enfoque-base.list.chroot" || {
   echo 'ERRO: pacote sudo ausente no modo Live.' >&2
   exit 1
