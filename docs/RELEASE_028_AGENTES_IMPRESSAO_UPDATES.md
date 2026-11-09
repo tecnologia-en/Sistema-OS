@@ -1,3 +1,13 @@
+## Revisao 0.2.29 — bootstrap APT Debian 13
+
+O teste real de um Debian 13 limpo encontrou que gpgv nao e dependencia
+do apt (a distribuicao base utiliza sqv). Como o atualizador da Enfoque
+verifica InRelease com /usr/bin/gpgv, incluimos gpgv explicitamente tanto
+na ISO quanto no Depends do pacote de atualizacao. Um cliente com gpgv
+autorizado em laboratorio conseguiu habilitar a origem HTTPS e identificar
+0.2.28 como candidata. A revisao 0.2.29 substitui 0.2.28 como versao final
+recomendada para novas instalacoes e para o pacote corporativo.
+
 # Enfoque OS 0.2.28 - testes e implantacao
 
 ## Correcoes incluidas

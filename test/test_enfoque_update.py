@@ -41,6 +41,10 @@ class UpdateSecurityTests(unittest.TestCase):
         self.assertIsNotNone(updater.PKG.fullmatch("libreoffice"))
         self.assertIsNotNone(updater.PKG.fullmatch("linux-image-amd64"))
 
+    def test_gpgv_is_mandatory_for_signed_bootstrap_on_debian_13(self):
+        self.assertIn("\ngpgv\n", (ROOT / "config/package-lists/enfoque-base.list.chroot").read_text())
+        self.assertIn("ca-certificates, gpgv, openssh-client", (ROOT / "scripts/build-update-package.py").read_text())
+
     def test_package_builder_never_includes_agent_credentials_or_pycache(self):
         self.assertFalse(builder.managed("etc/enfoque-os/agent.json"))
         self.assertFalse(builder.managed("var/lib/enfoque-agent/identity.json"))

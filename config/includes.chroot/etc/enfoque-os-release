@@ -1,5 +1,5 @@
 NAME="Enfoque OS"
-VERSION="0.2.28"
+VERSION="0.2.29"
 CHANNEL="piloto"
 BASE="Debian 13 (trixie)"
-STATUS="piloto-agentes-driver-menu-028"
+STATUS="piloto-apt-assinado-029"

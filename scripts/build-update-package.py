@@ -144,7 +144,7 @@ def create(output):
             f"Package: {PACKAGE}\nVersion: {release}-1\n"
             "Section: admin\nPriority: optional\nArchitecture: all\n"
             "Maintainer: Enfoque TI <tecnologia@enfoquepapelaria.com.br>\n"
-            "Depends: python3, python3-gi, gir1.2-gtk-3.0, apt, systemd, ca-certificates, openssh-client, openssh-server, xfce4-genmon-plugin, xfce4-appfinder, xfce4-docklike-plugin, papirus-icon-theme, timeshift, rsync, restic, smartmontools, mate-polkit, pkexec\n"
+            "Depends: python3, python3-gi, gir1.2-gtk-3.0, apt, systemd, ca-certificates, gpgv, openssh-client, openssh-server, xfce4-genmon-plugin, xfce4-appfinder, xfce4-docklike-plugin, papirus-icon-theme, timeshift, rsync, restic, smartmontools, mate-polkit, pkexec\n"
             "Description: Enfoque OS corporate system components and updater\n"
             " Replaces custom Enfoque OS files on managed workstations using\n"
             " individually signed APT repository updates.\n",

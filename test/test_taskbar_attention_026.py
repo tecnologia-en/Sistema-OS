@@ -63,7 +63,7 @@ class DocklikeAttentionTests(unittest.TestCase):
 
     def test_release_number(self):
         release=(BASE/"etc/enfoque-os-release").read_text()
-        self.assertIn('VERSION="0.2.28"',release)
+        self.assertIn('VERSION="0.2.29"',release)
 
 if __name__=="__main__":
     unittest.main()
