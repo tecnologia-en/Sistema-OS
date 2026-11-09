@@ -1,26 +1,18 @@
 #!/usr/bin/env python3
-"""Installer offline for Enfoque OS. Explicit wipe or verified personal-file preservation.
+"""Installer offline for Enfoque OS. Wipes only an explicitly confirmed disk.
 
 This is a *disk installer*, never a USB/live persistence mechanism. It must
 be started from the live ISO, by a local operator who chose the target disk.
 """
 import argparse
-from contextlib import contextmanager, ExitStack
 import json
 import os
 from pathlib import Path
 import re
-import shutil
 import stat
 import subprocess
 import sys
-import tempfile
 import time
-from uuid import uuid4
-
-# Only imported by the ISO installer; unrelated to enrollment or agents.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib/enfoque-installer"))
-import preserve as migration
 
 MIN_BYTES = 24 * 1024 ** 3
 LIVE = Path("/run/live/medium")
@@ -104,144 +96,6 @@ def available_disks():
             continue
         disks.append({"path": path, "size": size, "model": obj.get("model") or "Disco interno"})
     return disks
-
-
-def block_tree():
-    return json.loads(run(
-        ["lsblk", "--json", "--tree", "--bytes", "--output",
-         "PATH,TYPE,SIZE,RM,RO,TRAN,MODEL,MOUNTPOINTS,FSTYPE,LABEL"],
-        quiet=True).stdout).get("blockdevices", [])
-
-
-def _walk_blocks(node):
-    for child in node.get("children") or []:
-        yield child
-        yield from _walk_blocks(child)
-
-
-SOURCE_FS = {"ext2", "ext3", "ext4", "ntfs", "ntfs3",
-             "exfat", "vfat", "xfs", "btrfs"}
-BACKUP_FS = {"ext4", "ntfs", "ntfs3", "exfat", "vfat"}
-
-
-def source_volumes(disk):
-    node = next((n for n in block_tree() if n.get("path") == disk), None)
-    if node is None:
-        raise ValueError("Disco original nao encontrado.")
-    volumes = []
-    for child in _walk_blocks(node):
-        kind = (child.get("fstype") or "").lower()
-        path = child.get("path") or ""
-        if kind in {"bitlocker", "crypto_luks", "crypto_luks2", "apfs"}:
-            raise migration.PreservationError(
-                f"Unidade {path} criptografada/nao suportada ({kind}); faca backup manual."
-            )
-        if child.get("type") in ("part", "lvm", "crypt") and kind in SOURCE_FS:
-            volumes.append({"path": path, "fstype": kind})
-        elif child.get("type") in ("part", "lvm", "crypt") and kind and kind not in {
-            "swap", "linux_raid_member", "lvm2_member", "zfs_member", "linux-swap",
-            "vfat", "ntfs", "ntfs3", "ext2", "ext3", "ext4", "exfat", "xfs", "btrfs"}:
-            raise migration.PreservationError(
-                f"Particao com formato desconhecido ({kind}) em {path}; "
-                "instalacao interrompida."
-            )
-    if not volumes:
-        raise migration.PreservationError("Nenhuma particao pessoal acessivel no disco.")
-    return volumes
-
-
-def backup_volumes(disk):
-    live = live_media_disk()
-    result = []
-    for root in block_tree():
-        parent = root.get("path")
-        if root.get("type") != "disk" or parent in (disk, live):
-            continue
-        if root.get("ro"):
-            continue
-        for node in _walk_blocks(root):
-            kind = (node.get("fstype") or "").lower()
-            if node.get("type") != "part" or kind not in BACKUP_FS or node.get("ro"):
-                continue
-            path = node.get("path")
-            if not path or not re.fullmatch(r"/dev/[a-zA-Z0-9_+./-]+", path):
-                continue
-            result.append({"path": path, "disk": parent,
-                           "size": node.get("size") or 0,
-                           "fstype": kind, "label": node.get("label") or "Backup",
-                           "model": root.get("model") or "Unidade secundaria"})
-    return result
-
-
-@contextmanager
-def mounted_volume(device, fs, *, writable=False):
-    """Mount in a private /run location; never format or change original volume."""
-    temp = Path(tempfile.mkdtemp(prefix="enfoque-preserve-", dir="/run"))
-    options = "rw,nosuid,nodev,noexec" if writable else "ro,nosuid,nodev,noexec"
-    if not writable and fs.startswith("ext"):
-        options += ",noload"
-    if not writable and fs == "xfs":
-        options += ",norecovery"
-    mounted = False
-    try:
-        run(["mount", "-o", options, device, str(temp)], timeout=40)
-        mounted = True
-        if writable:
-            test = temp / (".enfoque-write-test-" + uuid4().hex)
-            with test.open("x") as f:
-                f.write("ok")
-                f.flush()
-                os.fsync(f.fileno())
-            test.unlink()
-        yield temp
-    finally:
-        if mounted:
-            run(["sync"], timeout=60, quiet=True)
-            result = subprocess.run(["umount", str(temp)], timeout=45,
-                                    capture_output=True, text=True)
-            if result.returncode != 0:
-                raise migration.PreservationError(
-                    f"Nao foi possivel desmontar {device}; instalacao bloqueada.")
-        try:
-            temp.rmdir()
-        except OSError:
-            pass
-
-
-def target_user_ids():
-    passwd = (TARGET / "etc/passwd").read_text(encoding="utf-8")
-    for line in passwd.splitlines():
-        fields = line.split(":")
-        if fields[0] == "enfoque" and len(fields) >= 4:
-            return int(fields[2]), int(fields[3])
-    raise RuntimeError("Usuario enfoque nao criado no sistema novo.")
-
-
-def backup_personal_files(disk, backup_device, backup_mount):
-    """Collect on read-only mounts, stage on independent drive, verify before wipe."""
-    with ExitStack() as source_mounts:
-        scanned = []
-        for partition in source_volumes(disk):
-            source = source_mounts.enter_context(
-                mounted_volume(partition["path"], partition["fstype"]))
-            inventory = migration.scan_partition(source, Path(partition["path"]).name)
-            scanned.append((Path(partition["path"]).name, inventory))
-        files = migration.compile_inventory(scanned)
-        count = len(files)
-        size = sum(x.size for x in files)
-        print(f"Enfoque OS: localizados {count} arquivo(s) ({size} bytes).", flush=True)
-        free = shutil.disk_usage(backup_mount).free
-        if free < migration.required_space(files):
-            raise migration.PreservationError(
-                f"Backup insuficiente: requer {migration.required_space(files)} bytes; "
-                f"disponivel {free} bytes. Disco original intocado.")
-        backup_root = backup_mount / ("EnfoqueOS-Backup-" + uuid4().hex)
-        print("Enfoque OS: copiando e verificando documentos antes da instalacao...", flush=True)
-        migration.stage_files(files, backup_root)
-        print(f"Enfoque OS: backup em {backup_device}, pasta {backup_root.name}.", flush=True)
-        print(f"Enfoque OS: backup independente confirmado ({count} arquivo(s)).", flush=True)
-        # Do not unmount the backup yet: restoration happens after installation.
-        return backup_root
 
 
 def partitions(disk):
@@ -368,14 +222,11 @@ def configure_system(disk, esp, root):
     run(["sync"], timeout=90)
 
 
-def install(disk, confirmation, *, mode="erase", backup_device=None):
+def install(disk, confirmation):
     if os.geteuid() != 0 or not LIVE.is_dir() or not SQUASH.is_file():
         raise PermissionError("Instalador apenas na ISO Live, com permissao administrativa.")
-    if mode not in ("erase", "preserve"):
-        raise ValueError("Modo de instalacao desconhecido.")
-    expected = "APAGAR" if mode == "erase" else "MANTER"
-    if confirmation != expected:
-        raise ValueError(f"Digite {expected} para confirmar o modo selecionado.")
+    if confirmation != "APAGAR":
+        raise ValueError("Confirmacao de apagamento ausente.")
     if not all(Path("/usr/bin/" + name).exists() or
                Path("/usr/sbin/" + name).exists() or
                Path("/sbin/" + name).exists() for name in REQUIRED):
@@ -385,50 +236,16 @@ def install(disk, confirmation, *, mode="erase", backup_device=None):
         raise ValueError("Disco nao elegivel, montado, removivel ou pequeno demais.")
     if TARGET.is_mount():
         raise RuntimeError("Instalacao anterior ainda montada.")
-    backup = None
-    if mode == "preserve":
-        backup = next((item for item in backup_volumes(disk)
-                       if item["path"] == backup_device), None)
-        if backup is None:
-            raise migration.PreservationError(
-                "Escolha outra unidade para backup, independente do disco do sistema."
-            )
-    print(f"Enfoque OS: instalacao {mode} em {disk}.", flush=True)
+    print(f"INSTALANDO Enfoque OS em {disk}; apagamento irreversivel.", flush=True)
     try:
-        with ExitStack() as mounted:
-            backup_root = None
-            if mode == "preserve":
-                # Prepare, hash and VERIFY the entire independent copy BEFORE
-                # running parted or mkfs on the original system disk.
-                backup_mount = mounted.enter_context(
-                    mounted_volume(backup["path"], backup["fstype"], writable=True))
-                backup_root = backup_personal_files(disk, backup_device, backup_mount)
-                migration.verify_stage(backup_root)
-                # The original disk must be unmounted again before the first write.
-                if disk not in {item["path"] for item in available_disks()}:
-                    raise migration.PreservationError(
-                        "Disco original ainda ocupado; nenhuma formatacao sera iniciada.")
-                print("Enfoque OS: verificacao final concluida; instalando sistema.",
-                      flush=True)
-            else:
-                print(f"INSTALANDO Enfoque OS em {disk}; apagamento irreversivel.",
-                      flush=True)
-            esp, root = prepare_target(disk)
-            mount_system(root, esp)
-            print("Enfoque OS: extraindo o sistema...", flush=True)
-            run(["unsquashfs", "-f", "-d", str(TARGET), str(SQUASH)], timeout=2400)
-            configure_system(disk, esp, root)
-            if backup_root:
-                uid, gid = target_user_ids()
-                count = migration.restore_files(
-                    backup_root, TARGET / "home/enfoque", uid=uid, gid=gid)
-                print(f"Enfoque OS: {count} arquivo(s) restaurado(s) nas pastas pessoais.",
-                      flush=True)
-                print("Enfoque OS: backup original mantido na unidade externa.",
-                      flush=True)
-            print("ENFOQUE_INSTALL_OK", flush=True)
+        esp, root = prepare_target(disk)
+        mount_system(root, esp)
+        print("Enfoque OS: extraindo o sistema...", flush=True)
+        run(["unsquashfs", "-f", "-d", str(TARGET), str(SQUASH)], timeout=2400)
+        configure_system(disk, esp, root)
+        print("ENFOQUE_INSTALL_OK", flush=True)
     finally:
-        # Release all mounts; never erase the independent backup.
+        # Release mounts before a reboot, including recursively mounted /dev.
         if TARGET.is_mount():
             subprocess.run(["umount", "-R", str(TARGET)], timeout=100, check=False)
 
@@ -436,24 +253,16 @@ def install(disk, confirmation, *, mode="erase", backup_device=None):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--list-disks", action="store_true")
-    parser.add_argument("--list-backups", action="store_true")
     parser.add_argument("--disk")
     parser.add_argument("--confirm")
-    parser.add_argument("--mode", choices=("erase", "preserve"), default="erase")
-    parser.add_argument("--backup-device")
     args = parser.parse_args()
     try:
         if args.list_disks:
             print(json.dumps(available_disks()))
-        elif args.list_backups:
-            if not args.disk:
-                parser.error("--disk e obrigatorio")
-            print(json.dumps(backup_volumes(args.disk)))
         else:
             if not args.disk:
                 parser.error("--disk e obrigatorio")
-            install(args.disk, args.confirm, mode=args.mode,
-                    backup_device=args.backup_device)
+            install(args.disk, args.confirm)
         return 0
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         print("ENFOQUE_INSTALL_ERROR: " + str(error)[:350], file=sys.stderr, flush=True)
