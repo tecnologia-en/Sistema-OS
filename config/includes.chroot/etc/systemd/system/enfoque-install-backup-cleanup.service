@@ -1,0 +1,17 @@
+[Unit]
+Description=Enfoque OS - conferência de arquivos e limpeza do backup temporário
+After=network.target
+ConditionPathExists=/var/lib/enfoque-os/install-backup-receipt.json
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/sbin/enfoque-install-backup-cleanup
+Restart=on-failure
+RestartSec=180
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

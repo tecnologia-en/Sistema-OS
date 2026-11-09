@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+"""First successful installed boot: verify files, then purge VPS temporary copy.
+
+This does not enroll devices, change agents, or manipulate existing PCs. The
+service only executes when a per-install recovery receipt exists on disk.
+"""
+from pathlib import Path
+import json
+import os
+import pwd
+import sys
+
+sys.path.insert(0, "/usr/local/lib/enfoque-installer")
+import server_transfer as remote
+
+RECEIPT = Path("/var/lib/enfoque-os/install-backup-receipt.json")
+
+
+def main():
+    if not RECEIPT.is_file():
+        return 0
+    # Never delete the backup from the Live USB; the installed OS must boot.
+    if Path("/run/live/medium").exists():
+        raise RuntimeError("Limpeza disponivel apenas apos o primeiro boot.")
+    data = json.loads(RECEIPT.read_text(encoding="utf-8"))
+    if data.get("server") != remote.DEFAULT_URL:
+        raise RuntimeError("Destino do servidor de backup desconhecido.")
+    if not data.get("session_id") or not data.get("token"):
+        raise RuntimeError("Ticket de restauracao incompleto.")
+    client = remote.Client(data["server"], data["session_id"], data["token"])
+    manifest = client.get_manifest()
+    if (len(manifest["files"]) != data["file_count"] or
+            manifest["total_bytes"] != data["total_bytes"]):
+        raise RuntimeError("Manifesto do servidor diferente do ticket de instalacao.")
+    user = pwd.getpwnam("enfoque")
+    home = Path(user.pw_dir)
+    if not home.is_dir():
+        raise RuntimeError("Conta enfoque sem pasta pessoal.")
+    count = remote.restore_files(client, manifest, home, user.pw_uid, user.pw_gid)
+    if count != data["file_count"]:
+        raise RuntimeError("Arquivos locais incompletos: backup sera preservado.")
+    # The OS has booted and every file has been verified at its local destination.
+    reply = client.complete()
+    if not reply.get("deleted"):
+        raise RuntimeError("Servidor nao confirmou a limpeza.")
+    RECEIPT.unlink()
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (OSError, RuntimeError, ValueError, KeyError,
+            remote.BackupTransferError) as error:
+        print("ENFOQUE_BACKUP_CLEANUP_RETRY: " + str(error)[:220], file=sys.stderr)
+        raise SystemExit(1)

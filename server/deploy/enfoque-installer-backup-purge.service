@@ -1,0 +1,18 @@
+[Unit]
+Description=Enfoque OS - limpar backups temporarios expirados
+After=enfoque-installer-backup.service
+
+[Service]
+Type=oneshot
+User=enfoqueos-backup
+Group=enfoqueos-backup
+Environment=ENFOQUE_BACKUP_STORAGE=/var/lib/enfoque-os-install-backups
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 -B /opt/enfoque-os-install-backup/installer-backup-service.py purge
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/enfoque-os-install-backups
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes

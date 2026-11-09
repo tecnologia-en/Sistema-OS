@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Installer offline for Enfoque OS. Wipes only an explicitly confirmed disk.
+"""Installer offline for Enfoque OS. Wipe or verified remote backup restore.
 
 This is a *disk installer*, never a USB/live persistence mechanism. It must
 be started from the live ISO, by a local operator who chose the target disk.
 """
 import argparse
+from contextlib import contextmanager, ExitStack
 import json
 import os
 from pathlib import Path
@@ -12,7 +13,12 @@ import re
 import stat
 import subprocess
 import sys
+import tempfile
 import time
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib/enfoque-installer"))
+import preserve as migration
+import server_transfer as remote
 
 MIN_BYTES = 24 * 1024 ** 3
 LIVE = Path("/run/live/medium")
@@ -96,6 +102,121 @@ def available_disks():
             continue
         disks.append({"path": path, "size": size, "model": obj.get("model") or "Disco interno"})
     return disks
+
+
+def original_data_partitions(disk):
+    """Only direct, readable partitions are supported; no encrypted/LVM/RAID."""
+    tree = json.loads(run(["lsblk", "--json", "--tree", "--output",
+                           "PATH,TYPE,FSTYPE,RO,MOUNTPOINTS"], quiet=True).stdout)
+    entry = next((item for item in tree.get("blockdevices", [])
+                  if item.get("path") == disk), None)
+    if not entry:
+        raise RuntimeError("Nao foi possivel identificar o disco original.")
+    allowed = {"ext2", "ext3", "ext4", "ntfs", "ntfs3", "exfat", "vfat"}
+    skipped = {"", "swap"}
+    found = []
+    for part in entry.get("children") or []:
+        if part.get("type") != "part" or part.get("children"):
+            raise RuntimeError("Layout LVM/RAID/criptografado exige migracao manual.")
+        fs = (part.get("fstype") or "").lower()
+        if fs not in allowed and fs not in skipped:
+            raise RuntimeError(f"Particao {part.get('path')} nao suportada ({fs}). "
+                               "Nao sera apagada no modo MANTER.")
+        if fs in allowed:
+            found.append((part["path"], fs))
+    if not found:
+        raise RuntimeError("Nenhuma particao de arquivos detectada; "
+                           "instalacao MANTER bloqueada.")
+    return found
+
+
+@contextmanager
+def mount_personal_source(partition, fs):
+    """Read-only source, never run shrink/format commands on the old volume."""
+    folder = Path(tempfile.mkdtemp(prefix="enfoque-read-source-", dir="/run"))
+    opts = "ro,nosuid,nodev,noexec"
+    if fs.startswith("ext"):
+        opts += ",noload"
+    active = False
+    try:
+        run(["mount", "-o", opts, partition, str(folder)], timeout=100)
+        active = True
+        yield folder
+    finally:
+        if active:
+            result = subprocess.run(["umount", str(folder)], timeout=90,
+                                    capture_output=True, text=True)
+            if result.returncode != 0:
+                raise RuntimeError("Nao foi possivel desmontar a origem "
+                                   "com seguranca. Disco original mantido.")
+        try:
+            folder.rmdir()
+        except OSError:
+            pass
+
+
+@contextmanager
+def opened_inventory(disk):
+    with ExitStack() as mounted:
+        inventories = []
+        for partition, fs in original_data_partitions(disk):
+            source = mounted.enter_context(mount_personal_source(partition, fs))
+            inventory = migration.scan_partition(source, Path(partition).name)
+            inventories.append((Path(partition).name, inventory))
+        files = migration.compile_inventory(inventories)
+        yield files
+
+
+def back_up_to_server(disk, code):
+    """Never touch the partition table until the remote copy is fully verified."""
+    with opened_inventory(disk) as files:
+        count = len(files)
+        total = sum(item.size for item in files)
+        client = remote.Client()
+        if not isinstance(code, str) or not code.strip():
+            raise RuntimeError("Codigo temporario da TI obrigatorio.")
+        client.create_session(code.strip(), count, total)
+        print("Enfoque OS: sessao temporaria iniciada no servidor; "
+              "ID DE RECUPERACAO " + client.session_id, flush=True)
+        print(f"Enfoque OS: enviando {count} arquivo(s) "
+              f"({total} bytes) ao servidor seguro...", flush=True)
+        manifest = []
+        for index, file in enumerate(files):
+            manifest.append(client.upload_file(index, file))
+            if (index+1) % 50 == 0 or index+1 == count:
+                print(f"Enfoque OS: backup {index+1}/{count} arquivos enviados.",
+                      flush=True)
+        verified = client.finalize(manifest)
+        if verified["total_bytes"] != total:
+            raise remote.BackupTransferError(
+                "Servidor retornou soma de bytes inconsistente; "
+                "disco original mantido.")
+        print("Enfoque OS: backup confirmado por SHA256 no servidor. "
+              "Agora pode substituir o sistema antigo.", flush=True)
+        return client, verified
+
+
+def provision_recovery(client, manifest):
+    """Persist a 0600 one-use restore ticket in the target before first boot."""
+    target = TARGET / "var/lib/enfoque-os/install-backup-receipt.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    ticket = {"server": remote.DEFAULT_URL,
+              "session_id": client.session_id, "token": client.token,
+              "file_count": len(manifest["files"]),
+              "total_bytes": manifest["total_bytes"]}
+    target.write_text(json.dumps(ticket, ensure_ascii=False), encoding="utf-8")
+    target.chmod(0o600)
+    # This service is inert on existing PCs without the per-install receipt.
+    run(["systemctl", "--root", str(TARGET), "enable",
+         "enfoque-install-backup-cleanup.service"], timeout=50)
+
+
+def target_user_ids():
+    for line in (TARGET / "etc/passwd").read_text().splitlines():
+        fields = line.split(":")
+        if len(fields) >= 4 and fields[0] == "enfoque":
+            return int(fields[2]), int(fields[3])
+    raise RuntimeError("Usuario enfoque nao criado para restauracao.")
 
 
 def partitions(disk):
@@ -222,11 +343,14 @@ def configure_system(disk, esp, root):
     run(["sync"], timeout=90)
 
 
-def install(disk, confirmation):
+def install(disk, confirmation, *, mode="erase", setup_code=None):
     if os.geteuid() != 0 or not LIVE.is_dir() or not SQUASH.is_file():
         raise PermissionError("Instalador apenas na ISO Live, com permissao administrativa.")
-    if confirmation != "APAGAR":
-        raise ValueError("Confirmacao de apagamento ausente.")
+    if mode not in ("erase", "preserve"):
+        raise ValueError("Modo desconhecido.")
+    expected = "APAGAR" if mode == "erase" else "MANTER"
+    if confirmation != expected:
+        raise ValueError(f"Digite {expected} para confirmar a instalacao.")
     if not all(Path("/usr/bin/" + name).exists() or
                Path("/usr/sbin/" + name).exists() or
                Path("/sbin/" + name).exists() for name in REQUIRED):
@@ -236,16 +360,36 @@ def install(disk, confirmation):
         raise ValueError("Disco nao elegivel, montado, removivel ou pequeno demais.")
     if TARGET.is_mount():
         raise RuntimeError("Instalacao anterior ainda montada.")
-    print(f"INSTALANDO Enfoque OS em {disk}; apagamento irreversivel.", flush=True)
+    client = None
+    manifest = None
+    print(f"Enfoque OS: iniciando modo {mode} em {disk}.", flush=True)
     try:
+        if mode == "preserve":
+            client, manifest = back_up_to_server(disk, setup_code)
+            # Even if installation fails from here, the temporary VPS backup
+            # stays intact and can be recovered by IT using its session ID.
+        else:
+            print(f"INSTALANDO Enfoque OS em {disk}; apagamento irreversivel.",
+                  flush=True)
         esp, root = prepare_target(disk)
         mount_system(root, esp)
         print("Enfoque OS: extraindo o sistema...", flush=True)
         run(["unsquashfs", "-f", "-d", str(TARGET), str(SQUASH)], timeout=2400)
+        if client is not None:
+            provision_recovery(client, manifest)
         configure_system(disk, esp, root)
+        if client is not None:
+            uid, gid = target_user_ids()
+            restored = remote.restore_files(
+                client, manifest, TARGET / "home/enfoque", uid, gid)
+            if restored != len(manifest["files"]):
+                raise remote.BackupTransferError("Restauracao incompleta.")
+            print(f"Enfoque OS: {restored} arquivo(s) baixados e verificados "
+                  "nas respectivas pastas.", flush=True)
+            print("Enfoque OS: o servidor apagará o backup temporario "
+                  "apos a primeira inicializacao confirmada.", flush=True)
         print("ENFOQUE_INSTALL_OK", flush=True)
     finally:
-        # Release mounts before a reboot, including recursively mounted /dev.
         if TARGET.is_mount():
             subprocess.run(["umount", "-R", str(TARGET)], timeout=100, check=False)
 
@@ -255,6 +399,7 @@ def main():
     parser.add_argument("--list-disks", action="store_true")
     parser.add_argument("--disk")
     parser.add_argument("--confirm")
+    parser.add_argument("--mode", choices=("erase", "preserve"), default="erase")
     args = parser.parse_args()
     try:
         if args.list_disks:
@@ -262,7 +407,9 @@ def main():
         else:
             if not args.disk:
                 parser.error("--disk e obrigatorio")
-            install(args.disk, args.confirm)
+            # Do not expose the one-time authorization code in process arguments.
+            code = sys.stdin.readline().strip() if args.mode == "preserve" else None
+            install(args.disk, args.confirm, mode=args.mode, setup_code=code)
         return 0
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         print("ENFOQUE_INSTALL_ERROR: " + str(error)[:350], file=sys.stderr, flush=True)

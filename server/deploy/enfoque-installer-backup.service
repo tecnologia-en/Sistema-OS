@@ -1,0 +1,31 @@
+[Unit]
+Description=Enfoque OS - armazenamento temporario privado para instalacao
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=enfoqueos-backup
+Group=enfoqueos-backup
+Environment=ENFOQUE_BACKUP_STORAGE=/var/lib/enfoque-os-install-backups
+Environment=ENFOQUE_BACKUP_HOST=127.0.0.1
+Environment=ENFOQUE_BACKUP_PORT=43210
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 -B /opt/enfoque-os-install-backup/installer-backup-service.py
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/enfoque-os-install-backups
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+PrivateTmp=yes
+PrivateDevices=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=512M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

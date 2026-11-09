@@ -1,0 +1,11 @@
+[Unit]
+Description=Enfoque OS - varredura diaria de backups expirados
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=3600
+Unit=enfoque-installer-backup-purge.service
+
+[Install]
+WantedBy=timers.target

@@ -16,6 +16,9 @@ parted
 squashfs-tools
 dosfstools
 e2fsprogs
+# Read-only migration from Windows NTFS and removable exFAT volumes.
+ntfs-3g
+exfatprogs
 grub2-common
 grub-pc-bin
 grub-efi-amd64-bin
