@@ -18,7 +18,7 @@ for path in \
   config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml \
   config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml \
   config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml \
-  config/includes.chroot/etc/skel/.config/xfce4/panel/battery-13.rc \
+  config/includes.chroot/etc/skel/.config/xfce4/panel/genmon-13.rc \
   config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml \
   config/includes.chroot/usr/share/icons/hicolor/scalable/apps/enfoque-start.svg \
   config/includes.chroot/usr/share/icons/hicolor/scalable/apps/enfoque-sige.svg \
@@ -59,8 +59,8 @@ need config/includes.chroot/etc/xdg/xfce4/panel/docklike.rc
 need config/includes.chroot/usr/local/sbin/enfoque-docklike-install
 grep -Fxq 'xfce4-docklike-plugin' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'docklike ausente da ISO'
 grep -Fq '#docklike-plugin .group.enfoque_attention' "$ROOT/config/includes.chroot/etc/skel/.config/gtk-3.0/gtk.css" || fail 'piscar laranja ausente'
-grep -Fq 'name="plugin-13" type="string" value="battery"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'bateria ausente no painel'
-grep -Fq 'display_percentage=true' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/panel/battery-13.rc" || fail 'porcentagem da bateria nao habilitada'
+grep -Fq 'name="plugin-13" type="string" value="genmon"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'bateria dinamica ausente do painel'
+grep -Fq 'Command=/usr/local/bin/enfoque-bateria-painel' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/panel/genmon-13.rc" || fail 'indicador de bateria adaptativo ausente'
 grep -Fxq xfce4-battery-plugin "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'plugin bateria ausente da ISO'
 need config/includes.chroot/usr/share/applications/enfoque-menu.desktop
 need config/includes.chroot/usr/local/bin/enfoque-desktop-shell

@@ -106,6 +106,9 @@ def manifest():
         "etc/systemd/system/enfoque-saude.timer",
         "etc/systemd/system/enfoque-backup.timer",
         "etc/systemd/system/enfoque-limpeza.timer",
+        "usr/local/bin/enfoque-bateria-painel",
+        "usr/local/bin/enfoque-bateria-migrar",
+        "etc/xdg/autostart/enfoque-bateria-migrar.desktop",
         "usr/local/bin/enfoque-session-agent",
         "usr/local/lib/enfoque-session/bridge.py",
         "etc/tmpfiles.d/enfoque-remote.conf",
@@ -157,6 +160,8 @@ def create(output):
             "  getent group enfoque-remote >/dev/null 2>&1 || groupadd --system enfoque-remote\n"
             "  for u in enfoque enfoque-kiosk; do if id -u \"$u\" >/dev/null 2>&1; then usermod -a -G enfoque-remote \"$u\"; fi; done\n"
             "  systemd-tmpfiles --create /etc/tmpfiles.d/enfoque-remote.conf >/dev/null 2>&1 || true\n"
+            "  systemctl disable --now cups-browsed.service >/dev/null 2>&1 || true\n"
+            "  systemctl try-restart enfoque-remote-agent.service >/dev/null 2>&1 || true\n"
             "  if [ -s /usr/local/lib/enfoque-docklike/libdocklike.so ]; then /usr/local/sbin/enfoque-docklike-install; fi\n"
             # Important: never create a regular account from a package postinst.
             # live-build installs this .deb into the image chroot; creating

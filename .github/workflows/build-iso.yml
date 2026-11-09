@@ -85,6 +85,18 @@ jobs:
           grep -Fq 'usr/local/sbin/enfoque-zero-touch' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
           grep -Fq 'usr/local/sbin/enfoque-tunnel' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
           grep -Fq 'usr/local/sbin/enfoque-live-session' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
+          # All 0.2.28 capabilities must be present in the signed APT update.
+          for component in \
+            usr/local/lib/enfoque-session/bridge.py \
+            usr/local/bin/enfoque-session-agent \
+            usr/local/bin/enfoque-remote-agent \
+            usr/local/bin/enfoque-desktop-shell \
+            usr/local/sbin/enfoque-hardware-setup \
+            usr/local/bin/enfoque-bateria-painel \
+            usr/local/bin/enfoque-bateria-migrar \
+            etc/xdg/autostart/enfoque-bateria-migrar.desktop; do
+            grep -Fq "$component" "$RUNNER_TEMP/enfoque-core-package-contents.txt"
+          done
           grep -Fq 'etc/systemd/system/enfoque-live-session.service' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
           # The .deb is installed into the chroot before the Live boot; do not
           # consume UID 1000 by creating an admin account from its postinst.

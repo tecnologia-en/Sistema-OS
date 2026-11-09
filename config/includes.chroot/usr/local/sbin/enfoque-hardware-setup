@@ -11,8 +11,8 @@ ROOT=pathlib.Path("/var/lib/enfoque-os")
 STATE=ROOT/"hardware-status.json"
 SENT=ROOT/"test-pages-sent.json"
 BASE=("libgl1-mesa-dri","mesa-vulkan-drivers","xserver-xorg-video-all")
-PRINTERS=("cups","cups-client","cups-filters","cups-browsed","ipp-usb",
-          "printer-driver-gutenprint","printer-driver-escpr","system-config-printer")
+PRINTERS=("cups","cups-client","cups-filters","ipp-usb",
+          "printer-driver-gutenprint","printer-driver-escpr","printer-driver-hpcups","system-config-printer")
 DRY=False
 INFO={}
 
@@ -230,21 +230,22 @@ def printer_setup():
     install(PRINTERS,"Impressoras: suporte genérico")
     if not DRY:
         cmd(["systemctl","start","cups.service"],10)
-        cmd(["systemctl","start","cups-browsed.service"],10)
+        # cups-browsed can generate several synthetic HP/IPP queues for one
+        # physical device. We never auto-create remote printer queues.
+        cmd(["systemctl","disable","--now","cups-browsed.service"],15)
     available=queues()
-    uris={uri for _,uri in available}
     devices=found()
-    for uri in devices[:24]:
-        if uri in uris or not local_ipp(uri):continue
-        name="enfoque-ipp-"+hashlib.sha256(uri.encode()).hexdigest()[:9]
-        if DRY:
-            event("Impressora",f"Criaria fila IPP {name}","simulacao",None);continue
-        rc,_,err=cmd(["lpadmin","-p",name,"-E","-v",uri,"-m","everywhere"],50)
-        if rc:
-            event("Impressora",f"IPP {name} exige configuração manual: {err[-120:]}","atenção",None)
-        else:
-            event("Impressora",f"IPP Everywhere: fila {name} criada.","concluido",100)
-            uris.add(uri)
+    # A real CUPS queue must be explicitly configured for the physical
+    # printer and driver. Never auto-create "enfoque-ipp-..." duplicates.
+    if not available:
+        event("Impressoras",
+              "Impressora detectada, mas nenhuma fila CUPS configurada. "
+              "Escolha a impressora real no Centro Enfoque.",
+              "aguardando", None)
+    else:
+        event("Impressoras",
+              "Filas CUPS existentes preservadas; nenhuma fila adicional criada.",
+              "concluido", 100)
     available=queues()
     configured={uri for _,uri in available}
     configured_rows=[{"name":n,"connection":u,"state":"configurada","progress":100}
@@ -255,10 +256,8 @@ def printer_setup():
                   (local_ipp(uri) or uri.startswith("usb://"))]
     INFO["printers"]=(configured_rows+pending_rows)[:40]
     store(STATE,INFO)
-    sent=load(SENT,{})
-    if not isinstance(sent,dict):sent={}
-    for name,uri in available[:20]:
-        send_test(name,uri,sent)
+    # Automatic checks are read-only: never send unsolicited test pages
+    # every 3 minutes. Keep send_test for deliberate future user action.
     if not available:
         event("Impressoras",f"{len(devices)} dispositivo(s) anunciados, nenhuma fila pronta.","aguardando",None)
     else:

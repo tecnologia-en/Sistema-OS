@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""GenMon: show battery only if the machine has a real present battery.
+
+A desktop without a BAT power_supply emits no panel markup, not a fake
+battery/AC icon. Only reads sysfs, never modifies power management.
+"""
+import html
+from pathlib import Path
+
+SYSFS = Path("/sys/class/power_supply")
+
+
+def battery_markup(root=SYSFS):
+    try:
+        entries = sorted(root.iterdir(), key=lambda x: x.name)
+    except OSError:
+        return ""
+    for item in entries:
+        try:
+            kind = (item / "type").read_text().strip()
+            if kind != "Battery":
+                continue
+            present = item / "present"
+            if present.exists() and present.read_text().strip() != "1":
+                continue
+            percentage = int((item / "capacity").read_text().strip())
+            if not 0 <= percentage <= 100:
+                continue
+            state = (item / "status").read_text().strip() if (item / "status").exists() else ""
+            arrow = "⚡" if state == "Charging" else "🔋"
+            tooltip = f"Bateria {percentage}%"
+            if state in ("Charging", "Discharging", "Full", "Not charging"):
+                tooltip += " — " + {"Charging": "carregando",
+                                    "Discharging": "descarregando",
+                                    "Full": "carregada",
+                                    "Not charging": "sem carregar"}[state]
+            # Battery icons/charge are shown only on systems with BAT sysfs.
+            return (f'<txt><span font_desc="Noto Sans 10">{arrow} {percentage}%</span></txt>\n'
+                    f'<tool>{html.escape(tooltip)}</tool>')
+        except (OSError, ValueError):
+            continue
+    return ""
+
+
+if __name__ == "__main__":
+    print(battery_markup())

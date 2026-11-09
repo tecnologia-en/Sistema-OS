@@ -87,11 +87,11 @@ dbus-user-session
 cups
 cups-client
 cups-filters
-cups-browsed
 ipp-usb
 system-config-printer
 printer-driver-gutenprint
 printer-driver-escpr
+printer-driver-hpcups
 avahi-daemon
 
 xcape

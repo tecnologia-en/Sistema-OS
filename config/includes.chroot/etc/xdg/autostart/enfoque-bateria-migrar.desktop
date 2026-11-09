@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Enfoque OS — Indicador de bateria adaptativo
+Comment=Oculta o indicador em desktops e mostra nivel em notebooks
+Exec=/usr/local/bin/enfoque-bateria-migrar
+TryExec=/usr/local/bin/enfoque-bateria-migrar
+OnlyShowIn=XFCE;
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

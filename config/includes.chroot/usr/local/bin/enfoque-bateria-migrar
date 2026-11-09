@@ -1,0 +1,20 @@
+#!/bin/sh
+# Enfoque OS 0.2.28: migrate only Enfoque battery plugin id 13.
+# No root, sudo or polkit. Preserve all other user panel configuration.
+set -eu
+command -v xfconf-query >/dev/null 2>&1 || exit 0
+command -v xfce4-panel >/dev/null 2>&1 || exit 0
+[ -n "${DISPLAY:-}" ] || exit 0
+sleep 3
+current="$(xfconf-query -c xfce4-panel -p /plugins/plugin-13 2>/dev/null || true)"
+[ "$current" = battery ] || exit 0
+src=/etc/skel/.config/xfce4/panel/genmon-13.rc
+[ -r "$src" ] || exit 0
+directory="${XDG_CONFIG_HOME:-$HOME/.config}/xfce4/panel"
+mkdir -p "$directory"
+if [ ! -e "$directory/genmon-13.rc" ]; then
+    cp "$src" "$directory/genmon-13.rc"
+fi
+xfconf-query -c xfce4-panel -p /plugins/plugin-13 -s genmon
+# Restart only on migration and only during session login.
+xfce4-panel --restart >/dev/null 2>&1 || :

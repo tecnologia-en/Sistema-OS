@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=Impressoras Enfoque
+Name=Impressoras
 Exec=/usr/local/bin/enfoque-desktop-shell printers
 Icon=enfoque-printer
 Categories=HardwareSettings;Settings;
