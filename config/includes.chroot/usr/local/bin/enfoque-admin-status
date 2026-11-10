@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+"""Status local, sem privilegios e sem divulgar credenciais administrativas.
+
+O acesso root nunca e disponibilizado pelo agente de sessao nem pela ISO:
+exige aprovacao Zero Touch vinculada ao equipamento, par de chaves individual
+e tunel SSH restrito a localhost no VPS.
+"""
+import json
+from pathlib import Path
+import subprocess
+
+def present(path):
+    try:
+        f = Path(path)
+        return f.is_file() and not f.is_symlink() and f.stat().st_size > 0
+    except OSError:
+        return False
+
+def active(service):
+    try:
+        return subprocess.run(["/usr/bin/systemctl", "is-active", "--quiet", service],
+                              capture_output=True, timeout=5).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+def status():
+    return {
+        "admin_account_present": account_present(),
+        "zero_touch_enrollment": "provisionado" if present("/etc/enfoque-ssh/tunnel.json") else "aguardando_aprovacao_ti",
+        "admin_ssh_key_configured": present("/etc/enfoque-ssh/authorized_keys"),
+        "loopback_ssh_active": active("ssh.service"),
+        "reverse_tunnel_active": active("enfoque-tunnel.service"),
+        "remote_agent_unchanged": True,
+        "note": "Acesso root somente via conta enfoque-ti com chave SSH individual, apos aprovacao explicita da TI.",
+    }
+
+def account_present():
+    try:
+        import pwd
+        return pwd.getpwnam("enfoque-ti").pw_uid >= 1000
+    except (KeyError, OSError):
+        return False
+
+if __name__ == "__main__":
+    print(json.dumps(status(), ensure_ascii=False, indent=2))

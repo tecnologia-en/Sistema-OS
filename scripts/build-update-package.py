@@ -94,6 +94,7 @@ def manifest():
         "etc/systemd/system/enfoque-firewall.service",
         "etc/enfoque-os/firewall.nft",
         "usr/local/bin/enfoque-proteger-tela",
+        "usr/local/bin/enfoque-admin-status",
         "etc/xdg/autostart/enfoque-proteger-tela.desktop",
         "usr/local/sbin/enfoque-ssh-support",
         "usr/local/sbin/enfoque-zero-touch",
