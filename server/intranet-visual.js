@@ -131,6 +131,7 @@
       if (!xy || (e.button !== 0 && e.button !== 1 && e.button !== 2)) return;
       e.preventDefault();
       pointerDown = true;
+      viewer.focus();
       img.setPointerCapture?.(e.pointerId);
       const btn = e.button === 2 ? "right" : e.button === 1 ? "middle" : "left";
       enqueue({ op: "move", ...xy });
@@ -151,8 +152,7 @@
       pointerDown = false;
     });
     img.addEventListener("pointermove", (e) => {
-      if (!pointerDown) return;
-      if (Date.now() - lastMoveAt < 105) return;
+      if (Date.now() - lastMoveAt < 110) return;
       lastMoveAt = Date.now();
       const xy = screenCoords(e);
       if (xy) enqueue({ op: "move", ...xy });
