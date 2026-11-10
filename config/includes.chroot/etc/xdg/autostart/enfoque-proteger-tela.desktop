@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Enfoque OS - Protecao de tela
+Comment=Escurece apos 3 minutos; solicita senha apos 15 minutos de inatividade
+Exec=/usr/local/bin/enfoque-proteger-tela
+TryExec=/usr/local/bin/enfoque-proteger-tela
+OnlyShowIn=XFCE;
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

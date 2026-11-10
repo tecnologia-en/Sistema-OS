@@ -1,0 +1,19 @@
+[Unit]
+Description=Enfoque OS - Firewall de entrada para computadores corporativos
+Documentation=https://github.com/tecnologia-en/Sistema-OS
+After=nftables.service
+Before=network-online.target
+ConditionPathExists=!/run/live/medium
+ConditionPathExists=/etc/enfoque-os/firewall.nft
+
+[Service]
+Type=oneshot
+ExecStartPre=/usr/sbin/nft --check -f /etc/enfoque-os/firewall.nft
+ExecStart=/usr/sbin/nft -f /etc/enfoque-os/firewall.nft
+ExecReload=/usr/sbin/nft -f /etc/enfoque-os/firewall.nft
+ExecStop=-/usr/sbin/nft delete table inet enfoque_guard
+RemainAfterExit=yes
+TimeoutStartSec=20
+
+[Install]
+WantedBy=multi-user.target

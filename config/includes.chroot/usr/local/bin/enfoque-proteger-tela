@@ -1,0 +1,55 @@
+#!/bin/sh
+# Enfoque OS 0.2.36 - politica de ociosidade apenas para XFCE instalado.
+# 3 min sem entrada: tela preta SEM senha. 12 min depois (15 total): trava PAM.
+# Live nao recebe bloqueio, para nao interromper instalacao e backup.
+set -eu
+[ -n "${DISPLAY:-}" ] || exit 0
+command -v xfconf-query >/dev/null 2>&1 || exit 0
+command -v xfce4-screensaver >/dev/null 2>&1 || exit 0
+
+marker="${HOME}/.config/enfoque-os/tela-036-configurada"
+[ ! -e "$marker" ] || exit 0
+
+set_value() {
+    key="$1"
+    type="$2"
+    value="$3"
+    if xfconf-query -c xfce4-screensaver -p "$key" >/dev/null 2>&1; then
+        xfconf-query -c xfce4-screensaver -p "$key" -s "$value"
+    else
+        xfconf-query -c xfce4-screensaver -p "$key" -n -t "$type" -s "$value"
+    fi
+}
+# xfce4-screensaver tambem inicia via autostart nativo do pacote.
+# No Live, desabilitar antes de um periodo longo de backup ou instalacao.
+if [ -e /run/live/medium ]; then
+    set_value /saver/enabled bool false
+    set_value /saver/idle-activation/enabled bool false
+    set_value /lock/enabled bool false
+    if command -v xfce4-screensaver-command >/dev/null 2>&1; then
+        xfce4-screensaver-command --exit >/dev/null 2>&1 || true
+    fi
+    exit 0
+fi
+set_value /saver/enabled bool true
+set_value /saver/mode int 0
+set_value /saver/idle-activation/enabled bool true
+set_value /saver/idle-activation/delay int 3
+# Aplicativos em tela cheia nao podem impedir o bloqueio automatico.
+set_value /saver/fullscreen-inhibit bool false
+set_value /lock/enabled bool true
+set_value /lock/saver-activation/enabled bool true
+set_value /lock/saver-activation/delay int 12
+# Ao suspender, hibernar ou fechar a tampa, exigir senha imediatamente.
+set_value /lock/sleep-activation bool true
+
+# A distribuicao xfce4-screensaver costuma iniciar pelo XDG autostart.
+# Caso um perfil antigo nao o tenha iniciado, assegura a execucao sem root.
+if command -v xfce4-screensaver-command >/dev/null 2>&1; then
+    if ! xfce4-screensaver-command --query >/dev/null 2>&1; then
+        (xfce4-screensaver >/dev/null 2>&1 &)
+    fi
+fi
+umask 077
+mkdir -p "${HOME}/.config/enfoque-os"
+printf 'Politica 0.2.36: 3 min sem senha; 15 min com senha.\n' > "$marker"

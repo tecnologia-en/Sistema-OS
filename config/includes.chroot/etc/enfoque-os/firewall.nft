@@ -1,0 +1,18 @@
+#!/usr/sbin/nft -f
+# Enfoque OS 0.2.36 - regras restritas a tabela Enfoque, sem flush global.
+# Atualizacao atomica, idempotente e compativel com nft 1.0+.
+# Bloqueia novas conexoes de entrada; mantem saida, conexoes em andamento,
+# DHCP, ICMPv6 (NDP), multicast local para impressoras e ping da rede privada.
+add table inet enfoque_guard
+flush table inet enfoque_guard
+add chain inet enfoque_guard input { type filter hook input priority 10; policy drop; }
+add rule inet enfoque_guard input iifname "lo" accept
+add rule inet enfoque_guard input ct state { established, related } accept
+add rule inet enfoque_guard input ct state invalid drop
+add rule inet enfoque_guard input meta l4proto ipv6-icmp accept
+add rule inet enfoque_guard input ip protocol icmp icmp type { destination-unreachable, time-exceeded, parameter-problem, echo-reply } accept
+add rule inet enfoque_guard input ip saddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 } ip protocol icmp icmp type echo-request accept
+add rule inet enfoque_guard input udp sport 67 udp dport 68 accept
+add rule inet enfoque_guard input udp sport 547 udp dport 546 accept
+add rule inet enfoque_guard input ip daddr 224.0.0.251 udp dport 5353 accept
+add rule inet enfoque_guard input ip6 daddr ff02::fb udp dport 5353 accept

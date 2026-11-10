@@ -49,6 +49,7 @@ pulseaudio
 pavucontrol
 alsa-utils
 xfce4-power-manager
+xfce4-screensaver
 xfce4-battery-plugin
 upower
 xfce4-notifyd
@@ -66,6 +67,7 @@ thunar
 gvfs
 network-manager
 network-manager-gnome
+nftables
 # Wireless authentication is a hard requirement: apt-recommends=false omits it otherwise.
 wpasupplicant
 rfkill

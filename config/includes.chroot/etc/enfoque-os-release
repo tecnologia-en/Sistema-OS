@@ -1,5 +1,5 @@
 NAME="Enfoque OS"
-VERSION="0.2.35"
+VERSION="0.2.36"
 CHANNEL="piloto"
 BASE="Debian 13 (trixie)"
-STATUS="piloto-backup-iso-filtro-progresso-gb-035"
+STATUS="piloto-protecao-tela-firewall-036"

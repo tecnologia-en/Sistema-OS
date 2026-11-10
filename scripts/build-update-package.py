@@ -49,6 +49,7 @@ def managed(name):
         "etc/systemd/journald.conf.d/90-enfoque",
         "etc/default/grub.d/90-enfoque",
         "etc/enfoque-os/lojas-ip.json",
+        "etc/enfoque-os/firewall.nft",
         "etc/tmpfiles.d/enfoque-remote.conf",
         "etc/xdg/xfce4/panel/docklike.rc",
         "etc/ssh/sshd_config.d/95-enfoque-suporte.conf",
@@ -90,6 +91,10 @@ def manifest():
         "usr/local/sbin/enfoque-update-control",
         "etc/systemd/system/enfoque-update-control.service",
         "etc/systemd/system/enfoque-update-control.timer",
+        "etc/systemd/system/enfoque-firewall.service",
+        "etc/enfoque-os/firewall.nft",
+        "usr/local/bin/enfoque-proteger-tela",
+        "etc/xdg/autostart/enfoque-proteger-tela.desktop",
         "usr/local/sbin/enfoque-ssh-support",
         "usr/local/sbin/enfoque-zero-touch",
         "usr/local/sbin/enfoque-tunnel",
@@ -147,7 +152,7 @@ def create(output):
             f"Package: {PACKAGE}\nVersion: {release}-1\n"
             "Section: admin\nPriority: optional\nArchitecture: all\n"
             "Maintainer: Enfoque TI <tecnologia@enfoquepapelaria.com.br>\n"
-            "Depends: python3, python3-gi, gir1.2-gtk-3.0, apt, systemd, ca-certificates, gpgv, openssh-client, openssh-server, xfce4-genmon-plugin, xfce4-appfinder, xfce4-docklike-plugin, papirus-icon-theme, timeshift, rsync, restic, smartmontools, mate-polkit, pkexec, network-manager, network-manager-gnome, wpasupplicant, rfkill, onboard, firmware-iwlwifi, firmware-realtek, firmware-atheros, firmware-brcm80211, firmware-mediatek\n"
+            "Depends: python3, python3-gi, gir1.2-gtk-3.0, apt, systemd, ca-certificates, gpgv, openssh-client, openssh-server, xfce4-genmon-plugin, xfce4-appfinder, xfce4-docklike-plugin, papirus-icon-theme, timeshift, rsync, restic, smartmontools, mate-polkit, pkexec, xfce4-screensaver, nftables, network-manager, network-manager-gnome, wpasupplicant, rfkill, onboard, firmware-iwlwifi, firmware-realtek, firmware-atheros, firmware-brcm80211, firmware-mediatek\n"
             "Description: Enfoque OS corporate system components and updater\n"
             " Replaces custom Enfoque OS files on managed workstations using\n"
             " individually signed APT repository updates.\n",
@@ -172,6 +177,10 @@ def create(output):
             # The disk installer explicitly provisions enfoque-ti afterward.
             "  systemctl enable enfoque-update-check.timer enfoque-update-control.timer enfoque-zero-touch.timer enfoque-saude.timer enfoque-backup.timer enfoque-limpeza.timer >/dev/null 2>&1 || true\n"
             "  systemctl disable --now enfoque-update-apply.timer >/dev/null 2>&1 || true\n"
+            "  systemctl enable enfoque-firewall.service >/dev/null 2>&1 || true\n"
+            "  if [ -d /run/systemd/system ] && [ ! -e /run/live/medium ]; then\n"
+            "    if ! systemctl start enfoque-firewall.service; then echo \"AVISO: verifique o firewall Enfoque OS\" >&2; fi\n"
+            "  fi\n"
             "  if [ ! -s /etc/enfoque-ssh/authorized_keys ]; then\n"
             "    systemctl disable --now ssh.service ssh.socket >/dev/null 2>&1 || true\n"
             "  fi\n"
