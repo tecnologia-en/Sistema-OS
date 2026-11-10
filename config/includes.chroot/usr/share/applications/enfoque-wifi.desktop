@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Conectar ao Wi-Fi (Enfoque OS)
+Comment=Selecionar uma rede sem fio pelo mouse
+Exec=/usr/local/bin/enfoque-configurar-wifi
+TryExec=/usr/local/bin/enfoque-configurar-wifi
+Icon=network-wireless
+Categories=Network;Settings;GTK;
+Terminal=false
+StartupNotify=true

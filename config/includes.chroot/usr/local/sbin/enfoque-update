@@ -221,9 +221,13 @@ def perform(kind, values, *, automatic=False, skip_snapshot=False):
                 if vparts(target) <= vparts(current):
                     log_event(kind, "skipped_already_installed", target)
                     return {"ok": True, "skipped": "versao ja instalada"}
+                # The core must be installed already, but dependencies added
+                # by a newer signed version may be NEW (e.g. wpasupplicant).
+                # --only-upgrade would reject those first-time dependencies.
+                # --no-remove prevents an unattended removal of other packages.
                 cmd = ["-o", "Dpkg::Options::=--force-confdef",
                        "-o", "Dpkg::Options::=--force-confold",
-                       "--yes", "--only-upgrade", "install",
+                       "--yes", "--no-remove", "--no-install-recommends", "install",
                        PACKAGE + "=" + target + "-1"]
             elif kind == "install":
                 cmd = ["--yes", "--no-install-recommends", "install", *values]

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Teclado Virtual (Acessibilidade)
+Comment=Digitar com o mouse, sem teclado fisico
+Exec=/usr/bin/onboard
+TryExec=/usr/bin/onboard
+Icon=input-keyboard
+Categories=Utility;Accessibility;GTK;
+Terminal=false
+StartupNotify=true

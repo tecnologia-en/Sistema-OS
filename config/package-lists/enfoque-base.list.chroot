@@ -66,6 +66,17 @@ thunar
 gvfs
 network-manager
 network-manager-gnome
+# Wireless authentication is a hard requirement: apt-recommends=false omits it otherwise.
+wpasupplicant
+rfkill
+# Offline firmware for common Wi-Fi adapters. Included both in Live ISO and installed OS.
+firmware-iwlwifi
+firmware-realtek
+firmware-atheros
+firmware-brcm80211
+firmware-mediatek
+# Mouse/touch accessible on-screen keyboard, including the Live installer.
+onboard
 arc-theme
 papirus-icon-theme
 fonts-noto-core

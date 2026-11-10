@@ -10,7 +10,8 @@ gi.require_version("Gtk","3.0")
 from gi.repository import Gtk
 MARKER=pathlib.Path.home()/".config/enfoque-os/primeiro-uso-concluido"
 PROGRAMS=[
-    ("Wi-Fi e internet","Conectar a rede disponível",["nm-connection-editor"]),
+    ("Wi-Fi e internet","Escolher Wi-Fi e conectar pelo mouse",["/usr/local/bin/enfoque-configurar-wifi"]),
+    ("Acessibilidade","Abrir teclado virtual",["/usr/bin/onboard"]),
     ("Impressoras","Configurar driver e papel correto",["system-config-printer"]),
     ("Navegador","Abrir Google Chrome sem acessar suas senhas",["google-chrome-stable"]),
     ("Proteção","Configurar pontos de restauração no Timeshift",["timeshift-launcher"]),

@@ -20,7 +20,7 @@ INSTALLER = "/usr/local/sbin/enfoque-install-system"
 class Installer(Gtk.Window):
     def __init__(self):
         super().__init__(title="Instalar Enfoque OS")
-        self.set_default_size(710, 520)
+        self.set_default_size(750, 580)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.set_border_width(28)
         self.connect("destroy", Gtk.main_quit)
@@ -37,6 +37,15 @@ class Installer(Gtk.Window):
         intro.set_line_wrap(True)
         intro.set_xalign(0)
         box.pack_start(intro, False, False, 0)
+        # Both controls work with a mouse in the Live ISO, without an Ethernet cable.
+        tools = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=9)
+        wifi = Gtk.Button(label="Conectar ao Wi-Fi")
+        wifi.connect("clicked", self.launch_helper, "/usr/local/bin/enfoque-configurar-wifi")
+        tools.pack_start(wifi, False, False, 0)
+        keyboard = Gtk.Button(label="Teclado virtual")
+        keyboard.connect("clicked", self.launch_helper, "/usr/bin/onboard")
+        tools.pack_start(keyboard, False, False, 0)
+        box.pack_start(tools, False, False, 0)
         self.disk = Gtk.ComboBoxText()
         box.pack_start(Gtk.Label(label="Disco de destino (minimo 24 GiB)"), False, False, 0)
         box.pack_start(self.disk, False, False, 0)
@@ -78,6 +87,14 @@ class Installer(Gtk.Window):
         box.pack_end(row, False, False, 0)
         self.update_mode()
         self.refresh_disks()
+
+    def launch_helper(self, _button, program):
+        try:
+            subprocess.Popen([program], stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+        except OSError:
+            self.message("Recurso indisponivel nesta instalacao.", True)
 
     def message(self, message, warning=False):
         dialog = Gtk.MessageDialog(self, 0, Gtk.MessageType.WARNING if warning
