@@ -114,6 +114,50 @@ class ServiceCases(unittest.TestCase):
         with self.assertRaises(server_transfer.BackupTransferError):
             client.get_manifest()
 
+    def test_only_iso_extension_is_skipped_and_large_other_files_are_kept(self):
+        downloads = self.base / "windows" / "Users" / "Operador" / "Downloads"
+        write_file(downloads / "enfoque.iso", b"ISO image fixture")
+        write_file(downloads / "sistema.ISO", b"Uppercase ISO extension")
+        write_file(downloads / "subdir" / "outra.Iso", b"Mixed-case ISO")
+        large_zip = b"Z" * (2 * 1024 * 1024 + 17)
+        write_file(downloads / "backup.zip", large_zip)
+        write_file(downloads / "manual.iso.txt", b"Document with iso in stem")
+        write_file(downloads / "software.exe", b"Binary file")
+        write_file(downloads / "arquivos.iso" / "relatorio.pdf", b"PDF in a directory named .iso")
+        items = self.make_inventory()
+        names = {item.relative.as_posix(): item.size for item in items}
+        self.assertNotIn("Downloads/enfoque.iso", names)
+        self.assertNotIn("Downloads/sistema.ISO", names)
+        self.assertNotIn("Downloads/subdir/outra.Iso", names)
+        self.assertEqual(names["Downloads/backup.zip"], len(large_zip))
+        self.assertEqual(names["Downloads/manual.iso.txt"], len(b"Document with iso in stem"))
+        self.assertIn("Downloads/software.exe", names)
+        self.assertIn("Downloads/arquivos.iso/relatorio.pdf", names)
+        self.assertIn("Documentos/arquivos/catalogo.csv", names)
+
+    def test_large_upload_reports_byte_progress_before_file_completes(self):
+        original = self.base / "windows" / "Users" / "Operador" / "Downloads"
+        contents = b"A" * (2 * 1024 * 1024 + 113)
+        write_file(original / "arquivo-grande.zip", contents)
+        items = self.make_inventory()
+        file = next(f for f in items if f.relative.name == "arquivo-grande.zip")
+        client, _ = self.session(items)
+        progress = []
+        result = client.upload_file(0, file, progress=progress.append)
+        self.assertEqual(result["size"], len(contents))
+        self.assertTrue(progress)
+        self.assertEqual(progress[-1], len(contents))
+        self.assertTrue(any(0 < value < len(contents) for value in progress))
+        self.assertTrue(all(0 < value <= len(contents) for value in progress))
+
+    def test_only_iso_inventory_fails_closed_before_formatting(self):
+        root = self.base / "only-iso" / "Users" / "Operador"
+        write_file(root / "Downloads" / "instalador.iso", b"boot image")
+        files = preserve.scan_partition(self.base / "only-iso", "win")
+        self.assertEqual(files, [])
+        with self.assertRaises(preserve.PreservationError):
+            preserve.compile_inventory([("win", files)])
+
     def test_first_boot_revalidates_and_deletes_backup_automatically(self):
         from types import SimpleNamespace
         cleanup = import_source(

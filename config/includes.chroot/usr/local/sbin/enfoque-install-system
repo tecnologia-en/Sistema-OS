@@ -179,13 +179,24 @@ def back_up_to_server(disk, code):
         print("Enfoque OS: sessao temporaria iniciada no servidor; "
               "ID DE RECUPERACAO " + client.session_id, flush=True)
         print(f"Enfoque OS: enviando {count} arquivo(s) "
-              f"({total} bytes) ao servidor seguro...", flush=True)
+              f"({total / 1_000_000_000:.2f} GB) ao servidor seguro...", flush=True)
         manifest = []
+        confirmed_bytes = 0
+
+        def show_progress(done, in_flight=0):
+            # GUI recebe bytes enviados, inclusive DURANTE arquivos grandes.
+            # Nenhum nome de arquivo, codigo ou token e exibido no progresso.
+            sent = min(total, confirmed_bytes + in_flight)
+            print(f"ENFOQUE_BACKUP_PROGRESS {done} {count} {sent} {total}", flush=True)
+
+        show_progress(0)
         for index, file in enumerate(files):
-            manifest.append(client.upload_file(index, file))
-            if (index+1) % 50 == 0 or index+1 == count:
-                print(f"Enfoque OS: backup {index+1}/{count} arquivos enviados.",
-                      flush=True)
+            manifest.append(client.upload_file(
+                index, file,
+                progress=lambda bytes_sent, idx=index: show_progress(idx, bytes_sent)))
+            confirmed_bytes += file.size
+            if (index + 1) % 25 == 0 or index + 1 == count:
+                show_progress(index + 1)
         verified = client.finalize(manifest)
         if verified["total_bytes"] != total:
             raise remote.BackupTransferError(

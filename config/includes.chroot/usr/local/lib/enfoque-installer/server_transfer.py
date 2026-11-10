@@ -58,7 +58,8 @@ class Client:
         self.session_id = session_id
         self.token = token
 
-    def _request(self, method, endpoint, *, body=None, size=None, stream=None, headers=None):
+    def _request(self, method, endpoint, *, body=None, size=None, stream=None,
+                 headers=None, on_chunk=None):
         url_path = self.base_path + endpoint
         class_ = http.client.HTTPSConnection if self.url.scheme == "https" else http.client.HTTPConnection
         conn = class_(self.url.hostname, self.url.port,
@@ -88,9 +89,13 @@ class Client:
                 if body:
                     conn.send(body)
             else:
+                transferred = 0
                 with Path(stream).open("rb") as file:
                     while block := file.read(CHUNK):
                         conn.send(block)
+                        transferred += len(block)
+                        if on_chunk is not None:
+                            on_chunk(transferred)
             response = conn.getresponse()
             if response.status >= 400:
                 sample = response.read(1500).decode("utf-8", "replace")
@@ -126,7 +131,7 @@ class Client:
         self.token = obj["token"]
         return obj
 
-    def upload_file(self, index, file):
+    def upload_file(self, index, file, progress=None):
         path = Path(file.original)
         if not path.is_file() or path.is_symlink():
             raise BackupTransferError("Arquivo de origem indisponivel.")
@@ -134,11 +139,23 @@ class Client:
             raise BackupTransferError("Arquivo de origem mudou de tamanho.")
         digest = digest_file(path)
         endpoint = f"/v1/sessions/{self.session_id}/files/{index}"
+        last_report = 0.0
+
+        def report_progress(sent):
+            nonlocal last_report
+            if progress is None:
+                return
+            now = time.monotonic()
+            if sent >= file.size or now - last_report >= 0.75:
+                progress(sent)
+                last_report = now
+
         for attempt in range(3):
             try:
                 conn, response = self._request(
                     "PUT", endpoint, size=file.size, stream=path,
-                    headers={"X-File-SHA256": digest})
+                    headers={"X-File-SHA256": digest},
+                    on_chunk=report_progress)
                 response.read()
                 conn.close()
                 return {"path": file.relative.as_posix(), "size": file.size,

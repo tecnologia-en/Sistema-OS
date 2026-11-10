@@ -25,6 +25,7 @@ class Installer(Gtk.Window):
         self.set_border_width(28)
         self.connect("destroy", Gtk.main_quit)
         self.running = False
+        self.progress_determinate = False
         self.disks = []
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
         self.add(box)
@@ -75,6 +76,7 @@ class Installer(Gtk.Window):
         self.status.set_line_wrap(True)
         box.pack_start(self.status, False, False, 0)
         self.progress = Gtk.ProgressBar()
+        self.progress.set_show_text(False)
         box.pack_start(self.progress, False, False, 0)
         row = Gtk.Box(spacing=12)
         self.refresh = Gtk.Button(label="Atualizar discos")
@@ -134,7 +136,8 @@ class Installer(Gtk.Window):
             "A instalacao vai enviar arquivos pessoais por HTTPS ao servidor "
             "temporario da Enfoque, verificar tudo ANTES de formatar, instalar "
             "o sistema e restaurar Area de Trabalho, Downloads, Documentos, "
-            "Imagens, Videos e Musicas. O servidor apaga o backup apos o "
+            "Imagens, Videos e Musicas (exceto arquivos .iso). "
+            "O servidor apaga o backup apos o "
             "primeiro boot e verificacao completa. Exige internet e codigo "
             "temporario da TI; nao requer outro disco ou pendrive de dados."
             if keeping else
@@ -175,6 +178,8 @@ class Installer(Gtk.Window):
         self.keep_mode.set_sensitive(False)
         self.status.set_text("Enviando e verificando arquivos no servidor..." if mode == "preserve"
                              else "Preparando disco e copiando o Enfoque OS...")
+        self.progress_determinate = False
+        self.progress.set_show_text(False)
         self.progress.pulse()
         threading.Thread(target=self.run_install, args=(disk, mode, code), daemon=True).start()
         GLib.timeout_add(400, self.pulse)
@@ -182,10 +187,33 @@ class Installer(Gtk.Window):
     def pulse(self):
         if not self.running:
             return False
-        self.progress.pulse()
+        if not self.progress_determinate:
+            self.progress.pulse()
         return True
 
     def progress_line(self, line):
+        if line.startswith("ENFOQUE_BACKUP_PROGRESS "):
+            try:
+                done, count, sent, total = map(int, line.split()[1:5])
+                if count <= 0 or min(done, sent, total) < 0:
+                    return False
+                fraction = min(1.0, sent / total if total else done / count)
+                sent_gb = sent / 1_000_000_000
+                total_gb = total / 1_000_000_000
+                self.progress_determinate = True
+                self.progress.set_fraction(fraction)
+                self.progress.set_show_text(True)
+                self.progress.set_text(f"{fraction * 100:.1f}% - {sent_gb:.2f} / {total_gb:.2f} GB")
+                self.status.set_text(
+                    f"Backup: {done}/{count} arquivos concluidos | "
+                    f"{sent_gb:.2f} / {total_gb:.2f} GB enviados")
+            except (ValueError, ZeroDivisionError):
+                pass
+            return False
+        if "Enfoque OS: backup confirmado por SHA256" in line:
+            self.progress_determinate = False
+            self.progress.set_show_text(False)
+            self.progress.pulse()
         if "ENFOQUE_INSTALL_ERROR" in line or "Enfoque OS:" in line:
             self.status.set_text(line.strip()[:180])
         return False
@@ -214,6 +242,10 @@ class Installer(Gtk.Window):
 
     def done(self, success, detail=""):
         self.running = False
+        if success:
+            self.progress.set_fraction(1.0)
+            self.progress.set_show_text(True)
+            self.progress.set_text("100% - instalacao concluida")
         self.submit.set_sensitive(not success)
         self.refresh.set_sensitive(not success)
         if success:

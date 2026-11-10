@@ -102,6 +102,10 @@ def _walk_regular_files(folder):
             if entry.is_dir(follow_symlinks=False):
                 stack.append(path)
             elif entry.is_file(follow_symlinks=False):
+                # Somente imagens .iso (inclusive .ISO) ficam fora da migracao.
+                # Outros arquivos, de qualquer tipo e tamanho, sao preservados.
+                if path.suffix.casefold() == ".iso":
+                    continue
                 s = entry.stat(follow_symlinks=False)
                 if not stat.S_ISREG(s.st_mode):
                     raise PreservationError(f"Arquivo especial nao suportado: {path}")
