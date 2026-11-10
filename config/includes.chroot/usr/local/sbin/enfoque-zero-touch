@@ -36,6 +36,8 @@ STORES = {
     "sao-goncalo", "centro", "deposito", "administracao", "papel-arte"
 }
 NAME = re.compile(r"^[A-Za-zÀ-ÿ0-9 _.-]{3,48}$")
+# O nome oficial de unidade "Administracao / TI" usa barra.
+# Aceita-se SOMENTE esse valor especial, nao barras livres/pathnames.
 ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 TOKEN = re.compile(r"^[A-Za-z0-9_-]{40,150}$")
 SSHKEY = re.compile(r"^ssh-ed25519 [A-Za-z0-9+/]+={0,2}$")
@@ -91,6 +93,15 @@ def secure_keypair():
     return public
 
 
+def valid_unit_name(unit, unit_name):
+    """Allow only trusted display names, including the known Administracao / TI."""
+    if not isinstance(unit_name, str):
+        return False
+    return bool(NAME.fullmatch(unit_name)) or (
+        unit == "administracao" and unit_name == "Administracao / TI"
+    )
+
+
 def local_info():
     if LIVE.exists():
         raise RuntimeError("Zero Touch nao funciona no modo Live")
@@ -109,7 +120,7 @@ def local_info():
     name, unit, unit_name = profile.get("pcName"), profile.get("unitId"), profile.get("unitName")
     if not isinstance(name, str) or not NAME.fullmatch(name):
         raise ValueError("Nome de computador invalido")
-    if unit not in STORES or not isinstance(unit_name, str) or not NAME.fullmatch(unit_name):
+    if unit not in STORES or not valid_unit_name(unit, unit_name):
         raise ValueError("Unidade invalida")
     return {"deviceId": uid, "pcName": name, "unitId": unit, "unitName": unit_name}
 

@@ -103,6 +103,24 @@ test("registration cannot overwrite existing key or pretend to be another unit",
     await assert.rejects(registry.request(forgedHost));
   });
 });
+test("Admin TI unit may contain slash but machine names still cannot", async () => {
+  await setup(async registry => {
+    const f = fixture();
+    const request = await registry.request(
+      f.auth("register", { pcName: "TESTE2", unitId: "administracao", unitName: "Administracao / TI" })
+    );
+    assert.equal(request.status, "pending");
+    const status = await registry.poll(f.auth("status"));
+    assert.equal(status.unitName, "Administracao / TI");
+    await assert.rejects(
+      registry.request(f.auth("register", { pcName: "../etc/sudoers", unitId: "administracao", unitName: "Administracao / TI" }))
+    );
+    await assert.rejects(
+      registry.request(f.auth("register", { pcName: "TESTE3", unitId: "administracao", unitName: "../etc" }))
+    );
+  });
+});
+
 test("expired status, unsupported key and invalid identity are rejected", async () => {
   await setup(async registry => {
     const f = fixture();

@@ -21,6 +21,11 @@ const STORE = new Set([
 const MAX_DEVICES = 350;
 const MAX_AGE_MS = 5 * 60 * 1000;
 const SAFE_NAME = /^[A-Za-zÀ-ÿ0-9 _.-]{3,48}$/;
+// Unico rótulo oficial que usa barra; nao aceitar paths arbitrarios.
+function validUnitName(unitId, name) {
+  return SAFE_NAME.test(name || "") ||
+    (unitId === "administracao" && name === "Administracao / TI");
+}
 const TUNNEL_PORT_START = 23101;
 const TUNNEL_HOST = "intranet.enfoquepapelaria.com.br";
 function digest(bytes) { return createHash("sha256").update(bytes).digest("hex"); }
@@ -130,7 +135,7 @@ export class ZeroTouchRegistry {
   }
   async request(data) {
     if (!data || !UUID4.test(data.deviceId || "") || !SAFE_NAME.test(data.pcName || "") ||
-        !STORE.has(data.unitId) || !SAFE_NAME.test(data.unitName || "") ||
+        !STORE.has(data.unitId) || !validUnitName(data.unitId, data.unitName) ||
         typeof data.publicKey !== "string") throw err("Dados de inscricao invalidos");
     validateSshKey(data.tunnelPublicKey);
     validateSshKey(data.hostPublicKey);
