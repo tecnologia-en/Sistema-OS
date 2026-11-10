@@ -52,12 +52,12 @@ def root_only():
         raise RuntimeError("Nao agendar na ISO Live")
 
 
-def read_request(file=None):
+def read_request(file=None, *, owner_uid=0):
     file = REQUEST if file is None else file
     if not file.exists():
         return None
     meta = file.lstat()
-    if file.is_symlink() or not file.is_file() or meta.st_uid != 0 or meta.st_mode & 0o077:
+    if file.is_symlink() or not file.is_file() or meta.st_uid != owner_uid or meta.st_mode & 0o077:
         raise PermissionError("Agendamento nao pertence a root")
     data = json.loads(file.read_text())
     if data.get("schema") != 1 or not VERSION.fullmatch(data.get("version", "")) or not re.fullmatch(r"[0-9a-f-]{36}", data.get("createdBoot", "")):

@@ -39,7 +39,8 @@ class Recovery038Tests(unittest.TestCase):
             (source / "home").mkdir()
             (source / "etc" / "hostname").write_text("caixa-teste\n")
             (source / "home" / "manual.pdf").write_bytes(b"%PDF-1.4\n" + b"A" * 2048)
-            with mock.patch.object(tool, "prepare_space", return_value=(4096, 10**11)):
+            with mock.patch.object(tool, "prepare_space", return_value=(4096, 10**11)), \
+                 mock.patch.object(tool, "check_root_directory", side_effect=lambda p: p):
                 result = tool.create_image("Teste de recuperacao", source, target, base/"no-efi")
             self.assertTrue(result["ok"])
             self.assertTrue(result["verified"])
@@ -104,7 +105,9 @@ class Nextboot038Tests(unittest.TestCase):
             plan = tool.schedule("0.2.38")
             self.assertTrue(plan["ok"])
             self.assertEqual(plan["when"], "proximo-boot")
-            with mock.patch.object(tool, "process") as executor:
+            original_read = tool.read_request
+            with mock.patch.object(tool, "read_request", side_effect=lambda: original_read(owner_uid=__import__("os").getuid())), \
+                 mock.patch.object(tool, "process") as executor:
                 result = tool.apply()
                 self.assertEqual(result["reason"], "aguardando_reinicio")
                 self.assertTrue(tool.REQUEST.exists())
@@ -130,11 +133,14 @@ class Nextboot038Tests(unittest.TestCase):
             tool.BOOT.write_text("c483d7e1-2964-4e69-98e1-1e976caa78a1")
             tool.schedule("0.2.38")
             tool.BOOT.write_text("d483d7e1-2964-4e69-98e1-1e976caa78a1")
-            with mock.patch.object(tool, "process", return_value={"ok": False, "executed": True, "error": "fail"}):
+            original_read = tool.read_request
+            with mock.patch.object(tool, "read_request", side_effect=lambda: original_read(owner_uid=__import__("os").getuid())), \
+                 mock.patch.object(tool, "process", return_value={"ok": False, "executed": True, "error": "fail"}):
                 result = tool.apply()
+                after_failed = tool.apply()
             self.assertFalse(result["ok"])
             self.assertFalse(tool.REQUEST.exists())
-            self.assertFalse(tool.apply()["executed"])
+            self.assertFalse(after_failed["executed"])
 
     def test_signed_apt_and_recovery_do_the_update(self):
         code = NEXTBOOT.read_text()
