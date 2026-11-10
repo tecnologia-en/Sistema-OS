@@ -34,6 +34,30 @@ SESSION_RX = re.compile(r"^[0-9a-f]{32}$")
 HEX_RX = re.compile(r"^[0-9a-f]{64}$")
 
 
+def fixed_code_authorized(value):
+    """Optional server-side reusable TI code (only stored as SHA-256 in private storage).
+
+    One-time codes remain valid. The fixed code grants ONLY creation of an
+    independent session, never access to an existing backup or its files.
+    """
+    if not isinstance(value, str) or len(value) > 128:
+        return False
+    normalized = value.strip().casefold()
+    if not re.fullmatch(r"[a-z0-9]{4,64}", normalized):
+        return False
+    path = DATA / "master-code.sha256"
+    if path.is_symlink():
+        return False
+    try:
+        expected = path.read_text(encoding="ascii").strip().lower()
+    except (OSError, UnicodeError):
+        return False
+    if not HEX_RX.fullmatch(expected):
+        return False
+    actual = hashlib.sha256(normalized.encode("ascii")).hexdigest()
+    return hmac.compare_digest(actual, expected)
+
+
 def ensure_storage():
     for path in (DATA, DATA / "codes", DATA / "sessions"):
         path.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -189,31 +213,36 @@ class Handler(BaseHTTPRequestHandler):
 
     def create_session(self):
         setup = self.headers.get("X-Enfoque-Setup-Code", "")
+        is_fixed = fixed_code_authorized(setup)
         code = re.sub(r"[\s-]", "", setup).upper()
-        if not re.fullmatch(r"[A-Z2-9]{20}", code):
-            raise ErrorHTTP(401, "Codigo temporario necessario")
+        if not is_fixed and not re.fullmatch(r"[A-Z2-9]{20}", code):
+            raise ErrorHTTP(401, "Codigo da TI invalido")
         body = self.request_json(4096)
         files = body.get("file_count")
         total = body.get("total_bytes")
         if (type(files) is not int or not 0 < files <= MAX_FILES or
                 type(total) is not int or not 0 <= total <= MAX_SESSION_BYTES):
             raise ErrorHTTP(422, "Inventario invalido ou excede limite")
-        digest = hashlib.sha256(code.encode("ascii")).hexdigest()
-        code_path = DATA / "codes" / (digest + ".json")
+        code_path = None
+        if not is_fixed:
+            digest = hashlib.sha256(code.encode("ascii")).hexdigest()
+            code_path = DATA / "codes" / (digest + ".json")
         with LOCK:
-            try:
-                code_meta = read_json(code_path)
-            except (OSError, ValueError):
-                raise ErrorHTTP(401, "Codigo nao autorizado")
-            if code_meta["expires"] < time.time():
-                code_path.unlink(missing_ok=True)
-                raise ErrorHTTP(401, "Codigo expirado")
+            if not is_fixed:
+                try:
+                    code_meta = read_json(code_path)
+                except (OSError, ValueError):
+                    raise ErrorHTTP(401, "Codigo nao autorizado")
+                if code_meta["expires"] < time.time():
+                    code_path.unlink(missing_ok=True)
+                    raise ErrorHTTP(401, "Codigo expirado")
             disk = shutil.disk_usage(DATA)
             if disk.free - total < MIN_AVAILABLE_BYTES:
                 raise ErrorHTTP(507, "VPS sem margem de armazenamento")
             if aggregate_stored_bytes() + total > MAX_TOTAL_BYTES:
                 raise ErrorHTTP(507, "Cota temporaria de backups atingida")
-            code_path.unlink()
+            if code_path is not None:
+                code_path.unlink()
             session_id = secrets.token_hex(16)
             token = secrets.token_urlsafe(40)
             root = session_root(session_id)
@@ -224,6 +253,7 @@ class Handler(BaseHTTPRequestHandler):
                 "token_hash": hashlib.sha256(token.encode()).hexdigest(),
                 "created": now, "expires": now + TTL,
                 "file_count": files, "expected_bytes": total,
+                "authorization_kind": "fixed" if is_fixed else "temporary",
                 "status": "uploading",
             })
         self.reply(201, {"session_id": session_id,

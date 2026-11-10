@@ -162,6 +162,32 @@ class ServiceCases(unittest.TestCase):
             client.finalize(entries)
         self.assertTrue(service.session_root(client.session_id).is_dir())
 
+    def test_fixed_ti_code_reusable_and_sessions_stay_isolated(self):
+        # Teste no diretorio temporario, nunca em backups reais.
+        import hashlib
+        path = service.DATA / "master-code.sha256"
+        path.write_text(hashlib.sha256(b"fixtureinternaltest2026").hexdigest() + "\n")
+        path.chmod(0o600)
+        items = self.make_inventory()
+        c1 = server_transfer.Client(self.url)
+        c2 = server_transfer.Client(self.url)
+        total = sum(file.size for file in items)
+        c1.create_session("fixtureinternaltest2026", len(items), total)
+        c2.create_session("fixtureinternaltest2026", len(items), total)
+        self.assertNotEqual(c1.session_id, c2.session_id)
+        self.assertNotEqual(c1.token, c2.token)
+        self.assertEqual(
+            service.read_json(service.session_root(c1.session_id) / "meta.json")
+            ["authorization_kind"], "fixed")
+        # Acesso a copia de outra sessao exige o token da propria sessao.
+        unauthorized = server_transfer.Client(self.url)
+        unauthorized.session_id = c1.session_id
+        unauthorized.token = c2.token
+        with self.assertRaises(server_transfer.BackupTransferError):
+            unauthorized.get_manifest()
+        with self.assertRaises(server_transfer.BackupTransferError):
+            server_transfer.Client(self.url).create_session("errado", len(items), total)
+
     def test_setup_code_single_use_and_server_capacity_fail_closed(self):
         items = self.make_inventory()
         client, code = self.session(items)
