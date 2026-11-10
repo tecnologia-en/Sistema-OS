@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""Enfoque OS: recebimento de campanhas aprovadas pela TI.
+
+Nao executa comandos remotos: somente a atualizacao APT assinada do pacote
+enfoque-os-core, para uma versao superior, com snapshot obrigatorio.
+A fila do servidor SOZINHA nao modifica o PC: a campanha precisa de aprovacao
+de administrador e de um agente local inscrito individualmente.
+"""
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+import uuid
+
+BASE = "https://intranet.enfoquepapelaria.com.br/enfoque-os-update-control/v1"
+IDENTITY = Path("/var/lib/private/enfoque-agent/identity.json")
+DEVICE = Path("/var/lib/enfoque-os/device-identity.json")
+RELEASE = Path("/etc/enfoque-os-release")
+UPDATER = "/usr/local/sbin/enfoque-update"
+VERSION = re.compile(r"^\d{1,3}\.\d{1,3}\.\d{1,4}$")
+DEVICE_ID = re.compile(r"^enfoqueos-[0-9a-f-]{36}$")
+CAMPAIGN = re.compile(r"^[a-f0-9-]{36}$")
+WORKER = "1.0"
+
+
+def compare(a, b):
+    if not isinstance(a, str) or not isinstance(b, str) or not VERSION.fullmatch(a) or not VERSION.fullmatch(b):
+        raise ValueError("Versao invalida")
+    x, y = map(lambda v: tuple(map(int, v.split("."))), (a, b))
+    return (x > y) - (x < y)
+
+
+def installed_version():
+    data = RELEASE.read_text("utf8")
+    match = re.search(r'^VERSION="([^"]+)"$', data, re.MULTILINE)
+    if not match or not VERSION.fullmatch(match.group(1)):
+        raise RuntimeError("Versao instalada desconhecida")
+    return match.group(1)
+
+
+def state():
+    if os.geteuid() != 0:
+        raise PermissionError("Somente servico local da TI (root).")
+    if Path("/run/live/medium").exists():
+        raise PermissionError("Nao atualizar em modo Live.")
+    # DynamicUser: credenciais do agente ficam protegidas em /var/lib/private.
+    # O token privado exige 0600; o ID publico do computador pode ser 0644.
+    if (IDENTITY.is_symlink() or not IDENTITY.is_file()
+            or IDENTITY.stat().st_mode & 0o077):
+        raise PermissionError("Token do agente indisponivel ou inseguro")
+    if (DEVICE.is_symlink() or not DEVICE.is_file()
+            or DEVICE.stat().st_uid != 0 or DEVICE.stat().st_mode & 0o022):
+        raise PermissionError("Identidade do computador nao confiavel")
+    device = json.loads(DEVICE.read_text("utf8"))
+    local_id = str(uuid.UUID(device["uuid"]))
+    if str(device["uuid"]) != local_id:
+        raise ValueError("Identidade invalida")
+    cred = json.loads(IDENTITY.read_text("utf8"))
+    device_id, token = cred.get("deviceId"), cred.get("token")
+    if (device_id != "enfoqueos-" + local_id or not DEVICE_ID.fullmatch(device_id)
+            or not isinstance(token, str) or not re.fullmatch(r"[0-9a-f]{64}", token)):
+        raise PermissionError("Agente nao corresponde ao computador")
+    return device_id, token
+
+
+def post(action, payload, device_id, token, base=BASE):
+    headers = {"Content-Type": "application/json", "Accept": "application/json",
+               "Authorization": "Bearer " + token, "X-Enfoque-Device-ID": device_id,
+               "User-Agent": "Enfoque-OS-Update-Control/1.0"}
+    body = json.dumps(payload, separators=(",", ":")).encode("utf8")
+    if len(body) > 1500:
+        raise ValueError("Solicitacao excessiva")
+    request = urllib.request.Request(base + "/" + action, body, headers, method="POST")
+    with urllib.request.urlopen(request, timeout=20) as response:
+        if response.status != 200:
+            raise RuntimeError("Resposta nao autorizada")
+        data = response.read(4097)
+    if len(data) > 4096:
+        raise RuntimeError("Resposta longa demais")
+    result = json.loads(data)
+    if not isinstance(result, dict) or result.get("ok") is not True:
+        raise RuntimeError("Resposta invalida")
+    return result
+
+
+def validate_command(command, current):
+    if command is None:
+        return None
+    if not isinstance(command, dict) or command.get("action") != "update-core":
+        raise ValueError("Apenas atualizacao APT assinada e permitida")
+    version, cid, sha = command.get("version"), command.get("campaignId"), command.get("packageSha256")
+    if (not isinstance(version, str) or not VERSION.fullmatch(version)
+            or not isinstance(cid, str) or not CAMPAIGN.fullmatch(cid)
+            or not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{64}", sha)):
+        raise ValueError("Campanha invalida")
+    if compare(current, version) >= 0:
+        return {"version": version, "campaignId": cid, "alreadyApplied": True}
+    return {"version": version, "campaignId": cid, "alreadyApplied": False}
+
+
+def run_once():
+    identity, token = state()
+    current = installed_version()
+    offer = post("poll", {"version": current, "workerVersion": WORKER}, identity, token)
+    command = validate_command(offer.get("command"), current)
+    if not command:
+        print("Enfoque Update Control: sem campanhas autorizadas")
+        return 0
+    cid, target = command["campaignId"], command["version"]
+    if command["alreadyApplied"]:
+        result={"campaignId":cid,"status":"concluida","version":current}
+        post("report",result,identity,token)
+        return 0
+    failure=None
+    try:
+        completed = subprocess.run([UPDATER,"apply-core",target],stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,
+                         text=True,timeout=8100,check=False)
+        if completed.returncode:
+            failure="Falha na atualizacao ou snapshot indisponivel"
+    except (OSError,subprocess.TimeoutExpired):
+        failure="Atualizacao nao concluiu no prazo"
+    after=installed_version()
+    if compare(after,target)<0:
+        failure=failure or "Versao instalada nao mudou"
+    result={"campaignId":cid,"status":"falha" if failure else "concluida",
+            "version":after}
+    if failure:
+        result["error"]=failure
+    post("report",result,identity,token)
+    print("Enfoque Update Control:",result["status"],"versao",after)
+    return 0 if not failure else 1
+
+
+def main():
+    try:
+        return run_once()
+    except (OSError,PermissionError,ValueError,RuntimeError,urllib.error.URLError,
+            json.JSONDecodeError,subprocess.SubprocessError) as error:
+        # Tokens and headers must never be written to journalctl.
+        print("Enfoque Update Control:",type(error).__name__,file=sys.stderr)
+        return 1
+
+
+if __name__=="__main__":
+    sys.exit(main())

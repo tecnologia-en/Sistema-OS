@@ -210,6 +210,21 @@ def perform(kind, values, *, automatic=False, skip_snapshot=False):
                     "-o", "Dpkg::Options::=--force-confold",
                     "--yes", "full-upgrade",
                 ]
+            elif kind == "apply-core":
+                # Atualizador corporativo: somente o pacote principal, na
+                # versao exata autorizada (APT valida indice e .deb assinados).
+                # Nunca executa upgrade completo do Debian ou de aplicativos.
+                target = values[0]
+                current = installed_version()
+                def vparts(value):
+                    return tuple(int(part) for part in value.split("."))
+                if vparts(target) <= vparts(current):
+                    log_event(kind, "skipped_already_installed", target)
+                    return {"ok": True, "skipped": "versao ja instalada"}
+                cmd = ["-o", "Dpkg::Options::=--force-confdef",
+                       "-o", "Dpkg::Options::=--force-confold",
+                       "--yes", "--only-upgrade", "install",
+                       PACKAGE + "=" + target + "-1"]
             elif kind == "install":
                 cmd = ["--yes", "--no-install-recommends", "install", *values]
             elif kind == "remove":
@@ -253,7 +268,7 @@ def perform(kind, values, *, automatic=False, skip_snapshot=False):
 def main():
     p = argparse.ArgumentParser(description="Gerenciador de atualizacoes Enfoque OS")
     p.add_argument("operation", choices=[
-        "status", "check", "apply", "install", "remove",
+        "status", "check", "apply", "apply-core", "install", "remove",
         "rollback-core", "auto", "history",
     ])
     p.add_argument("values", nargs="*")
@@ -300,6 +315,9 @@ def main():
                 p.error("Informe nomes validos de pacotes APT")
             if args.operation == "remove" and PACKAGE in args.values:
                 p.error("O pacote principal do Enfoque OS nao pode ser removido aqui")
+        elif args.operation == "apply-core":
+            if len(args.values)!=1 or not re.fullmatch(r"\d{1,3}\.\d{1,3}\.\d{1,4}",args.values[0]):
+                p.error("Informe uma versao do Enfoque OS valida")
         elif args.operation == "rollback-core":
             if len(args.values) != 1 or VERSION.fullmatch(args.values[0]) is None:
                 p.error("Informe uma versao APT valida para o pacote Enfoque")

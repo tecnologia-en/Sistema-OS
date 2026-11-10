@@ -1,0 +1,19 @@
+[Unit]
+Description=Enfoque OS - executar apenas atualizacoes autorizadas pela TI
+Wants=network-online.target
+After=network-online.target enfoque-remote-agent.service
+ConditionPathExists=!/run/live/medium
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/enfoque-update-control
+TimeoutStartSec=8400
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+UMask=0077

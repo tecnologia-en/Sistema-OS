@@ -1,0 +1,12 @@
+[Unit]
+Description=Enfoque OS - consultar campanhas aprovadas pela TI
+
+[Timer]
+OnBootSec=4min
+OnUnitInactiveSec=4min
+RandomizedDelaySec=30s
+Persistent=false
+Unit=enfoque-update-control.service
+
+[Install]
+WantedBy=timers.target
