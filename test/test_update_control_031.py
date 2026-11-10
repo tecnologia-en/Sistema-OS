@@ -13,6 +13,13 @@ loader.exec_module(worker)
 
 
 class ControlledUpdateTests(TestCase):
+    def test_legacy_automatic_upgrade_is_disabled(self):
+        builder=(ROOT / "scripts/build-update-package.py").read_text()
+        self.assertIn("systemctl disable --now enfoque-update-apply.timer",builder)
+        worker_unit=(ROOT / "config/includes.chroot/etc/systemd/system/enfoque-update-control.service").read_text()
+        self.assertIn("NoNewPrivileges=yes",worker_unit)
+        self.assertIn("ExecStart=/usr/local/sbin/enfoque-update-control",worker_unit)
+
     def test_only_newer_signed_core_version_accepted(self):
         job={"action":"update-core","version":"0.2.31",
              "campaignId":"786f1d1b-c72c-4f19-9005-5e4dac1800c3",

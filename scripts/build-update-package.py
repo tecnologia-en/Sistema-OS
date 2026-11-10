@@ -170,7 +170,8 @@ def create(output):
             # live-build installs this .deb into the image chroot; creating
             # enfoque-ti here consumes UID 1000, breaking Debian Live's user.
             # The disk installer explicitly provisions enfoque-ti afterward.
-            "  systemctl enable enfoque-update-check.timer enfoque-update-apply.timer enfoque-update-control.timer enfoque-zero-touch.timer enfoque-saude.timer enfoque-backup.timer enfoque-limpeza.timer >/dev/null 2>&1 || true\n"
+            "  systemctl enable enfoque-update-check.timer enfoque-update-control.timer enfoque-zero-touch.timer enfoque-saude.timer enfoque-backup.timer enfoque-limpeza.timer >/dev/null 2>&1 || true\n"
+            "  systemctl disable --now enfoque-update-apply.timer >/dev/null 2>&1 || true\n"
             "  if [ ! -s /etc/enfoque-ssh/authorized_keys ]; then\n"
             "    systemctl disable --now ssh.service ssh.socket >/dev/null 2>&1 || true\n"
             "  fi\n"

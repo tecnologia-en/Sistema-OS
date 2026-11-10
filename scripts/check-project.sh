@@ -93,6 +93,15 @@ for pkg in libreoffice libreoffice-gtk3 libreoffice-l10n-pt-br hunspell-pt-br hy
   grep -Fxq "$pkg" "$ROOT/config/package-lists/enfoque-base.list.chroot" || { echo "LibreOffice incompleto: $pkg" >&2; exit 1; }
 done
 
+# 0.2.31: somente a campanha aprovada pode iniciar update do core.
+# O timer legado semanal precisa estar explicitamente desabilitado no postinst.
+grep -Fq 'systemctl disable --now enfoque-update-apply.timer' "$ROOT/scripts/build-update-package.py" || {
+  echo 'ERRO: instalacao automatica sem controle administrativo' >&2
+  exit 1
+}
+test -x "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-update-control"
+test -f "$ROOT/config/includes.chroot/etc/systemd/system/enfoque-update-control.timer"
+
 # AnyDesk vendor-signed installer must be included in the bootable ISO.
 anydesk_hook="$ROOT/config/hooks/normal/093-anydesk-oficial.hook.chroot"
 test -x "$anydesk_hook" || { echo 'Hook AnyDesk ausente' >&2; exit 1; }
