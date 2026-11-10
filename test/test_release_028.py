@@ -163,7 +163,8 @@ class Menu28(unittest.TestCase):
         source=(BIN/"enfoque-desktop-shell").read_text()
         self.assertIn('("enfoque-impressoras.desktop", "Impressoras"',source)
         self.assertIn('desktop_id == "system-config-printer.desktop"',source)
-        self.assertIn('if ident in seen or not app_info(ident):',source)
+        self.assertIn('if not app_info(ident):',source)
+        self.assertIn('if ident not in self._menu_tile_cache:',source)
         self.assertIn('self.toggle("printers")',source)
         self.assertIn('normalize_search(search)',source)
 

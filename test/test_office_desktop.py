@@ -13,11 +13,11 @@ PERSONAL = PANEL_ROOT / ".config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.
 VISUAL = CHROOT / "usr/local/bin/enfoque-aplicar-visual"
 
 class OfficeAndDesktopTests(unittest.TestCase):
-    def test_complete_office_included_offline_in_installed_iso(self):
+    def test_office_applications_and_ptbr_support_in_installed_iso(self):
         packages = {p.strip() for p in PACKAGE_LIST.read_text().splitlines()
                     if p.strip() and not p.lstrip().startswith("#")}
         required = {"libreoffice", "libreoffice-gtk3", "libreoffice-l10n-pt-br",
-                    "libreoffice-help-pt-br", "hunspell-pt-br",
+                     "hunspell-pt-br",
                     "hyphen-pt-br", "fonts-crosextra-carlito"}
         self.assertTrue(required.issubset(packages), sorted(required - packages))
         self.assertTrue({"xfce4", "zram-tools", "cups"}.issubset(packages))

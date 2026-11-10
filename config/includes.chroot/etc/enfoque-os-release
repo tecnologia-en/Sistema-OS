@@ -1,5 +1,5 @@
 NAME="Enfoque OS"
-VERSION="0.2.29"
+VERSION="0.2.30"
 CHANNEL="piloto"
 BASE="Debian 13 (trixie)"
-STATUS="piloto-apt-assinado-029"
+STATUS="piloto-performance-030"

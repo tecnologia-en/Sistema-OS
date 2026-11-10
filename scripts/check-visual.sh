@@ -73,7 +73,7 @@ grep -Fq 'https://intranet.enfoquepapelaria.com.br/' "$ROOT/config/includes.chro
 if find "$ROOT/config/includes.chroot/etc/skel/Desktop" -maxdepth 1 -type f ! -name 'SIGE.desktop' ! -name 'Intranet.desktop' | grep -q .; then
   fail 'Mais de dois atalhos no Desktop da ISO'
 fi
-for package in libreoffice libreoffice-gtk3 libreoffice-l10n-pt-br libreoffice-help-pt-br hunspell-pt-br hyphen-pt-br; do
+for package in libreoffice libreoffice-gtk3 libreoffice-l10n-pt-br hunspell-pt-br hyphen-pt-br; do
   grep -Fxq "$package" "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail "pacote LibreOffice faltando: $package"
 done
 grep -Eq '^xfce4-whiskermenu-plugin$' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'whiskermenu ausente'

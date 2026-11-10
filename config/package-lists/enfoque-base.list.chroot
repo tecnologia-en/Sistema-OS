@@ -52,11 +52,10 @@ xfce4-power-manager
 xfce4-battery-plugin
 upower
 xfce4-notifyd
-# LibreOffice completo, gratuito, em portugues brasileiro; integrado ao GTK3.
+# LibreOffice completo em pt-BR e GTK3; ajuda online para ISO mais compacta.
 libreoffice
 libreoffice-gtk3
 libreoffice-l10n-pt-br
-libreoffice-help-pt-br
 hunspell-pt-br
 hyphen-pt-br
 fonts-crosextra-carlito
@@ -100,7 +99,7 @@ avahi-daemon
 
 xcape
 xserver-xorg-video-all
-mesa-vulkan-drivers
+# Vulkan opcional nao incluido no perfil de escritorio corporativo.
 libnotify-bin
 
 x11-utils

@@ -5,8 +5,31 @@ Nao concede privilegios e nunca instala drivers por conta propria.
 """
 import os
 import sys
-import json
 import socket
+
+def _fast_client():
+    command = sys.argv[1] if len(sys.argv) > 1 else "menu"
+    if command not in ("menu", "notifications", "printers", "calendar", "hide"):
+        return False
+    uid = os.getuid()
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    folder = runtime if runtime else os.path.join(
+        os.path.expanduser("~"), ".cache", "enfoque-os")
+    path = os.path.join(folder, "enfoque-shell-%d.sock" % uid)
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(0.45)
+            client.connect(path)
+            client.sendall(command.encode("ascii") + b"\n")
+        return True
+    except (ConnectionError, OSError, TimeoutError):
+        return False
+
+
+if __name__ == "__main__" and _fast_client():
+    sys.exit(0)
+
+import json
 import threading
 import subprocess
 import shutil
@@ -190,6 +213,9 @@ class DesktopShell:
         self.open_panel=None
         self.windows={}
         self.menu_buttons=[]
+        self._menu_tile_cache={}
+        self._menu_catalog=None
+        self._menu_showing_full=False
         self.search_text=None
         self.init_css()
         self.build_menu()
@@ -304,51 +330,70 @@ class DesktopShell:
         power.connect("clicked",lambda *_:self.launch_command(["xfce4-session-logout"]))
         footer.pack_end(power,False,False,0)
         outer.pack_end(footer,False,False,0)
-    def populate_apps(self,search="",show_all=False):
-        for c in list(self.fl.get_children()):
-            self.fl.remove(c)
-        self.menu_buttons.clear()
+    def available_app_catalog(self):
+        """Read installed apps once; tiles are materialized only when shown."""
+        if self._menu_catalog is not None:
+            return self._menu_catalog
         apps=list(APP_IDS)
-        if show_all:
-            apps=[]
-            try:
-                for info in Gio.AppInfo.get_all():
-                    ident=info.get_id()
-                    if not ident or not info.should_show() or not app_info(ident):
-                        continue
-                    apps.append((ident,info.get_display_name() or ident,
-                                 "application-x-executable"))
-                # The Enfoque printer center is the unique search destination.
-                if not any(id == "enfoque-impressoras.desktop" for id,_,_ in apps):
-                    apps.append(("enfoque-impressoras.desktop","Impressoras",
-                                 "enfoque-printer"))
-                apps.sort(key=lambda a:a[1].casefold())
-            except (AttributeError, GLib.Error):
-                apps=list(APP_IDS)
+        seen={ident for ident,_,_ in apps}
+        try:
+            extra=[]
+            for info in Gio.AppInfo.get_all():
+                ident=info.get_id()
+                if not ident or ident in seen or not info.should_show():
+                    continue
+                if not app_info(ident):
+                    continue
+                seen.add(ident)
+                extra.append((ident,info.get_display_name() or ident,
+                              "application-x-executable"))
+            extra.sort(key=lambda item:item[1].casefold())
+            apps.extend(extra)
+        except (AttributeError,GLib.Error):
+            pass
+        self._menu_catalog=apps
+        return apps
+
+    def populate_apps(self,search="",show_all=False):
         query=normalize_search(search)
-        seen=set()
+        full=show_all or bool(query)
+        self._menu_showing_full=full
+        apps=self.available_app_catalog() if full else APP_IDS
+        selected=[]
         for ident,name,ico in apps:
-            if ident in seen or not app_info(ident):
-                continue
-            seen.add(ident)
             if query and query not in normalize_search(name):
                 continue
-            b=styled(Gtk.Button(),"enfoque-tile")
-            box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=5)
-            box.set_halign(Gtk.Align.CENTER)
-            box.pack_start(icon(ico,42),False,False,0)
-            txt=label(name)
-            txt.set_justify(Gtk.Justification.CENTER)
-            txt.set_xalign(.5)
-            txt.set_max_width_chars(13)
-            txt.set_ellipsize(Pango.EllipsizeMode.END)
-            box.pack_start(txt,False,False,0)
-            b.add(box)
-            b.connect("clicked",lambda _,d=ident:self.launch(d))
-            b.set_tooltip_text(name)
-            self.fl.add(b)
-            self.menu_buttons.append((b,ident))
-        self.fl.show_all()
+            if ident not in self._menu_tile_cache:
+                if not app_info(ident):
+                    continue
+                b=styled(Gtk.Button(),"enfoque-tile")
+                box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=5)
+                box.set_halign(Gtk.Align.CENTER)
+                box.pack_start(icon(ico,42),False,False,0)
+                txt=label(name)
+                txt.set_justify(Gtk.Justification.CENTER)
+                txt.set_xalign(.5)
+                txt.set_max_width_chars(13)
+                txt.set_ellipsize(Pango.EllipsizeMode.END)
+                box.pack_start(txt,False,False,0)
+                b.add(box)
+                b.connect("clicked",lambda _,d=ident:self.launch(d))
+                b.set_tooltip_text(name)
+                self.fl.add(b)
+                self._menu_tile_cache[ident]=b
+            selected.append((self._menu_tile_cache[ident],ident))
+            if query and len(selected)>=60:
+                break
+        wanted={ident for _,ident in selected}
+        for ident,button in self._menu_tile_cache.items():
+            child=button.get_parent() or button
+            visible=ident in wanted
+            child.set_no_show_all(not visible)
+            if visible:
+                child.show_all()
+            else:
+                child.hide()
+        self.menu_buttons=selected
     def filter_apps(self,widget,show_all=False):
         text=self.search_text.get_text() if self.search_text else ""
         self.populate_apps(text, show_all=show_all or bool(text))
@@ -509,8 +554,10 @@ class DesktopShell:
         elif name=="printers":
             self.refresh_printers()
         elif name=="menu":
-            self.search_text.set_text("")
-            self.populate_apps()
+            if self.search_text.get_text():
+                self.search_text.set_text("")
+            elif self._menu_showing_full:
+                self.populate_apps()
         elif name=="calendar":
             self.calendar_date.set_text(datetime.datetime.now().strftime("%d/%m/%Y"))
         x,y,w,h=self.geometry(name)

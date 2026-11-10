@@ -89,7 +89,7 @@ if find "$desktop" -mindepth 1 -maxdepth 1 -type f ! -name 'SIGE.desktop' ! -nam
   echo 'ERRO: ISO colocou atalhos extras na area de trabalho' >&2
   exit 1
 fi
-for pkg in libreoffice libreoffice-gtk3 libreoffice-l10n-pt-br libreoffice-help-pt-br hunspell-pt-br hyphen-pt-br; do
+for pkg in libreoffice libreoffice-gtk3 libreoffice-l10n-pt-br hunspell-pt-br hyphen-pt-br; do
   grep -Fxq "$pkg" "$ROOT/config/package-lists/enfoque-base.list.chroot" || { echo "LibreOffice incompleto: $pkg" >&2; exit 1; }
 done
 
