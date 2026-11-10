@@ -84,12 +84,27 @@ def snapshot_backend():
             return {"ready":True,"backend":"timeshift-rsync","file_system":fs,
                     "message":"Timeshift configurado. A restauracao exige verificacao e pode precisar da ISO Live.",
                     "backup_device":out}
+    # Fallback de recuperacao para os PCs EXT4 instalados sem segundo disco.
+    # O arquivo e verificado antes da atualizacao; nao e imagem raw bootavel.
+    recovery=pathlib.Path("/usr/local/sbin/enfoque-recovery-image")
+    if fs=="ext4" and recovery.is_file() and os.access(recovery,os.X_OK):
+        usage=shutil.disk_usage("/")
+        if usage.free >= (usage.used * 2 + 2 * 1024**3):
+            return {"ready":True,"backend":"enfoque-archive","file_system":fs,
+                    "message":"Arquivo de recuperacao local verificado antes do upgrade; copia em outro disco e recomendada.",
+                    "storage":"mesmo-disco"}
     return {"ready":False,"backend":"nao_configurado","file_system":fs,
-            "message":"Pontos de restauracao nao configurados. Escolha um disco de backup no Timeshift antes de atualizar."}
+            "message":"Sem destino de recuperacao verificado ou espaco livre suficiente para a imagem."}
 def list_snapshots():
     info=snapshot_backend()
     if not info["ready"]:
         return {"configured":False,"items":[],"message":info["message"]}
+    if info["backend"]=="enfoque-archive":
+        code,out,_=cmd(["/usr/local/sbin/enfoque-recovery-image","list"],timeout=35)
+        if code:
+            return {"configured":False,"items":[],"message":"Nao foi possivel listar as imagens locais"}
+        records=json.loads(out)
+        return {"configured":True,"items":records.get("images",[]),"message":info["message"]}
     command=(["snapper","-c","root","list","--columns","number,date,description"] if
              info["backend"]=="snapper" else ["timeshift","--list"])
     code,out,err=cmd(command,timeout=26)
@@ -101,6 +116,8 @@ def make_snapshot(reason="Antes de alteracao de sistema"):
         raise RuntimeError(info["message"])
     if info["backend"]=="snapper":
         argv=["snapper","-c","root","create","-t","single","-d",reason[:80]]
+    elif info["backend"]=="enfoque-archive":
+        argv=["/usr/local/sbin/enfoque-recovery-image","create","--reason",reason[:80]]
     else:
         argv=["timeshift","--create","--comments",reason[:80],"--tags","O"]
     code,out,err=cmd(argv,timeout=3600)

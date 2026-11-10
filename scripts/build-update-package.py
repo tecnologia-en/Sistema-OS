@@ -89,6 +89,10 @@ def manifest():
         "etc/enfoque-os-release",
         "usr/local/sbin/enfoque-update",
         "usr/local/sbin/enfoque-update-control",
+        "usr/local/sbin/enfoque-update-nextboot",
+        "usr/local/sbin/enfoque-recovery-image",
+        "etc/systemd/system/enfoque-update-nextboot.timer",
+        "etc/systemd/system/enfoque-update-nextboot.service",
         "etc/systemd/system/enfoque-update-control.service",
         "etc/systemd/system/enfoque-update-control.timer",
         "etc/systemd/system/enfoque-firewall.service",
@@ -176,7 +180,7 @@ def create(output):
             # live-build installs this .deb into the image chroot; creating
             # enfoque-ti here consumes UID 1000, breaking Debian Live's user.
             # The disk installer explicitly provisions enfoque-ti afterward.
-            "  systemctl enable enfoque-update-check.timer enfoque-update-control.timer enfoque-zero-touch.timer enfoque-saude.timer enfoque-backup.timer enfoque-limpeza.timer >/dev/null 2>&1 || true\n"
+            "  systemctl enable enfoque-update-check.timer enfoque-update-control.timer enfoque-update-nextboot.timer enfoque-zero-touch.timer enfoque-saude.timer enfoque-backup.timer enfoque-limpeza.timer >/dev/null 2>&1 || true\n"
             "  systemctl disable --now enfoque-update-apply.timer >/dev/null 2>&1 || true\n"
             "  systemctl enable enfoque-firewall.service >/dev/null 2>&1 || true\n"
             "  if [ -d /run/systemd/system ] && [ ! -e /run/live/medium ]; then\n"

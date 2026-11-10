@@ -1,5 +1,5 @@
 NAME="Enfoque OS"
-VERSION="0.2.37"
+VERSION="0.2.38"
 CHANNEL="piloto"
 BASE="Debian 13 (trixie)"
-STATUS="piloto-acesso-root-ssh-aprovado-037"
+STATUS="piloto-root-uma-aprovacao-recuperacao-agendar-038"

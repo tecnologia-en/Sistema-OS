@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+"""Enfoque OS 0.2.38: root-only, verified offline recovery archives.
+
+Archives preserve filesystem metadata, permissions, ACLs, extended attributes,
+ownership, and the EFI boot partition. NOT a block-by-block bootable image,
+NOT crash-consistent database backup, and NOT safe against loss of the same disk.
+The offline recovery archive is intended for restoring from separate rescue media.
+"""
+import argparse
+from datetime import datetime, timezone
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import uuid
+
+ROOT = Path("/var/backups/enfoque-os/recovery")
+LOCK = Path("/run/lock/enfoque-recovery-image.lock")
+SOURCE = Path("/")
+EFI = Path("/boot/efi")
+RELEASE = Path("/etc/enfoque-os-release")
+EXCLUDES = (
+    "/dev/***", "/proc/***", "/sys/***", "/run/***", "/tmp/***",
+    "/mnt/***", "/media/***", "/var/backups/enfoque-os/recovery/***",
+    "/var/cache/apt/archives/***", "/var/log/journal/***",
+    "/home/*/.cache/***", "/home/*/.local/share/Trash/***",
+    "/lost+found/***",
+)
+ID = re.compile(r"^image-\d{8}T\d{6}Z-[0-9a-f]{8}$")
+
+
+def require_root():
+    if os.geteuid() != 0:
+        raise PermissionError("Criar imagens exige a conta administrativa root")
+    if Path("/run/live/medium").exists():
+        raise RuntimeError("Nao criar imagem a partir da ISO Live")
+    if Path("/.dockerenv").exists():
+        raise RuntimeError("Nao criar imagem dentro de container de build")
+
+
+def check_root_directory(location=ROOT):
+    location.mkdir(parents=True, mode=0o700, exist_ok=True)
+    stat = location.lstat()
+    if location.is_symlink() or not location.is_dir() or stat.st_uid != 0 or stat.st_mode & 0o077:
+        raise PermissionError("Repositorio de recuperacao precisa ser root:root 0700")
+    location.chmod(0o700)
+    return location
+
+
+def checked(argv, timeout=3600):
+    return subprocess.run(argv, check=True, stdin=subprocess.DEVNULL,
+                          stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                          timeout=timeout)
+
+
+def checksum(file):
+    digest = hashlib.sha256()
+    with file.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def system_version():
+    try:
+        return re.search(r'^VERSION="([^"]+)"$', RELEASE.read_text(), re.MULTILINE).group(1)
+    except (OSError, AttributeError):
+        return "desconhecida"
+
+
+def inventory(root=ROOT):
+    if not root.is_dir():
+        return []
+    result = []
+    for candidate in sorted(root.iterdir(), reverse=True):
+        if not ID.fullmatch(candidate.name) or candidate.is_symlink() or not candidate.is_dir():
+            continue
+        manifest = candidate / "manifest.json"
+        try:
+            if manifest.is_symlink() or manifest.stat().st_mode & 0o077:
+                continue
+            record = json.loads(manifest.read_text())
+            result.append({"id": candidate.name, "version": record.get("version"),
+                           "created": record.get("created"), "status": "arquivado",
+                           "bytes": record.get("total_bytes")})
+        except (OSError, ValueError):
+            continue
+    return result
+
+
+def verify_image(path):
+    manifest = path / "manifest.json"
+    if path.is_symlink() or not path.is_dir() or manifest.is_symlink():
+        raise RuntimeError("Imagem de recuperacao insegura")
+    data = json.loads(manifest.read_text())
+    if data.get("schema") != 1:
+        raise RuntimeError("Formato de recuperacao desconhecido")
+    for name in ("rootfs.tar.gz", "efi.tar.gz"):
+        item = data.get("archives", {}).get(name)
+        if item is None:
+            continue
+        if not isinstance(item, dict) or not re.fullmatch(r"[a-f0-9]{64}", item.get("sha256", "")):
+            raise RuntimeError("Hash de recuperacao ausente")
+        f = path / name
+        if f.is_symlink() or not f.is_file() or checksum(f) != item["sha256"]:
+            raise RuntimeError("Integridade da recuperacao invalida: " + name)
+        checked(["/usr/bin/tar", "-tzf", str(f)], timeout=3600)
+    if "rootfs.tar.gz" not in data.get("archives", {}):
+        raise RuntimeError("Arquivo raiz ausente")
+    return {"ok": True, "id": path.name, "version": data.get("version"),
+            "verified": True, "message": "Checksum e leitura do arquivo validados; restauracao fisica ainda exige teste"}
+
+
+def prepare_space(source=SOURCE, destination=ROOT):
+    used = shutil.disk_usage(source).used
+    free = shutil.disk_usage(destination).free
+    # Two phases (rsync staging + compressed archive) need storage headroom.
+    needed = (used * 2) + 2 * (1024 ** 3)
+    if free < needed:
+        raise RuntimeError("Espaco insuficiente para criar imagem verificada: "+
+                           str(round(free/1024**3, 1))+" GiB livres, "+
+                           str(round(needed/1024**3, 1))+" GiB estimados")
+    return used, free
+
+
+def create_image(reason, source=SOURCE, dest=ROOT, efi=EFI):
+    if not isinstance(reason, str) or not 1 <= len(reason) <= 120 or "\0" in reason:
+        raise ValueError("Motivo de recuperacao invalido")
+    check_root_directory(dest)
+    used, free = prepare_space(source, dest)
+    ident = "image-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
+    with tempfile.TemporaryDirectory(prefix=".building-", dir=dest) as staging:
+        tmp = Path(staging)
+        root = tmp / "stage" / "root"
+        root.mkdir(parents=True)
+        rsync = ["/usr/bin/rsync", "-aHAX", "--numeric-ids", "--one-file-system", "--delete",
+                 *("--exclude=" + e for e in EXCLUDES),
+                 str(source).rstrip("/") + "/", str(root) + "/"]
+        checked(rsync, timeout=4000)
+        archive = tmp / "rootfs.tar.gz"
+        checked(["/usr/bin/tar", "--acls", "--xattrs", "--numeric-owner",
+                 "-czf", str(archive), "-C", str(root), "."], timeout=3600)
+        archives = {"rootfs.tar.gz": {"sha256": checksum(archive), "bytes": archive.stat().st_size}}
+        # The ESP is a separate filesystem; preserve it independently when mounted.
+        if efi.is_dir() and subprocess.run(["/usr/bin/mountpoint", "-q", str(efi)],
+                                            check=False, timeout=8).returncode == 0:
+            esp_stage = tmp / "stage" / "efi"
+            esp_stage.mkdir()
+            checked(["/usr/bin/rsync", "-aH", "--numeric-ids",
+                     str(efi).rstrip("/") + "/", str(esp_stage) + "/"], timeout=700)
+            esp_archive = tmp / "efi.tar.gz"
+            checked(["/usr/bin/tar", "--numeric-owner", "-czf",
+                     str(esp_archive), "-C", str(esp_stage), "."], timeout=700)
+            archives["efi.tar.gz"] = {"sha256": checksum(esp_archive),
+                                       "bytes": esp_archive.stat().st_size}
+        root_device = subprocess.run(["/usr/bin/findmnt", "-n", "-o", "SOURCE", "--target", "/"],
+                                     capture_output=True, text=True, timeout=10)
+        data = {
+            "schema": 1, "id": ident,
+            "created": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "version": system_version(), "reason": reason,
+            "root_device": root_device.stdout.strip() if root_device.returncode == 0 else None,
+            "used_bytes_before": used, "free_bytes_before": free,
+            "archives": archives, "total_bytes": sum(z["bytes"] for z in archives.values()),
+            "method": "verified-rsync-tar-offline-restore",
+            "limitations": [
+                "Nao e imagem raw bootavel nem snapshot atomico de processos em execucao",
+                "Guardado no mesmo disco: perda fisica do disco elimina a recuperacao",
+                "Restauracao deve ser feita offline por TI via Live/Rescue, nunca no sistema ativo",
+            ],
+        }
+        (tmp / "manifest.json").write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+        (tmp / "manifest.json").chmod(0o600)
+        # Do not publish staging or partially written archives as valid snapshots.
+        shutil.rmtree(tmp / "stage")
+        verify_image(tmp)
+        final = dest / ident
+        os.replace(tmp, final)
+        return {"ok": True, "image": str(final), "id": ident,
+                "bytes": data["total_bytes"], "version": data["version"],
+                "verified": True, "storage": "local-mesmo-disco",
+                "warning": "NÃO protege contra falha do disco; copie também para o servidor"}
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Enfoque OS - arquivo de recuperacao verificavel")
+    parser.add_argument("operation", choices=("create", "verify", "list", "status"))
+    parser.add_argument("image_id", nargs="?")
+    parser.add_argument("--reason", default="Antes de manutencao")
+    a = parser.parse_args()
+    try:
+        if a.operation in ("create", "verify"):
+            require_root()
+        check_root_directory()
+        with LOCK.open("a+") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            if a.operation == "create":
+                result = create_image(a.reason)
+            elif a.operation == "verify":
+                if not isinstance(a.image_id, str) or not ID.fullmatch(a.image_id):
+                    raise ValueError("Identificador de imagem invalido")
+                result = verify_image(ROOT / a.image_id)
+            elif a.operation == "list":
+                result = {"images": inventory()}
+            else:
+                used, free = prepare_space()
+                result = {"ready": True, "free_bytes": free, "used_bytes": used,
+                          "storage": "local-mesmo-disco", "images": inventory(),
+                          "warning": "Recuperacao local nao substitui copia em outro disco"}
+        print(json.dumps(result, ensure_ascii=False))
+        return 0
+    except (OSError, ValueError, PermissionError, RuntimeError, subprocess.SubprocessError) as e:
+        print(json.dumps({"ok": False, "error": str(e)[:320]}, ensure_ascii=False))
+        return 2
+
+if __name__ == "__main__":
+    sys.exit(main())

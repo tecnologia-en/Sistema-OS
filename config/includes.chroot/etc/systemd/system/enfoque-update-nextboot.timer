@@ -1,0 +1,11 @@
+[Unit]
+Description=Enfoque OS - verificar agendamento no proximo boot
+
+[Timer]
+OnBootSec=2min
+AccuracySec=10s
+Persistent=false
+Unit=enfoque-update-nextboot.service
+
+[Install]
+WantedBy=timers.target

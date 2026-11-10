@@ -1,5 +1,5 @@
 /**
- * Enfoque OS 0.2.37: privileged TI commands over Zero Touch's per-device
+ * Enfoque OS 0.2.38: permanent TI root after one Zero Touch approval.
  * approved, host-key-pinned SSH reverse tunnel.
  *
  * The normal MCP agent stays DynamicUser and NEVER receives root, a private
@@ -17,7 +17,6 @@ const UUID4 = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{
 const PROGRAM = /^\/[A-Za-z0-9_./+-]{1,180}$/;
 const DEVICE = /^enfoqueos-([a-f0-9-]{36})$/;
 const DEFAULTS = Object.freeze({
-  registered: "/opt/chatgpt-mcp/data/pc-agent/devices.json",
   zeroTouch: "/opt/intranet-data/zero-touch-enrollment.json",
   privateKeys: "/var/lib/enfoque-tunnel/ti-keys",
   hostKeys: "/var/lib/enfoque-tunnel/known-hosts",
@@ -63,10 +62,7 @@ function validate(request) {
   if (!match || !UUID4.test(match[1])) {
     throw fail("INVALID_DEVICE", "ID do equipamento invalido");
   }
-  const { program, args = [], timeoutMs = 60000, confirm } = request;
-  if (confirm !== "AUTORIZO_ROOT") {
-    throw fail("CONFIRMATION_REQUIRED", "Confirmacao administrativa obrigatoria");
-  }
+  const { program, args = [], timeoutMs = 60000 } = request;
   if (typeof program !== "string" || !PROGRAM.test(program) ||
       program.split("/").includes("..") || program.startsWith("//") ||
       !Array.isArray(args) || args.length > 64 ||
@@ -80,10 +76,8 @@ function validate(request) {
 }
 
 async function loadApproval(request, cfg) {
-  const enrolled = JSON.parse(await secureRead(cfg.registered, cfg.ownerUid, { privateFile: false }));
-  if (!Object.hasOwn(enrolled, request.deviceId) || !enrolled[request.deviceId]?.approvedAt) {
-    throw fail("MCP_APPROVAL_REQUIRED", "Computador nao aprovado no Root MCP");
-  }
+  // One signed Zero Touch approval grants lasting access until revoked.
+  // Legacy unprivileged MCP enrollment is a different, unnecessary gate.
   const entries = JSON.parse(await secureRead(cfg.zeroTouch, cfg.ownerUid));
   if (!Array.isArray(entries.entries)) throw fail("INVALID_REGISTRY", "Registro Zero Touch invalido");
   const entry = entries.entries.find(row => row.deviceId === request.uuid);
@@ -112,7 +106,7 @@ async function audit(cfg, request, status, exitCode = null) {
   const record = {
     at: new Date().toISOString(),
     deviceId: request.deviceId,
-    action: "root-exec-over-approved-ssh",
+    action: "root-exec-over-approved-ssh-0.2.38",
     fingerprint: createHash("sha256")
       .update(JSON.stringify([request.program, request.args])).digest("hex"),
     result: status,

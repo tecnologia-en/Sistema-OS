@@ -45,7 +45,7 @@ async function fixture(t, changes = {}) {
 test("approved TI key uses ONLY the pinned per-PC SSH connection to sudo", async (t) => {
   const { cfg, calls } = await fixture(t);
   const answer = await runPrivilegedPcCommand({
-    deviceId: id, program: "/usr/bin/id", args: ["-u"], confirm: "AUTORIZO_ROOT",
+    deviceId: id, program: "/usr/bin/id", args: ["-u"],
   }, cfg);
   assert.equal(answer.ok, true);
   assert.equal(answer.scope, "root-via-ti-ssh");
@@ -64,36 +64,27 @@ test("approved TI key uses ONLY the pinned per-PC SSH connection to sudo", async
 test("unapproved TI registration cannot receive remote root", async (t) => {
   const { cfg, calls } = await fixture(t, { entry: { ...entry, status: "pending", issued: null } });
   const result = await runPrivilegedPcCommand({
-    deviceId: id, program: "/usr/bin/id", confirm: "AUTORIZO_ROOT",
+    deviceId: id, program: "/usr/bin/id",
   }, cfg);
   assert.equal(result.ok, false);
   assert.equal(result.code, "TI_APPROVAL_REQUIRED");
   assert.equal(calls.length, 0);
 });
 
-test("MCP approval alone is insufficient", async (t) => {
+test("single Zero Touch approval persists for future root commands", async (t) => {
   const { cfg, calls } = await fixture(t, { registered: {} });
-  const result = await runPrivilegedPcCommand({
-    deviceId: id, program: "/usr/bin/id", confirm: "AUTORIZO_ROOT",
-  }, cfg);
-  assert.equal(result.ok, false);
-  assert.equal(result.code, "MCP_APPROVAL_REQUIRED");
-  assert.equal(calls.length, 0);
-});
-
-test("root requires explicit confirmation on every call", async (t) => {
-  const { cfg, calls } = await fixture(t);
-  const result = await runPrivilegedPcCommand({ deviceId: id, program: "/usr/bin/id" }, cfg);
-  assert.equal(result.ok, false);
-  assert.equal(result.code, "CONFIRMATION_REQUIRED");
-  assert.equal(calls.length, 0);
+  const before = await runPrivilegedPcCommand({deviceId: id, program: "/usr/bin/id"}, cfg);
+  const after = await runPrivilegedPcCommand({deviceId: id, program: "/usr/bin/id"}, cfg);
+  assert.equal(before.ok, true);
+  assert.equal(after.ok, true);
+  assert.equal(calls.length, 2);
 });
 
 test("wrong host pin or SSH key blocks command", async (t) => {
   const { cfg, calls } = await fixture(t);
   await fs.writeFile(path.join(cfg.hostKeys, uuid), "[127.0.0.1]:23101 ssh-ed25519 DIFFERENT\n", { mode: 0o600 });
   const result = await runPrivilegedPcCommand({
-    deviceId: id, program: "/usr/bin/id", confirm: "AUTORIZO_ROOT",
+    deviceId: id, program: "/usr/bin/id",
   }, cfg);
   assert.equal(result.ok, false);
   assert.equal(result.code, "HOST_MISMATCH");
@@ -104,12 +95,12 @@ test("absolute executable paths and bounded arguments are mandatory", async (t) 
   const { cfg, calls } = await fixture(t);
   for (const program of ["sh", "../bin/sh", "/bin/../bin/sh", "/bin/sh;rm", "//bin/sh"]) {
     const result = await runPrivilegedPcCommand({
-      deviceId: id, program, confirm: "AUTORIZO_ROOT",
+      deviceId: id, program,
     }, cfg);
     assert.equal(result.code, "INVALID_COMMAND", program);
   }
   const invalid = await runPrivilegedPcCommand({
-    deviceId: id, program: "/bin/sh", args: ["a".repeat(40000)], confirm: "AUTORIZO_ROOT",
+    deviceId: id, program: "/bin/sh", args: ["a".repeat(40000)],
   }, cfg);
   assert.equal(invalid.code, "INVALID_COMMAND");
   assert.equal(calls.length, 0);

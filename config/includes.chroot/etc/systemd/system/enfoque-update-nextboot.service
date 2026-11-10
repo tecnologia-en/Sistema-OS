@@ -1,0 +1,18 @@
+[Unit]
+Description=Enfoque OS - atualizar pacote assinado na inicializacao seguinte
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/var/lib/enfoque-update/nextboot.json
+ConditionPathExists=!/run/live/medium
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/enfoque-update-nextboot apply
+TimeoutStartSec=8700
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+UMask=0077
