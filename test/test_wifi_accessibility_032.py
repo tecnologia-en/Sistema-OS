@@ -20,7 +20,7 @@ spec.loader.exec_module(wifi)
 
 class WifiAccessibility032Tests(unittest.TestCase):
     def test_version(self):
-        self.assertIn('VERSION="0.2.40"', (SRC/"etc/enfoque-os-release").read_text())
+        self.assertIn('VERSION="0.2.41"', (SRC/"etc/enfoque-os-release").read_text())
 
     def test_apt_core_update_allows_new_required_packages_without_removal(self):
         self.assertIn('"--no-remove", "--no-install-recommends", "install"', UPDATER)

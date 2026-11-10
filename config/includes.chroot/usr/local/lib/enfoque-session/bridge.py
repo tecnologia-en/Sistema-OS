@@ -144,7 +144,7 @@ def available_socket():
 
 
 def session_command(action, args=None):
-    if action not in ("open", "shell", "run", "process", "status"):
+    if action not in ("open", "shell", "run", "process", "status", "gui", "screenshot"):
         return {"ok": False, "error": "Ação fora do agente gráfico"}
     if not isinstance(args, dict):
         args = {}

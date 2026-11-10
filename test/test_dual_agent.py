@@ -125,7 +125,7 @@ class DualAgentUnitTests(unittest.TestCase):
 
     def test_agent_version_and_ws_fallback(self):
         code=(BIN/"enfoque-remote-agent").read_text()
-        self.assertIn('AGENT_VERSION = "0.2.28-linux-dual-agent"',code)
+        self.assertIn('AGENT_VERSION = "0.2.41-linux-visual-ondemand"',code)
         self.assertIn("websocket_cycle(state)",code)
         self.assertIn("run_cycle(state)",code)
 

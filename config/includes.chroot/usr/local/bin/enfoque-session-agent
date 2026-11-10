@@ -25,7 +25,7 @@ import threading
 import time
 from urllib.parse import urlsplit
 
-VERSION = "enfoque-session-0.3"
+VERSION = "enfoque-session-0.4-visual-ondemand"
 GROUP = "enfoque-remote"
 BASE = Path("/run/enfoque-remote")
 MAX_MSG = 96 * 1024
@@ -34,6 +34,7 @@ MAX_STDERR = 3 * 1024
 MAX_WAIT = 90
 MAX_PARALLEL = 4
 SLOTS = threading.BoundedSemaphore(MAX_PARALLEL)
+LAST_SCREEN_NOTICE = [0.0]
 
 def allowed_group_id():
     return grp.getgrnam(GROUP).gr_gid
@@ -254,6 +255,20 @@ def dispatch(data):
             return {"ok":False,"error":"Programa/argumentos inválidos"}
         notify("Suporte TI: execução de programa",Path(program).name)
         return command([program,*argv],args.get("cwd"),args.get("timeoutMs",30000))
+    if action in ("gui", "screenshot"):
+        # No ambient capture: each authorized agent request results in at most
+        # one bounded frame or one user-mode input event.
+        library = Path(__file__).resolve().parent.parent / "lib/enfoque-session"
+        if str(library) not in sys.path:
+            sys.path.insert(0, str(library))
+        try:
+            from visual import capture, gui, VisualError
+            if action == "screenshot" and time.monotonic() - LAST_SCREEN_NOTICE[0] > 110:
+                LAST_SCREEN_NOTICE[0] = time.monotonic()
+                notify("Suporte TI conectado", "Captura de tela sob demanda pela Central TI")
+            return capture(args) if action == "screenshot" else gui(args)
+        except (VisualError, OSError, ValueError, subprocess.SubprocessError) as error:
+            return {"ok": False, "error": "Visual: "+str(error)[:230]}
     if action=="open":
         return open_item(args)
     if action=="process":
@@ -285,7 +300,10 @@ def service(conn):
         try:
             action=payload.get("action","invalid") if isinstance(locals().get("payload"),dict) else "invalid"
             log_audit(action,result.get("ok",False))
-            conn.sendall(json.dumps(result,ensure_ascii=False,separators=(",",":")).encode("utf-8")[:64000]+b"\n")
+            encoded = json.dumps(result,ensure_ascii=False,separators=(",",":")).encode("utf-8")
+            if len(encoded) > 64000:
+                encoded = b'{"ok":false,"error":"Resposta de tela excedeu limite do IPC"}'
+            conn.sendall(encoded+b"\n")
         except OSError:
             pass
 

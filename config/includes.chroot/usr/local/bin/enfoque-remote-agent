@@ -2,7 +2,7 @@
 """Enfoque OS Root MCP agent: per-installation keys, explicit admin approval.
 
 Never ship credentials in the ISO; never execute arbitrary shell or root code.
-Full remote graphical control is provided by individually enrolled MeshCentral.
+Visual frames and input are served on demand through the logged-in XFCE session.
 """
 import argparse
 import hashlib
@@ -27,7 +27,7 @@ DEVICE = Path("/var/lib/enfoque-os/device-identity.json")
 LIVE_DEVICE = Path("/run/enfoque-os/device-identity.json")
 PROFILE = Path("/var/lib/enfoque-os/firstboot.json")
 STORE_SUFFIX = {"ilha-plaza":"1","copacabana":"2","itaipu":"3","icarai":"4","sao-goncalo":"5","centro":"6","deposito":"7","administracao":"8","papel-arte":"9"}
-AGENT_VERSION = "0.2.28-linux-dual-agent"
+AGENT_VERSION = "0.2.41-linux-visual-ondemand"
 
 def installed_version():
     try:
@@ -214,6 +214,11 @@ def audit_remote(command_id, action, args, result):
 
 def handle_action(action, args):
     args = args if isinstance(args, dict) else {}
+    if action in ("screenshot", "gui"):
+        # The existing user IPC socket requires an active, authenticated XFCE
+        # session. The remote server approves requests; the agent never polls
+        # pixels or controls the mouse on its own.
+        return session_request(action, args)
     if action == "open":
         return session_request("open", args)
     if action in ("shell", "run"):
