@@ -293,6 +293,16 @@ def configure_system(disk, esp, root):
     pt_br = "LANG=pt_BR.UTF-8\nLANGUAGE=pt_BR:pt\n"
     (TARGET / "etc/default/locale").write_text(pt_br)
     (TARGET / "etc/locale.conf").write_text(pt_br)
+    # Persist ABNT2 in the installed system, not just the transient Live boot.
+    # Debian keyboard-setup/Xorg and the LightDM login use /etc/default/keyboard.
+    keyboard_pt_br = (
+        'XKBMODEL="abnt2"\n'
+        'XKBLAYOUT="br"\n'
+        'XKBVARIANT=""\n'
+        'XKBOPTIONS=""\n'
+        'BACKSPACE="guess"\n'
+    )
+    (TARGET / "etc/default/keyboard").write_text(keyboard_pt_br, encoding="utf-8")
     lightdm_dropin = TARGET / "etc/systemd/system/lightdm.service.d/90-enfoque-portugues.conf"
     lightdm_dropin.parent.mkdir(parents=True, exist_ok=True)
     lightdm_dropin.write_text("[Service]\nEnvironment=LANG=pt_BR.UTF-8\n"

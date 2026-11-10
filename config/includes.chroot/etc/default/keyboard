@@ -1,0 +1,7 @@
+# Enfoque OS: Brazilian Portuguese keyboard, ABNT2 physical layout.
+# Used by Debian keyboard-setup/console-setup and the X11 login session.
+XKBMODEL="abnt2"
+XKBLAYOUT="br"
+XKBVARIANT=""
+XKBOPTIONS=""
+BACKSPACE="guess"
