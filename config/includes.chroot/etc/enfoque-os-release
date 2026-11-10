@@ -1,5 +1,5 @@
 NAME="Enfoque OS"
-VERSION="0.2.32"
+VERSION="0.2.33"
 CHANNEL="piloto"
 BASE="Debian 13 (trixie)"
-STATUS="piloto-wifi-acessibilidade-032"
+STATUS="piloto-correcao-conexao-wifi-033"

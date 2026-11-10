@@ -20,7 +20,7 @@ spec.loader.exec_module(wifi)
 
 class WifiAccessibility032Tests(unittest.TestCase):
     def test_version(self):
-        self.assertIn('VERSION="0.2.32"', (SRC/"etc/enfoque-os-release").read_text())
+        self.assertIn('VERSION="0.2.33"', (SRC/"etc/enfoque-os-release").read_text())
 
     def test_apt_core_update_allows_new_required_packages_without_removal(self):
         self.assertIn('"--no-remove", "--no-install-recommends", "install"', UPDATER)
@@ -61,7 +61,11 @@ class WifiAccessibility032Tests(unittest.TestCase):
 
     def test_no_password_in_process_argv(self):
         cmd = wifi.build_connect_argv("Loja-Itaipu")
-        self.assertEqual(cmd[:2], ["nmcli", "--ask"])
+        self.assertEqual(cmd[:2], ["--ask", "--wait"])
+        self.assertNotIn("nmcli", cmd)
+        # run_nmcli() itself prefixes the executable; regression against
+        # accidentally executing /usr/bin/nmcli nmcli --ask ...
+        self.assertIn("[NMCLI, *arguments]", WIFI_GUI)
         self.assertIn("device", cmd)
         self.assertNotIn("password", cmd)
         self.assertEqual(wifi.build_connect_argv("rede", hidden=True)[-2:], ["hidden", "yes"])

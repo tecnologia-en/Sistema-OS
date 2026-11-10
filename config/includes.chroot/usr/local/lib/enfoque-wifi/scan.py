@@ -60,7 +60,8 @@ def build_connect_argv(ssid, hidden=False):
     ssid = ssid.strip()
     if not ssid or len(ssid.encode("utf-8")) > 32:
         raise ValueError("Nome da rede Wi-Fi invalido")
-    argv = ["nmcli", "--ask", "--wait", "45", "device", "wifi", "connect", ssid]
+    # run_nmcli() already prepends the nmcli executable; do not duplicate it.
+    argv = ["--ask", "--wait", "45", "device", "wifi", "connect", ssid]
     if hidden:
         argv.extend(["hidden", "yes"])
     return argv
