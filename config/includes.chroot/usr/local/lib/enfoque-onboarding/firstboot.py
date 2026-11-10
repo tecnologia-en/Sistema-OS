@@ -79,6 +79,45 @@ def load_profile(path=PROFILE, machine_path=DEVICE, enforce_owner=True):
     return obj
 
 
+def sync_hostname_hosts(hostname, destination=Path("/etc/hosts")):
+    """Keep local DNS aligned with the hostname used by sudo after First Boot.
+
+    A mismatched /etc/hosts makes sudo wait for unreachable DNS servers,
+    which prevents noninteractive administrative maintenance and updates.
+    Only the 127.0.1.1 entry is managed; other host aliases are preserved.
+    """
+    if not isinstance(hostname, str) or not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?", hostname):
+        raise ValueError("Hostname local invalido")
+    target = Path(destination)
+    if target.is_symlink():
+        raise PermissionError("Arquivo hosts e link simbolico")
+    existing = target.read_text(encoding="utf8") if target.exists() else "127.0.0.1 localhost\n"
+    updated = []
+    inserted = False
+    for line in existing.splitlines():
+        if re.match(r"^\s*127\.0\.1\.1(?:\s|$)", line):
+            if not inserted:
+                updated.append("127.0.1.1 " + hostname)
+                inserted = True
+        else:
+            updated.append(line)
+    if not inserted:
+        updated.append("127.0.1.1 " + hostname)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".enfoque-hosts-", dir=target.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf8") as stream:
+            stream.write("\n".join(updated).rstrip() + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, target)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    return target
+
+
 def atomic_first_write(record, destination=PROFILE):
     """Link a private temporary file into place; never overwrite an existing setup."""
     target = Path(destination)

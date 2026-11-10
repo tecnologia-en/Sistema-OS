@@ -75,7 +75,12 @@ export function installZeroTouchRoutes({ app, registry, inventory, isAdmin,
     if (!protectedAdmin(req, res)) return;
     try {
       const actor = String(req.intranetUser?.email || "ti");
-      const item = await registry.approve(req.params.deviceId, req.body?.code, actor,
+      // Only one initial TI admin approval; devices authenticate their
+      // Ed25519 identity automatically. No manual key or on-PC code.
+      if (req.body?.grantFullRoot !== true) {
+        return res.status(400).json({ ok: false, error: "Confirme a concessao unica de acesso root total" });
+      }
+      const item = await registry.approveFromAdmin(req.params.deviceId, actor,
         async ({ name, location, actor, deviceId, tunnelPort }) => {
           const adminPublicKey = await provisionDeviceKeys(deviceId);
           const created = await inventory.register({ name, location, actor });
@@ -91,7 +96,8 @@ export function installZeroTouchRoutes({ app, registry, inventory, isAdmin,
     if (!protectedAdmin(req, res)) return;
     try {
       const actor = String(req.intranetUser?.email || "ti");
-      const item = await registry.revoke(req.params.deviceId, req.body?.code, actor);
+      if (req.body?.confirmRevoke !== true) return res.status(400).json({ ok: false, error: "Confirme a revogacao" });
+      const item = await registry.revokeFromAdmin(req.params.deviceId, actor);
       await syncAuthorizedTunnels(await registry.approvedConnections());
       await dropTunnelSessionsAfterRevocation();
       console.warn("[zero-touch] tunnel credentials revoked; reconnection refused",
@@ -104,7 +110,8 @@ export function installZeroTouchRoutes({ app, registry, inventory, isAdmin,
     if (!protectedAdmin(req, res)) return;
     try {
       const actor = String(req.intranetUser?.email || "ti");
-      const item = await registry.reject(req.params.deviceId, req.body?.code, actor);
+      if (req.body?.confirmReject !== true) return res.status(400).json({ ok: false, error: "Confirme a recusa" });
+      const item = await registry.rejectFromAdmin(req.params.deviceId, actor);
       console.info("[zero-touch] enrollment rejected", { deviceId: item.deviceId, by: actor });
       return res.json({ ok: true, device: item });
     } catch (error) { return fail(res, error); }

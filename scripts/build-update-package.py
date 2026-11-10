@@ -184,6 +184,7 @@ def create(output):
             "  systemctl disable --now enfoque-update-apply.timer >/dev/null 2>&1 || true\n"
             "  systemctl enable enfoque-firewall.service >/dev/null 2>&1 || true\n"
             "  if [ -d /run/systemd/system ] && [ ! -e /run/live/medium ]; then\n"
+            "    /usr/local/sbin/enfoque-hostname-repair >/dev/null 2>&1 || true\n"
             "    if ! systemctl start enfoque-firewall.service; then echo \"AVISO: verifique o firewall Enfoque OS\" >&2; fi\n"
             "  fi\n"
             "  if [ ! -s /etc/enfoque-ssh/authorized_keys ]; then\n"

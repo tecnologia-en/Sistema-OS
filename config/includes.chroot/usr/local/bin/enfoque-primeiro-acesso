@@ -84,7 +84,7 @@ class Onboarding(Gtk.Window):
             pass
         self.unit.connect("changed", self.update_id)
         self.status = Gtk.Label(label="Modo demonstracao" if preview else
-                                "A TI recebera o cadastro; autorizacao remota e separada.")
+                                "Informe o equipamento; a TI liberara o acesso completo na Intranet.")
         self.status.set_line_wrap(True)
         self.status.set_xalign(0)
         wrap.pack_start(self.status, False, False, 8)
@@ -141,16 +141,14 @@ class Onboarding(Gtk.Window):
                 identity.store_identity(self.username, company, unit)
             except FileExistsError:
                 pass
-            code = result.get("code")
-            if isinstance(code, str) and len(code) == 10:
-                msg = ("Computador cadastrado! Identificacao: " + result.get("id", "") +
-                       "\n\nCodigo de autorizacao da TI: " + code +
-                       "\n\nNa intranet, acesse Central de Computadores e aprove esta maquina" +
-                       " informando este codigo. O acesso remoto so sera ativado apos a aprovacao.")
-                popup = Gtk.MessageDialog(self, 0, Gtk.MessageType.INFO,
-                                          Gtk.ButtonsType.OK, msg)
-                popup.run()
-                popup.destroy()
+            msg = ("Computador cadastrado! Identificacao: " + result.get("id", "") +
+                   "\n\nA TI recebera a solicitacao automaticamente. No painel" +
+                   " Acesso Remoto da Intranet, clique em Liberar acesso completo (root)." +
+                   "\n\nNao e necessario digitar chave, codigo ou executar comandos neste PC.")
+            popup = Gtk.MessageDialog(self, 0, Gtk.MessageType.INFO,
+                                      Gtk.ButtonsType.OK, msg)
+            popup.run()
+            popup.destroy()
             Gtk.main_quit()
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
             self.notify(str(error)[:180])

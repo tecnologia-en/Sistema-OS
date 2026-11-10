@@ -24,21 +24,19 @@ def save(name, company, unit):
         pass
     record = firstboot.build_profile(name, company, unit, data, anydesk_id)
     subprocess.run(['/usr/bin/hostnamectl', 'set-hostname', record['hostname']], check=True, timeout=10)
+    firstboot.sync_hostname_hosts(record['hostname'])
     firstboot.atomic_first_write(record)
     try:
         subprocess.run(['/usr/bin/systemctl', '--no-block', 'start',
                         'enfoque-remote-agent.service'], check=False, timeout=8)
     except (OSError, subprocess.SubprocessError):
         pass
-    # Show the public enrollment fingerprint on this installation's screen.
-    # The private identity key never leaves the machine.
+    # Start the signed Zero Touch enrollment in the background right now:
+    # the user never needs to enter a key or code in this computer.
     try:
-        verification = subprocess.run(
-            ['/usr/local/sbin/enfoque-zero-touch', 'status'],
-            capture_output=True, text=True, timeout=20)
-        if verification.returncode == 0:
-            record['zeroTouchCode'] = json.loads(verification.stdout).get('code')
-    except (OSError, ValueError, subprocess.SubprocessError):
+        subprocess.run(['/usr/bin/systemctl', '--no-block', 'start',
+                        'enfoque-zero-touch.service'], check=False, timeout=8)
+    except (OSError, subprocess.SubprocessError):
         pass
     return record
 
@@ -46,8 +44,8 @@ if __name__ == '__main__':
     try:
         if len(sys.argv) != 4: raise ValueError('Parametros invalidos')
         record = save(*sys.argv[1:])
-        print(json.dumps({'ok': True, 'id': record['displayId'], 'unit': record['unitName'],
-                          'code': record.get('zeroTouchCode')}))
+        print(json.dumps({'ok': True, 'id': record['displayId'],
+                          'unit': record['unitName'], 'access': 'aguardando-liberacao-TI'}))
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         print(str(error)[:150], file=sys.stderr)
         sys.exit(1)

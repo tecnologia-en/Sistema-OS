@@ -9,6 +9,8 @@ ConditionPathExists=!/run/live/medium
 [Service]
 Type=oneshot
 User=root
+# Repara o mapeamento de hostname antes do SSH/sudo administrativo.
+ExecStartPre=-/usr/local/sbin/enfoque-hostname-repair
 ExecStart=/usr/local/sbin/enfoque-zero-touch once
 TimeoutStartSec=150
 UMask=0077

@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+"""Enfoque OS: repair local hostname resolution for passwordless TI sudo.
+
+Installed PCs initially have /etc/hosts containing "enfoque-novo", while the
+first login assigns a store-specific hostname. Sudo can hang on DNS lookup
+when that hostname cannot be resolved; do not change PAM or sudoers to fix it.
+"""
+import os
+import socket
+import sys
+from pathlib import Path
+
+sys.path.insert(0, "/usr/local/lib/enfoque-onboarding")
+import firstboot
+
+def main():
+    if os.geteuid() != 0:
+        raise PermissionError("Reparo de hostname exige root")
+    if Path("/run/live/medium").exists() or not firstboot.PROFILE.exists():
+        return 0
+    # Never trust the workstation's hostname without normalizing it. The
+    # first-login wizard already restricts the hostname to lowercase slugs.
+    hostname = socket.gethostname().strip().lower()
+    firstboot.sync_hostname_hosts(hostname)
+    return 0
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (OSError, ValueError, PermissionError) as error:
+        print("ENFOQUE_HOSTNAME_REPAIR: " + type(error).__name__, file=sys.stderr)
+        raise SystemExit(1)

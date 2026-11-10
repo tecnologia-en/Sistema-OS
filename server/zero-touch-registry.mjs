@@ -182,8 +182,38 @@ export class ZeroTouchRegistry {
     return (await this.read()).filter(x => x.status === "approved").map(x => ({
       deviceId: x.deviceId, status: x.status,
       tunnelPublicKey: x.tunnelPublicKey,
+      hostPublicKey: x.hostPublicKey,
       issued: { tunnelPort: x.issued?.tunnelPort }
     }));
+  }
+  /**
+   * One-click TI authorization. The initial device registration is signed
+   * with its private Ed25519 key and the machine MUST have recently completed
+   * a second, separately signed status poll before any root grant.
+   * No key or fingerprint is ever typed into the browser.
+   */
+  async approveFromAdmin(deviceId, actor, issue) {
+    if (!UUID4.test(deviceId || "") || typeof actor !== "string" || !actor) {
+      throw err("Aprovacao da TI invalida");
+    }
+    const item = (await this.read()).find(x => x.deviceId === deviceId);
+    if (!item || item.status !== "pending") throw err("Computador nao aguarda aprovacao");
+    const check = Date.parse(item.lastCheckAt || "");
+    if (!Number.isFinite(check) || this.clock() - check > 15 * 60_000 ||
+        this.clock() < check - 30_000) {
+      throw err("Computador precisa estar online e responder ao cadastro seguro recentemente");
+    }
+    return this.approve(deviceId, item.code, actor, issue);
+  }
+  async revokeFromAdmin(deviceId, actor) {
+    const item = (await this.read()).find(x => x.deviceId === deviceId);
+    if (!item || item.status !== "approved") throw err("Computador nao autorizado");
+    return this.revoke(deviceId, item.code, actor);
+  }
+  async rejectFromAdmin(deviceId, actor) {
+    const item = (await this.read()).find(x => x.deviceId === deviceId);
+    if (!item || item.status !== "pending") throw err("Computador nao esta pendente");
+    return this.reject(deviceId, item.code, actor);
   }
   async revoke(deviceId, code, actor) {
     if (!UUID4.test(deviceId || "") || !/^[0-9A-F]{10}$/.test(code || "") || !actor) {

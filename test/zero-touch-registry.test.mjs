@@ -67,6 +67,7 @@ test("approval requires exact code and returns per-machine token only to signed 
     assert.deepEqual(status.ssh, { port: 23101, adminPublicKey: issued.adminPublicKey,
       host: "intranet.enfoquepapelaria.com.br" });
     assert.equal((await registry.approvedConnections())[0].issued.tunnelPort, 23101);
+    assert.equal((await registry.approvedConnections())[0].hostPublicKey, f.base.hostPublicKey);
     assert.equal(status.unitId, "ilha-plaza");
     await assert.rejects(registry.approve(f.base.deviceId, verificationCode(f.base.deviceId, f.base.publicKey), "ti", issue));
     assert.equal(count, 1);
@@ -136,6 +137,40 @@ test("revocation removes tunnel access without changing other device authorizati
     assert.equal(remaining.length, 1);
     assert.equal(remaining[0].deviceId, second.base.deviceId);
     assert.equal(remaining[0].issued.tunnelPort, 23102);
+  });
+});
+
+test("one-click full-root approval needs a recent signed poll and no typed key", async () => {
+  await setup(async registry => {
+    const f = fixture();
+    await registry.request(f.auth("register"));
+    const issue = async ({ tunnelPort }) => ({ ...issued, tunnelPort });
+    await assert.rejects(registry.approveFromAdmin(f.base.deviceId, "ti@enfoque", issue),
+                         /precisa estar online/);
+    await registry.poll(f.auth("status"));
+    const approved = await registry.approveFromAdmin(f.base.deviceId, "ti@enfoque", issue);
+    assert.equal(approved.status, "approved");
+    assert.equal((await registry.approvedConnections())[0].hostPublicKey, f.base.hostPublicKey);
+    assert.equal((await registry.poll(f.auth("status"))).ssh.port, 23101);
+    await registry.revokeFromAdmin(f.base.deviceId, "ti@enfoque");
+    assert.equal((await registry.poll(f.auth("status"))).status, "revoked");
+  });
+});
+
+test("one-click denies stale signed polls and rejected devices", async () => {
+  await setup(async registry => {
+    const f = fixture();
+    await registry.request(f.auth("register"));
+    await registry.poll(f.auth("status"));
+    await registry.transact(async entries => {
+      entries[0].lastCheckAt = new Date(Date.now() - 60 * 60_000).toISOString();
+      return { changed: true, value: true };
+    });
+    await assert.rejects(registry.approveFromAdmin(f.base.deviceId, "ti", async () => issued),
+                         /precisa estar online/);
+    await registry.rejectFromAdmin(f.base.deviceId, "ti");
+    await assert.rejects(registry.approveFromAdmin(f.base.deviceId, "ti", async () => issued),
+                         /nao aguarda aprovacao/);
   });
 });
 

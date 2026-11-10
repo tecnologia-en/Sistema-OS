@@ -25,6 +25,32 @@ class BootTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 firstboot.atomic_first_write(item, file)
 
+    def test_hosts_mapping_follows_registered_hostname_without_touching_other_entries(self):
+        with tempfile.TemporaryDirectory() as d:
+            hosts = Path(d) / "hosts"
+            hosts.write_text("127.0.0.1 localhost\n127.0.1.1 enfoque-novo\n::1 ip6-localhost\n10.0.0.10 impressora\n")
+            firstboot.sync_hostname_hosts("caixa1-itaipu", hosts)
+            self.assertEqual(hosts.read_text().count("127.0.1.1"), 1)
+            self.assertIn("127.0.1.1 caixa1-itaipu\n", hosts.read_text())
+            self.assertIn("10.0.0.10 impressora\n", hosts.read_text())
+            original = hosts.read_text()
+            firstboot.sync_hostname_hosts("caixa1-itaipu", hosts)
+            self.assertEqual(hosts.read_text(), original)
+            firstboot.sync_hostname_hosts("note-itaipu", hosts)
+            self.assertIn("127.0.1.1 note-itaipu\n", hosts.read_text())
+            self.assertNotIn("caixa1-itaipu", hosts.read_text())
+
+    def test_hosts_mapping_rejects_invalid_hostname_and_symlink(self):
+        with tempfile.TemporaryDirectory() as d:
+            hosts = Path(d) / "hosts"
+            hosts.write_text("127.0.0.1 localhost\n")
+            with self.assertRaises(ValueError):
+                firstboot.sync_hostname_hosts("bad name; sudo", hosts)
+            link = Path(d) / "link-hosts"
+            link.symlink_to(hosts)
+            with self.assertRaises(PermissionError):
+                firstboot.sync_hostname_hosts("caixa-itaipu", link)
+
     def test_reject_invalid(self):
         u = uuid.uuid4()
         machine = {"uuid": str(u), "shortId": f"{u.int % 1000000000000:012d}"}
