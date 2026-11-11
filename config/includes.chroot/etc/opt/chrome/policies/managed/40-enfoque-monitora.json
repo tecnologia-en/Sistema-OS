@@ -1,0 +1,12 @@
+{
+  "ExtensionSettings": {
+    "ngghdkeagknifjchbdaaejgkipgfghbb": {
+      "installation_mode": "force_installed",
+      "update_url": "https://intranet.enfoquepapelaria.com.br/monitora/distribuicao/updates.xml",
+      "override_update_url": true
+    },
+    "aacldabebmfnlembpilcpcdcgeffgmam": {
+      "installation_mode": "removed"
+    }
+  }
+}

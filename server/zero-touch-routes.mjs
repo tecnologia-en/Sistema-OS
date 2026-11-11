@@ -3,10 +3,31 @@
  * New devices can only request an enrollment; no agent is activated until
  * an authenticated TI administrator explicitly approves the fingerprint.
  */
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+const execFileAsync = promisify(execFile);
 const LIMIT_WINDOW = 10 * 60_000;
+const MONITORA_PROVISIONER = "/opt/monitora-src/server/auto_provision.py";
+const MONITORA_TOKEN = /^[A-Za-z0-9_-]{40,100}$/;
+// Called ONLY after registry.poll validates the signed, approved Zero Touch
+// identity. The child drops to the restricted Monitora account.
+async function getApprovedMonitoraToken(record) {
+  const { stdout } = await execFileAsync("/usr/sbin/runuser",
+    ["-u", "monitora", "--", "/usr/bin/python3", MONITORA_PROVISIONER,
+     "issue", record.deviceId, record.unitName, record.pcName],
+    { timeout: 9000, maxBuffer: 4096, windowsHide: true });
+  const result = JSON.parse(stdout);
+  if (result.deviceId !== record.deviceId ||
+      typeof result.token !== "string" || !MONITORA_TOKEN.test(result.token)) {
+    throw new Error("Monitora provision response invalid");
+  }
+  return result.token;
+}
+
 const LIMIT_COUNT = 20;
 export function installZeroTouchRoutes({ app, registry, inventory, isAdmin,
-  provisionDeviceKeys, syncAuthorizedTunnels, dropTunnelSessionsAfterRevocation }) {
+  provisionDeviceKeys, syncAuthorizedTunnels, dropTunnelSessionsAfterRevocation,
+  provisionMonitora = getApprovedMonitoraToken }) {
   const attempts = new Map();
   function noStore(res) {
     res.setHeader("Cache-Control", "no-store");
@@ -59,7 +80,22 @@ export function installZeroTouchRoutes({ app, registry, inventory, isAdmin,
     noStore(res);
     try {
       if (JSON.stringify(req.body || {}).length > 1200) return res.status(413).json({ ok: false });
-      return res.json({ ok: true, ...(await registry.poll(req.body)) });
+      const record = await registry.poll(req.body);
+      // Older OS versions never ask for a token. No fleet enrollment is
+      // triggered until a 0.2.43 client opts in with approved signed status.
+      if (req.body?.monitoraProvision === true && record.status === "approved") {
+        try {
+          const token = await provisionMonitora(record);
+          return res.json({ ok:true, ...record, monitora: {
+            deviceId: record.deviceId, token
+          } });
+        } catch (error) {
+          console.error("[zero-touch] Monitora bootstrap unavailable",
+            { deviceId:record.deviceId, error:String(error?.name||"Error") });
+          return res.json({ ok:true, ...record, monitora: { available:false } });
+        }
+      }
+      return res.json({ ok: true, ...record });
     } catch (error) { return fail(res, error); }
   });
   app.get("/api/remote-access/zero-touch/pending", async (req, res) => {

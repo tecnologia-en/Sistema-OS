@@ -1,3 +1,3 @@
 #!/bin/sh
-# Enfoque OS: tema executado pelo sandbox oficial do xfce4-screensaver.
-exec /usr/local/bin/enfoque-papel-parede-ocioso "$@"
+# 0.2.43: tema visual X11 incorporado ao xfce4-screensaver (PAM nativo).
+exec /usr/local/bin/enfoque-tela-de-bloqueio "$@"

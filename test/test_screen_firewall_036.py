@@ -22,7 +22,7 @@ PACKAGE_BUILDER = ROOT / "scripts/build-update-package.py"
 
 class ScreenFirewall036Tests(unittest.TestCase):
     def test_release_and_core_packages(self):
-        self.assertIn('VERSION="0.2.42"', (SYS / "etc/enfoque-os-release").read_text())
+        self.assertIn('VERSION="0.2.43"', (SYS / "etc/enfoque-os-release").read_text())
         packages = (ROOT / "config/package-lists/enfoque-base.list.chroot").read_text()
         self.assertIn("\nxfce4-screensaver\n", packages)
         self.assertIn("\nnftables\n", packages)
@@ -44,7 +44,7 @@ class ScreenFirewall036Tests(unittest.TestCase):
         self.assertIn("set_value xfce4-screensaver /lock/sleep-activation bool true", code)
         self.assertIn("set_value xfce4-screensaver /saver/fullscreen-inhibit bool false", code)
 
-    def test_installed_session_applies_config_once_without_root(self):
+    def test_installed_session_reapplies_screen_policy_without_root(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
             executables = base / "bin"
@@ -71,9 +71,13 @@ class ScreenFirewall036Tests(unittest.TestCase):
             saver = base / "enfoque-papel-parede-ocioso"
             saver.write_text("#!/bin/sh\nexit 0\n")
             saver.chmod(0o755)
+            visual = base / "enfoque-tela-de-bloqueio"
+            visual.write_text("#!/bin/sh\nexit 0\n")
+            visual.chmod(0o755)
             policy = base / "policy.sh"
             policy.write_text(LOCK_SCRIPT.read_text()
                 .replace("/usr/local/bin/enfoque-papel-parede-ocioso", str(saver))
+                .replace("/usr/local/bin/enfoque-tela-de-bloqueio", str(visual))
                 .replace("/usr/share/applications/screensavers/enfoque-wallpaper-dim.desktop", str(theme)))
             run = subprocess.run(["/bin/sh", str(policy)], env=env,
                                  text=True, capture_output=True, timeout=8)
@@ -90,8 +94,8 @@ class ScreenFirewall036Tests(unittest.TestCase):
             again = subprocess.run(["/bin/sh", str(policy)], env=env,
                                    text=True, capture_output=True, timeout=8)
             self.assertEqual(again.returncode, 0, again.stderr)
-            self.assertEqual(count, len(log.read_text().splitlines()))
-            self.assertTrue((base / ".config/enfoque-os/tela-042-configurada").is_file())
+            self.assertGreater(len(log.read_text().splitlines()),count)
+            self.assertTrue((base / ".config/enfoque-os/tela-043-configurada").is_file())
 
     def test_firewall_does_not_modify_other_tables_or_block_outbound(self):
         rules = FIREWALL.read_text()

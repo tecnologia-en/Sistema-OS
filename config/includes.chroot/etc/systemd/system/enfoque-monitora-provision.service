@@ -1,0 +1,16 @@
+[Unit]
+Description=Enfoque OS - configurar Monitora com token individual aprovado
+Wants=network-online.target
+After=network-online.target enfoque-zero-touch.service
+ConditionPathExists=!/run/live/medium
+ConditionPathExists=/etc/enfoque-os/agent.json
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/enfoque-monitora-provision
+TimeoutStartSec=45
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true

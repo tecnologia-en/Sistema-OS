@@ -83,7 +83,7 @@ class LiveLoginRegression(unittest.TestCase):
 
     def test_release_version_bump(self):
         release=(TREE/"etc/enfoque-os-release").read_text()
-        self.assertIn('VERSION="0.2.42"',release)
+        self.assertIn('VERSION="0.2.43"',release)
 
 if __name__=="__main__":
     unittest.main()

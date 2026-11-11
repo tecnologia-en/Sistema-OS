@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Enfoque OS - monitor ligado na tela de bloqueio
+Comment=Evita que o X11 deixe a tela preta; bloqueio e senha permanecem no XFCE
+Exec=/usr/local/bin/enfoque-screensaver-watchdog
+TryExec=/usr/local/bin/enfoque-screensaver-watchdog
+OnlyShowIn=XFCE;
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

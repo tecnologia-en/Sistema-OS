@@ -37,7 +37,7 @@ jobs:
       - name: Validate Zero Touch enrollment and tunnel security
         run: |
           set -euo pipefail
-          node --test test/zero-touch-registry.test.mjs
+          node --test test/zero-touch-registry.test.mjs test/zero-touch-monitora.test.mjs
           node --check server/zero-touch-routes.mjs
           node --check server/zero-touch-provisioner.mjs
           python3 -m py_compile config/includes.chroot/usr/local/sbin/enfoque-zero-touch

@@ -1,0 +1,22 @@
+#!/bin/sh
+# Mantem o monitor ligado e corrige configuracao X11 reescrita pelo XFCE.
+# Nao intercepta eventos, nao desbloqueia, nao coleta teclado/senha.
+set -eu
+[ -n "${DISPLAY:-}" ] || exit 0
+[ -e /run/live/medium ] && exit 0
+root="${XDG_RUNTIME_DIR:-${HOME}/.cache}/enfoque-os"
+mkdir -p "$root"
+chmod 0700 "$root"
+exec 9>"$root/tela-043-watchdog.lock"
+flock -n 9 || exit 0
+while :; do
+    if command -v xfconf-query >/dev/null 2>&1; then
+        xfconf-query -c xfce4-screensaver -p /saver/mode -s 2 >/dev/null 2>&1 || true
+    fi
+    if command -v xset >/dev/null 2>&1; then
+        xset s off >/dev/null 2>&1 || true
+        xset s noblank >/dev/null 2>&1 || true
+        xset -dpms >/dev/null 2>&1 || true
+    fi
+    sleep 40
+done

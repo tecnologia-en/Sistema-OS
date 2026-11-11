@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=Enfoque OS - Protecao de tela
-Comment=Mostra o papel de parede esmaecido apos 3 minutos e pede senha apos 15
+Comment=Mostra tela de bloqueio com relogio apos 3 minutos e solicita senha apos 15
 Exec=/usr/local/bin/enfoque-proteger-tela
 TryExec=/usr/local/bin/enfoque-proteger-tela
 OnlyShowIn=XFCE;

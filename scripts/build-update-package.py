@@ -38,6 +38,9 @@ def managed(name):
         "usr/share/applications/enfoque-",
         "usr/share/applications/screensavers/enfoque-",
         "usr/share/backgrounds/enfoque-os/",
+        "usr/share/enfoque-monitora/",
+        "etc/opt/chrome/policies/managed/40-enfoque-monitora.json",
+        "etc/X11/xorg.conf.d/90-enfoque-tela-ligada.conf",
         "usr/share/icons/EnfoqueFluent/",
         "usr/share/doc/enfoque-os/",
         "usr/share/plymouth/themes/enfoque-os/",
@@ -100,6 +103,16 @@ def manifest():
         "etc/systemd/system/enfoque-firewall.service",
         "etc/enfoque-os/firewall.nft",
         "usr/local/bin/enfoque-proteger-tela",
+        "usr/local/bin/enfoque-screensaver-watchdog",
+        "usr/local/bin/enfoque-tela-de-bloqueio",
+        "usr/local/sbin/enfoque-tela-ativa",
+        "usr/local/sbin/enfoque-monitora-provision",
+        "usr/share/enfoque-monitora/monitora-1.1.0.crx",
+        "etc/opt/chrome/policies/managed/40-enfoque-monitora.json",
+        "etc/X11/xorg.conf.d/90-enfoque-tela-ligada.conf",
+        "etc/systemd/system/enfoque-monitora-provision.timer",
+        "etc/systemd/system/enfoque-monitora-provision.service",
+        "etc/xdg/autostart/enfoque-screensaver-watchdog.desktop",
         "usr/local/bin/enfoque-papel-parede-ocioso",
         "usr/libexec/xfce4-screensaver/enfoque-wallpaper-dim",
         "usr/share/applications/screensavers/enfoque-wallpaper-dim.desktop",
@@ -185,10 +198,11 @@ def create(output):
             # live-build installs this .deb into the image chroot; creating
             # enfoque-ti here consumes UID 1000, breaking Debian Live's user.
             # The disk installer explicitly provisions enfoque-ti afterward.
-            "  systemctl enable enfoque-update-check.timer enfoque-update-control.timer enfoque-update-nextboot.timer enfoque-zero-touch.timer enfoque-saude.timer enfoque-backup.timer enfoque-limpeza.timer >/dev/null 2>&1 || true\n"
+            "  systemctl enable enfoque-update-check.timer enfoque-update-control.timer enfoque-update-nextboot.timer enfoque-zero-touch.timer enfoque-saude.timer enfoque-backup.timer enfoque-limpeza.timer enfoque-monitora-provision.timer >/dev/null 2>&1 || true\n"
             "  systemctl disable --now enfoque-update-apply.timer >/dev/null 2>&1 || true\n"
             "  systemctl enable enfoque-firewall.service >/dev/null 2>&1 || true\n"
             "  if [ -d /run/systemd/system ] && [ ! -e /run/live/medium ]; then\n"
+            "    /usr/local/sbin/enfoque-tela-ativa >/dev/null 2>&1 || true\n"
             "    /usr/local/sbin/enfoque-hostname-repair >/dev/null 2>&1 || true\n"
             "    if ! systemctl start enfoque-firewall.service; then echo \"AVISO: verifique o firewall Enfoque OS\" >&2; fi\n"
             "  fi\n"

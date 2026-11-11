@@ -1,0 +1,119 @@
+#!/usr/bin/python3
+"""Enfoque OS 0.2.43: configure Monitora without touching Chrome's GUI/profile.
+
+Approval and identity come from the existing Ed25519 Zero Touch enrollment.
+The server creates one WRITE-ONLY credential per approved device and delivers
+it inside the signed enrollment channel over TLS. Chrome reads it through its
+enterprise storage.managed policy. No common token or secret in the ISO.
+"""
+import importlib.util
+import json
+import os
+from pathlib import Path
+import re
+import stat
+import sys
+import tempfile
+
+PROVISIONER = Path("/usr/local/sbin/enfoque-zero-touch")
+AGENT = Path("/etc/enfoque-os/agent.json")
+POLICY = Path("/etc/opt/chrome/policies/managed/41-enfoque-monitora-device.json")
+EXTENSION_ID = "ngghdkeagknifjchbdaaejgkipgfghbb"
+TOKEN = re.compile(r"^[A-Za-z0-9_-]{40,100}$")
+
+
+def policy_file(token):
+    if os.geteuid() != 0:
+        raise PermissionError("Provisionamento corporativo exige root")
+    if not TOKEN.fullmatch(token):
+        raise ValueError("Token de dispositivo invalido")
+    parent = POLICY.parent
+    if parent.is_symlink():
+        raise PermissionError("Diretorio de policy nao confiavel")
+    parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+    if POLICY.is_symlink():
+        raise PermissionError("Arquivo de policy redirecionado")
+    if POLICY.exists() and POLICY.stat().st_uid != 0:
+        raise PermissionError("Policy existente nao pertence ao sistema")
+    value = {
+        "3rdparty": {
+            "extensions": {
+                EXTENSION_ID: {"monitoraToken": token}
+            }
+        }
+    }
+    serialized = json.dumps(value, sort_keys=True, separators=(",",":")) + "\n"
+    if POLICY.is_file() and POLICY.read_text("utf8") == serialized:
+        return False
+    fd, temp = tempfile.mkstemp(prefix=".monitora-policy-", dir=parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf8") as output:
+            output.write(serialized)
+            output.flush()
+            os.fsync(output.fileno())
+        os.chmod(temp, 0o644)
+        os.replace(temp, POLICY)
+    finally:
+        if os.path.exists(temp):
+            os.unlink(temp)
+    return True
+
+
+def remove_policy():
+    if POLICY.is_symlink():
+        raise PermissionError("Policy nao confiavel")
+    if POLICY.is_file():
+        POLICY.unlink()
+        return True
+    return False
+
+
+def run():
+    if os.geteuid() != 0:
+        raise PermissionError("Provisionamento exige root")
+    if Path("/run/live/medium").exists() or not AGENT.is_file():
+        return "pending-approval"
+    if AGENT.is_symlink() or AGENT.stat().st_uid != 0 or stat.S_IMODE(AGENT.stat().st_mode) != 0o600:
+        raise PermissionError("Credencial Zero Touch local sem protecao")
+    spec = importlib.util.spec_from_file_location("enfoque_zt", PROVISIONER)
+    # Shell-independent SourceFileLoader for extensionless root executable.
+    from importlib.machinery import SourceFileLoader
+    loader = SourceFileLoader("enfoque_zt", str(PROVISIONER))
+    spec = importlib.util.spec_from_loader("enfoque_zt", loader)
+    zt = importlib.util.module_from_spec(spec)
+    loader.exec_module(zt)
+    info = zt.local_info()
+    public = zt.secure_keypair()
+    request = zt.signed_request("status", info, public)
+    request["monitoraProvision"] = True
+    result = zt.post("status", request)
+    if result.get("deviceId") != info["deviceId"]:
+        raise ValueError("Resposta pertence a outro dispositivo")
+    if result.get("status") in ("revoked","rejected"):
+        remove_policy()
+        return "revoked"
+    if result.get("status") != "approved":
+        return "pending-approval"
+    response = result.get("monitora")
+    if not isinstance(response, dict) or response.get("deviceId") != info["deviceId"]:
+        raise RuntimeError("Servidor ainda nao liberou credencial Monitora")
+    token = response.get("token")
+    if not isinstance(token, str) or not TOKEN.fullmatch(token):
+        raise RuntimeError("Token corporativo invalido/indisponivel")
+    # Only system policy is modified. No Chrome process, UI, profile, restart.
+    updated = policy_file(token)
+    return "configured" if updated else "already-configured"
+
+
+def main():
+    try:
+        result = run()
+        print("ENFOQUE_MONITORA=" + result)
+        return 0
+    except (OSError, RuntimeError, PermissionError, ValueError, TypeError) as e:
+        print("ENFOQUE_MONITORA_ERROR=" + type(e).__name__, file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

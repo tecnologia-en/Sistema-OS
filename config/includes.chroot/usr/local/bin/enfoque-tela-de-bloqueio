@@ -1,0 +1,146 @@
+#!/usr/bin/python3
+"""Visual corporativo do xfce4-screensaver 0.2.43 (NUNCA autentica usuario).
+
+O processo e incorporado pelo XSCREENSAVER_WINDOW / GtkPlug do XFCE. O
+xfce4-screensaver continua com controle exclusivo do teclado, PAM e senha.
+Ao sair, anima apenas o painel de fundo, sem interferir na autorizacao.
+"""
+import datetime
+import importlib.machinery
+import importlib.util
+import os
+from pathlib import Path
+import signal
+import sys
+
+FALLBACK = "/usr/libexec/xfce4-screensaver/slideshow"
+WALL_HELPER = "/usr/local/bin/enfoque-papel-parede-ocioso"
+
+
+def fallback():
+    # Um problema visual NUNCA desabilita a autenticacao do XFCE.
+    try:
+        loader=importlib.machinery.SourceFileLoader("enfoque_wall",WALL_HELPER)
+        spec=importlib.util.spec_from_loader(loader.name,loader)
+        helper=importlib.util.module_from_spec(spec)
+        loader.exec_module(helper)
+        folder=helper.prepare()
+    except Exception:
+        folder=Path("/usr/share/backgrounds/enfoque-os")
+    os.execv(FALLBACK,[FALLBACK,"--location="+str(folder),"--sort-images"])
+
+
+def main():
+    xid=os.environ.get("XSCREENSAVER_WINDOW","").strip()
+    if not xid or not xid.lower().startswith(("0x",)) and not xid.isdigit():
+        fallback()
+    try:
+        import gi
+        gi.require_version("Gtk","3.0")
+        gi.require_version("GdkPixbuf","2.0")
+        from gi.repository import Gtk,Gdk,GdkPixbuf,GLib
+        import cairo
+
+        # Nunca criar janela independente: somente desenhar dentro da janela
+        # de bloqueio gerenciada pelo proprio XFCE.
+        plug=Gtk.Plug.new(int(xid,0))
+        plug.set_title("Enfoque OS - Tela de descanso")
+        overlay=Gtk.Overlay()
+        plug.add(overlay)
+        try:
+            loader=importlib.machinery.SourceFileLoader("enfoque_wall",WALL_HELPER)
+            spec=importlib.util.spec_from_loader(loader.name,loader)
+            helper=importlib.util.module_from_spec(spec)
+            loader.exec_module(helper)
+            image=helper.prepare()/"wallpaper.png"
+            if not image.is_file():
+                image=Path("/usr/share/backgrounds/enfoque-os/wallpaper.jpg")
+            background=GdkPixbuf.Pixbuf.new_from_file(str(image))
+        except Exception:
+            background=None
+
+        canvas=Gtk.DrawingArea()
+        def draw(widget, cr):
+            w=max(1,widget.get_allocated_width())
+            h=max(1,widget.get_allocated_height())
+            cr.set_source_rgb(.025,.045,.07)
+            cr.paint()
+            if background:
+                iw,ih=background.get_width(),background.get_height()
+                scale=max(w/iw,h/ih)
+                dw,dh=iw*scale,ih*scale
+                cr.save()
+                cr.translate((w-dw)/2,(h-dh)/2)
+                cr.scale(scale,scale)
+                Gdk.cairo_set_source_pixbuf(cr,background,0,0)
+                cr.paint()
+                cr.restore()
+            # Vinheta translucida discreta para legibilidade do relogio.
+            cr.set_source_rgba(.018,.038,.06,.29)
+            cr.rectangle(0,0,w,h)
+            cr.fill()
+            return False
+        canvas.connect("draw",draw)
+        overlay.add(canvas)
+        content=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12)
+        content.set_halign(Gtk.Align.CENTER)
+        content.set_valign(Gtk.Align.CENTER)
+        content.set_margin_bottom(85)
+        content.set_margin_top(40)
+        clock=Gtk.Label()
+        clock.set_name("enfoque-lock-clock")
+        date=Gtk.Label()
+        date.set_name("enfoque-lock-date")
+        sub=Gtk.Label(label="ENFOQUE OS")
+        sub.set_name("enfoque-lock-brand")
+        hint=Gtk.Label(label="Pressione qualquer tecla para continuar")
+        hint.set_name("enfoque-lock-hint")
+        for item in (clock,date,sub,hint):
+            content.pack_start(item,False,False,0)
+        overlay.add_overlay(content)
+        css=Gtk.CssProvider()
+        css.load_from_data(b'''
+          #enfoque-lock-clock {font-size:92px;font-weight:300;color:#fff;}
+          #enfoque-lock-date {font-size:24px;font-weight:500;color:#fff;}
+          #enfoque-lock-brand {font-size:13px;font-weight:700;color:rgba(255,255,255,.82);}
+          #enfoque-lock-hint {font-size:15px;color:rgba(255,255,255,.9);margin-top:35px;}
+        ''')
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(),css,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        def redraw_clock():
+            now=datetime.datetime.now()
+            clock.set_text(now.strftime("%H:%M"))
+            days=("segunda-feira","terca-feira","quarta-feira","quinta-feira",
+                  "sexta-feira","sabado","domingo")
+            date.set_text(f"{days[now.weekday()].capitalize()}, {now.day:02d}/{now.month:02d}/{now.year}")
+            return True
+        redraw_clock()
+        GLib.timeout_add_seconds(3,redraw_clock)
+        exiting=[False]
+        def exit_animated():
+            if exiting[0]:
+                return False
+            exiting[0]=True
+            # O protetor XFCE ja validou a saida; somente transicao visual.
+            index=[0]
+            def frame():
+                index[0]+=1
+                step=index[0]
+                content.set_margin_bottom(85+step*13)
+                content.set_opacity(max(0,1-step/13))
+                if step>=13:
+                    Gtk.main_quit()
+                    return False
+                return True
+            GLib.timeout_add(17,frame)
+            return False
+        signal.signal(signal.SIGTERM,lambda *_:GLib.idle_add(exit_animated))
+        plug.show_all()
+        Gtk.main()
+    except (Exception,KeyboardInterrupt) as error:
+        print("Enfoque lock theme fallback: "+type(error).__name__,file=sys.stderr)
+        fallback()
+
+
+if __name__=="__main__":
+    main()

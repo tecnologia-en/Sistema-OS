@@ -1,4 +1,4 @@
-"""Regressoes da versao 0.2.42: tema dim e bloqueio seguro."""
+"""Regressoes da versao 0.2.43: tema dim e bloqueio seguro."""
 import importlib.machinery
 import importlib.util
 from pathlib import Path
@@ -53,8 +53,8 @@ class Version042Tests(unittest.TestCase):
         self.assertIn("/saver/mode int 2", p)
         self.assertIn("enfoque-wallpaper-dim", p)
         self.assertIn("/xfce4-power-manager/dpms-enabled bool false", p)
-        self.assertIn("xset s off -dpms", p)
-        self.assertIn("tela-042-configurada", p)
+        self.assertIn("xset -dpms", p)
+        self.assertIn("tela-043-configurada", p)
         self.assertIn("if [ -e /run/live/medium ]; then", p)
         self.assertIn("xfce4-screensaver-command", p)
         self.assertNotIn("passwd ", p)
@@ -72,7 +72,7 @@ class Version042Tests(unittest.TestCase):
 
     def test_versao_e_manifesto(self):
         release = (TREE / "etc/enfoque-os-release").read_text("utf8")
-        self.assertIn('VERSION="0.2.42"', release)
+        self.assertIn('VERSION="0.2.43"', release)
         p = (ROOT / "scripts/build-update-package.py").read_text("utf8")
         self.assertIn('"usr/share/applications/screensavers/enfoque-"', p)
         self.assertIn('"usr/share/applications/screensavers/enfoque-wallpaper-dim.desktop"', p)

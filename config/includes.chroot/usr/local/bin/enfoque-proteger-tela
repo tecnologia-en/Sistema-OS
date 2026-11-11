@@ -1,5 +1,6 @@
 #!/bin/sh
-# Enfoque OS 0.2.42: fundo esmaecido aos 3 min, senha aos 15 min.
+# Enfoque OS 0.2.43: visual de bloqueio aos 3 min, senha nativa aos 15.
+# Reaplica a politica ao entrar na sessao e apos upgrade, sem reiniciar o PC.
 # Autenticacao e captura de teclado continuam exclusivamente no xfce4-screensaver.
 # Live nao recebe bloqueio para nao interromper instalacao e backup.
 set -eu
@@ -7,8 +8,8 @@ set -eu
 command -v xfconf-query >/dev/null 2>&1 || exit 0
 command -v xfce4-screensaver >/dev/null 2>&1 || exit 0
 
-marker="${HOME}/.config/enfoque-os/tela-042-configurada"
-[ ! -e "$marker" ] || exit 0
+marker="${HOME}/.config/enfoque-os/tela-043-configurada"
+# Marcador e somente registro, nao bloqueia reconfiguracao de versoes futuras.
 
 set_value() {
     channel="$1"
@@ -34,6 +35,7 @@ if [ -e /run/live/medium ]; then
 fi
 
 [ -x /usr/local/bin/enfoque-papel-parede-ocioso ] || exit 1
+[ -x /usr/local/bin/enfoque-tela-de-bloqueio ] || exit 1
 [ -r /usr/share/applications/screensavers/enfoque-wallpaper-dim.desktop ] || exit 1
 
 set_value xfce4-screensaver /saver/enabled bool true
@@ -61,7 +63,9 @@ set_value xfce4-power-manager /xfce4-power-manager/dpms-enabled bool false
 set_value xfce4-power-manager /xfce4-power-manager/blank-on-ac int 0
 set_value xfce4-power-manager /xfce4-power-manager/blank-on-battery int 0
 if command -v xset >/dev/null 2>&1; then
-    xset s off -dpms >/dev/null 2>&1 || true
+    xset s off >/dev/null 2>&1 || true
+    xset s noblank >/dev/null 2>&1 || true
+    xset -dpms >/dev/null 2>&1 || true
 fi
 
 if command -v xfce4-screensaver-command >/dev/null 2>&1; then
@@ -72,4 +76,4 @@ fi
 
 umask 077
 mkdir -p "${HOME}/.config/enfoque-os"
-printf 'Politica 0.2.42: wallpaper esmaecido 3 min; senha 15 min.\n' > "$marker"
+printf 'Politica 0.2.43: tela de bloqueio 3 min; senha 15 min.\n' > "$marker"
