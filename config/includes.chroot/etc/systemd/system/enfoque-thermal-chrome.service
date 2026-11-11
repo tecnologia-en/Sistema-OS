@@ -1,0 +1,16 @@
+[Unit]
+Description=Enfoque OS - imprimir cupom sem zoom depois do Chrome fechar
+After=cups.service
+ConditionPathExists=!/run/live/medium
+ConditionPathExists=/home/enfoque
+
+[Service]
+Type=oneshot
+User=enfoque
+Group=enfoque
+ExecStart=/usr/local/sbin/enfoque-thermal-chrome --apply-if-closed
+TimeoutStartSec=15
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/enfoque
+PrivateTmp=true

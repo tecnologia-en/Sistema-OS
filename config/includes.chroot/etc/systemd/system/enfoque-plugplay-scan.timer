@@ -1,0 +1,13 @@
+[Unit]
+Description=Enfoque OS - verificar dispositivos e drivers diariamente
+ConditionPathExists=!/run/live/medium
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=24h
+RandomizedDelaySec=30min
+Persistent=true
+Unit=enfoque-plugplay-scan.service
+
+[Install]
+WantedBy=timers.target

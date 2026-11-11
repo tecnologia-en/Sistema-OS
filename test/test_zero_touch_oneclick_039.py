@@ -25,7 +25,7 @@ class OneClick039Tests(unittest.TestCase):
         self.assertIn("ExecStartPre=-/usr/local/sbin/enfoque-hostname-repair", service)
         self.assertIn("/usr/local/sbin/enfoque-hostname-repair", package)
         self.assertTrue((TREE / "usr/local/sbin/enfoque-hostname-repair").is_file())
-        self.assertIn("0.2.44", (TREE / "etc/enfoque-os-release").read_text())
+        self.assertIn("0.2.45", (TREE / "etc/enfoque-os-release").read_text())
 
     def test_oneclick_api_requires_administrator_and_recent_device_proof(self):
         routes = (ROOT / "server/zero-touch-routes.mjs").read_text()

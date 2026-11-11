@@ -4,7 +4,7 @@ ConditionPathExists=!/run/live/medium
 
 [Timer]
 OnBootSec=90s
-OnUnitActiveSec=3min
+OnUnitActiveSec=24h
 AccuracySec=30s
 RandomizedDelaySec=15s
 Unit=enfoque-hardware-inicial.service

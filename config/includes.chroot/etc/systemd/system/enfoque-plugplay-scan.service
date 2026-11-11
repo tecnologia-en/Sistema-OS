@@ -1,0 +1,18 @@
+[Unit]
+Description=Enfoque OS - catalogo USB/PCI e verificacao de drivers
+After=systemd-udevd.service local-fs.target
+ConditionPathExists=!/run/live/medium
+ConditionVirtualization=!container
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/enfoque-plugplay --scan
+TimeoutStartSec=240
+Nice=12
+IOSchedulingClass=idle
+NoNewPrivileges=true
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+CapabilityBoundingSet=CAP_SYS_MODULE CAP_DAC_OVERRIDE CAP_FOWNER CAP_CHOWN CAP_SETUID CAP_SETGID
+UMask=0027

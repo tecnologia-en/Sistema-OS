@@ -1,0 +1,381 @@
+#!/usr/bin/env python3
+"""Enfoque OS 0.2.45: conservative USB plug-and-play using signed Debian APT.
+
+Existing kernel modalias/udev bindings are authoritative. Database entries may
+request only a hard-coded allowlist of signed distro packages/modules.
+Never execute binary code, commands, or repository URLs from hardware metadata.
+No arbitrary online database, PCI proprietary driver, or forced USB rebind.
+"""
+import argparse
+import datetime
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+import time
+
+CATALOG = Path("/etc/enfoque-os/drivers/catalog.json")
+STATE = Path("/var/lib/enfoque-os/plugplay.json")
+LOG = Path("/var/log/enfoque-os/plugplay.jsonl")
+LOCK = Path("/run/enfoque-plugplay.lock")
+USB_ROOT = Path("/sys/bus/usb/devices")
+PCI_ROOT = Path("/sys/bus/pci/devices")
+DEV_RE = re.compile(r"^[0-9]+-[0-9]+(?:\.[0-9]+)*$")
+PCI_RE = re.compile(r"^[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]$")
+MODULES = frozenset(("usbhid", "usb_storage", "uas", "uvcvideo",
+                     "usblp", "btusb", "snd_usb_audio", "cdc_acm", "r8152"))
+PKGS = frozenset(("usbutils", "pciutils", "udev", "kmod", "ipp-usb", "cups",
+                  "printer-driver-gutenprint", "printer-driver-escpr",
+                  "printer-driver-hpcups", "v4l-utils", "libgl1-mesa-dri",
+                  "mesa-vulkan-drivers", "firmware-realtek",
+                  "firmware-iwlwifi", "firmware-atheros",
+                  "firmware-brcm80211", "firmware-mediatek"))
+
+def run(argv, timeout=12):
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout,
+                           env={**os.environ, "LC_ALL": "C"})
+        return p.returncode, p.stdout, p.stderr
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return 124, "", str(error)
+
+def read(path):
+    try:
+        return path.read_text(encoding="utf8", errors="replace").strip()[:300]
+    except OSError:
+        return ""
+
+def stamp():
+    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+
+def record(category, message, **fields):
+    data = {"time": stamp(), "category":category, "message":str(message)[:150]}
+    for key, value in fields.items():
+        if key in ("device", "vid", "pid", "driver", "state"):
+            data[key] = str(value)[:120]
+    print(json.dumps(data, ensure_ascii=False), flush=True)
+    if os.geteuid() != 0:
+        return
+    LOG.parent.mkdir(parents=True, exist_ok=True, mode=0o750)
+    with LOG.open("a", encoding="utf8") as log:
+        log.write(json.dumps(data, ensure_ascii=False)+"\n")
+
+def load_catalog(path=CATALOG):
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("Catalogo de drivers ausente ou simbolico")
+    if os.geteuid()==0 and path.stat().st_uid!=0:
+        raise ValueError("Catalogo nao pertence ao root")
+    if path.stat().st_size>64_000:
+        raise ValueError("Catalogo excede o limite de tamanho")
+    doc=json.loads(path.read_text(encoding="utf8"))
+    if doc.get("schema") != 1:
+        raise ValueError("Catalogo de drivers de versao desconhecida")
+    policies=doc.get("security", {})
+    if (set(policies.get("allow_modules", []))-MODULES or
+            set(policies.get("allow_packages", []))-PKGS):
+        raise ValueError("Catalogo pede driver/pacote nao autorizado")
+    for rule in list(doc.get("usb", {}).get("devices", {}).values())+list(doc.get("usb", {}).get("interfaces", {}).values()):
+        if set(rule.get("modules", []))-MODULES or set(rule.get("packages", []))-PKGS:
+            raise ValueError("Associacao de driver nao autorizada")
+    return doc
+
+def interfaces(dev):
+    found=[]
+    for item in dev.parent.glob(dev.name+":*"):
+        cl=read(item/"bInterfaceClass").lower()
+        if re.fullmatch("[0-9a-f]{2}",cl):
+            found.append(cl)
+    return sorted(set(found))
+
+def detect_usb(instance, root=USB_ROOT):
+    if not DEV_RE.fullmatch(instance):
+        raise ValueError("Instancia USB invalida")
+    device=root/instance
+    if not device.exists() or not (device/"idVendor").is_file():
+        return None
+    vendor=read(device/"idVendor").lower()
+    product=read(device/"idProduct").lower()
+    if not re.fullmatch("[0-9a-f]{4}",vendor) or not re.fullmatch("[0-9a-f]{4}",product):
+        raise ValueError("Identificador USB inconsistente")
+    return {"device":instance,"vid":vendor,"pid":product,
+            "vendorName":read(device/"manufacturer"),
+            "productName":read(device/"product"),
+            "classes":interfaces(device),
+            "driver":device.resolve().name}
+
+def match(info, catalog):
+    usb=catalog["usb"]
+    exact=usb.get("devices", {}).get(info["vid"]+":"+info["pid"])
+    matches=[]
+    if exact:
+        matches.append(exact)
+    for code in info["classes"]:
+        item=usb.get("interfaces", {}).get(code)
+        if item:matches.append(item)
+    result={"name":(exact or {}).get("name") or info["productName"] or "Dispositivo USB",
+            "modules":[],"packages":[],"categories":[]}
+    for row in matches:
+        result["categories"].append(row.get("category", "unknown"))
+        for key in ("modules", "packages"):
+            for val in row.get(key, []):
+                if val not in result[key]:result[key].append(val)
+    return result
+
+def package_installed(name):
+    rc,out,_=run(["/usr/bin/dpkg-query","-W","-f="+"$"+"{Status}",name],8)
+    return rc==0 and "install ok installed" in out
+
+def trusted_install(package):
+    if package not in PKGS:
+        return False
+    if package_installed(package):
+        return True
+    # Do not race an Enfoque OS core upgrade or another apt transaction.
+    if run(["/usr/bin/systemctl","is-active","--quiet","enfoque-update-apply.service"],4)[0]==0:
+        record("apt","Atualizacao corporativa em andamento; driver adiado",driver=package,state="deferred")
+        return False
+    args=["/usr/bin/apt-get","-y","--no-remove","--no-install-recommends",
+          "-o","Dpkg::Lock::Timeout=8","-o","APT::Get::AllowUnauthenticated=false",
+          "install",package]
+    rc,_,err=run(args,145)
+    if rc==0 and package_installed(package):
+        record("apt","Pacote assinado instalado",driver=package,state="installed")
+        return True
+    record("apt","Instalacao de driver adiada; APT indisponivel",driver=package,state="deferred")
+    return False
+
+def rollback_new_driver(package):
+    """Rollback only an optional package installed by this event, never core CUPS.
+
+    Refuse a removal which would remove dependencies or another installed app.
+    A full crashed-kernel rollback requires the existing recovery boot workflow.
+    """
+    if package not in PKGS or package in ("cups","ipp-usb","udev","kmod"):
+        return False
+    args=["/usr/bin/apt-get","-s","remove",package]
+    rc,out,_=run(args,18)
+    if rc:
+        return False
+    removed=re.findall(r"(?m)^Remv\s+(\S+)",out)
+    if removed!=[package]:
+        record("rollback","Removal would affect additional packages; manual recovery needed",
+               driver=package,state="blocked")
+        return False
+    rc,_,_=run(["/usr/bin/apt-get","-y","-o","Dpkg::Lock::Timeout=8",
+                "remove",package],90)
+    if rc==0 and not package_installed(package):
+        record("rollback","Failed new driver rolled back; generic kernel driver retained",
+               driver=package,state="rolled-back")
+        return True
+    record("rollback","Rollback requires administrator review",
+           driver=package,state="needs-review")
+    return False
+
+def request_module(name):
+    if name not in MODULES:
+        return False
+    # modprobe blacklist is honored; no forced override, no out-of-tree downloads.
+    rc,_,_=run(["/usr/sbin/modprobe","-b",name],14)
+    return rc==0
+
+def notify(summary,detail):
+    user=Path("/run/user/1000/bus")
+    if not user.exists() or not Path("/usr/bin/notify-send").exists():
+        return
+    msg="".join(c for c in detail if c.isprintable())[:110]
+    run(["/usr/sbin/runuser","-u","enfoque","--","/usr/bin/env",
+         "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus",
+         "XDG_RUNTIME_DIR=/run/user/1000",
+         "/usr/bin/notify-send","-a","Enfoque OS","-t","4000",summary,msg],4)
+
+def usb_ipp_auto_queue(info):
+    """Create only one uniquely identified *local* IPP-over-USB queue.
+
+    Never create RAW/ESC-POS guesses, never replace queues or set defaults.
+    Multiple printers/endpoints require human selection to avoid a wrong fiscal device.
+    """
+    if "07" not in info["classes"]:
+        return False
+    device_count=0
+    try:
+        for item in USB_ROOT.iterdir():
+            if DEV_RE.fullmatch(item.name) and (item/"idVendor").exists() and "07" in interfaces(item):
+                device_count+=1
+    except OSError:
+        return False
+    if device_count!=1:
+        record("printer","Multiple USB printers; skipping ambiguous auto configuration",state="needs-review")
+        return False
+    rc,devices,_=run(["/usr/sbin/lpinfo","-v"],14)
+    if rc:return False
+    endpoints=[]
+    for row in devices.splitlines():
+        fields=row.split(maxsplit=1)
+        if len(fields)!=2:continue
+        uri=fields[1].strip()
+        if re.fullmatch(r"ipp://(?:localhost|127\.0\.0\.1):[0-9]{2,5}/ipp/print",uri):
+            endpoints.append(uri)
+    endpoints=sorted(set(endpoints))
+    if len(endpoints)!=1:
+        record("printer","IPP USB unico nao detectado; abrir painel para driver do fabricante",
+               device=info["device"],state="needs-review")
+        return False
+    uri=endpoints[0]
+    rc,configured,_=run(["/usr/bin/lpstat","-v"],10)
+    if rc or uri in configured:
+        return False
+    # Avoid a second queue if a legacy USB driver is already configured.
+    if "usb://" in configured or "ipp://localhost:" in configured:
+        record("printer","Already configured USB printer; keeping existing CUPS queue",state="preserved")
+        return False
+    queue="Enfoque_USB_IPP_"+info["vid"]+"_"+info["pid"]
+    if queue.lower() in configured.lower():
+        return False
+    rc,_,err=run(["/usr/sbin/lpadmin","-p",queue,"-E","-v",uri,
+                  "-m","everywhere","-o","printer-is-shared=false"],26)
+    if rc:
+        record("printer","IPP Everywhere unavailable; model requires manual validation",
+               device=info["device"],state="needs-review")
+        return False
+    record("printer","IPP USB driverless queue created without printing or changing default",
+           device=info["device"],driver="ipp-everywhere",state="installed")
+    return True
+
+def handle_usb(instance,catalog,dry_run=False,notify_user=True):
+    info=detect_usb(instance)
+    if not info:return False
+    # Ignore USB root hubs, not a newly attached peripheral.
+    if info["vid"]=="1d6b" and info["pid"] in ("0001","0002","0003"):
+        return False
+    plan=match(info,catalog)
+    name=plan["name"]
+    record("usb","Dispositivo conectado: "+name,device=instance,vid=info["vid"],pid=info["pid"],state="detected")
+    if dry_run:return True
+    installed_now=[]
+    for package in plan["packages"]:
+        if package not in PKGS:raise ValueError("Pacote fora da lista permitida")
+        was_installed=package_installed(package)
+        if trusted_install(package) and not was_installed:
+            installed_now.append(package)
+    failures=[]
+    for module in plan["modules"]:
+        if module not in MODULES:raise ValueError("Modulo fora da lista permitida")
+        if request_module(module):
+            record("driver","Kernel carregou driver compativel",device=instance,driver=module,state="ready")
+        else:
+            failures.append(module)
+            record("driver","Driver indisponivel; kernel continua no padrao",device=instance,driver=module,state="fallback")
+    if failures:
+        for package in installed_now:
+            rollback_new_driver(package)
+    if "printer" in plan["categories"] or "thermal-printer" in plan["categories"]:
+        # IPP Everywhere only if exactly one unconfigured local USB device is found.
+        # Vendor-specific / ESC-POS printers keep their known working queue.
+        usb_ipp_auto_queue(info)
+        run(["/usr/local/sbin/enfoque-thermal-print","--scan"],30)
+    if plan["categories"] and notify_user:
+        notify("Dispositivo conectado",name+" - driver verificado ou generico")
+    else:
+        record("usb","Novo periferico sem regra especifica; driver nativo mantido",device=instance,state="generic")
+    return True
+
+def scan_pci(root=PCI_ROOT):
+    devices=[]
+    try:
+        for item in root.iterdir():
+            if not PCI_RE.fullmatch(item.name):continue
+            kind=read(item/"class")
+            if kind.startswith(("0x03","0x02","0x04")):
+                drv=item/"driver"
+                devices.append({"pci":item.name,"class":kind,"driver":drv.resolve().name if drv.exists() else "kernel"})
+    except OSError:
+        pass
+    # Inventory only. Never automatically install proprietary PCI/graphics drivers.
+    record("pci","Inventario PCI grafico/rede/audio",state="kernel-managed")
+    return devices
+
+def check_updates(catalog):
+    # Refresh only existing signed Debian/Enfoque APT sources; never add an URL.
+    code,_,_=run(["/usr/bin/apt-get","-qq","-o","Dpkg::Lock::Timeout=5","update"],110)
+    if code:
+        record("updates","Atualizacao de catalogo APT adiada, sem instalar pacotes",state="deferred")
+        return
+    names=sorted(set(row for r in catalog["usb"]["interfaces"].values()
+                     for row in r.get("packages",[])) |
+                 set(row for r in catalog["usb"]["devices"].values()
+                     for row in r.get("packages",[])))
+    for package in names:
+        if package not in PKGS:continue
+        rc,out,_=run(["/usr/bin/apt-cache","policy",package],8)
+        if rc:
+            continue
+        installed=re.search(r"(?m)^\s*Installed:\s*(\S+)",out)
+        candidate=re.search(r"(?m)^\s*Candidate:\s*(\S+)",out)
+        if installed and candidate and installed.group(1)!="(none)" and candidate.group(1)!="(none)":
+            if run(["/usr/bin/dpkg","--compare-versions",installed.group(1),"lt",candidate.group(1)],5)[0]==0:
+                record("updates","Atualizacao de driver disponivel; instalacao depende de manutencao",
+                       driver=package,state="update-available")
+            else:
+                record("updates","Driver sem atualizacao nova",driver=package,state="checked")
+
+def main(argv=None):
+    parser=argparse.ArgumentParser()
+    option=parser.add_mutually_exclusive_group(required=True)
+    option.add_argument("--usb")
+    option.add_argument("--scan",action="store_true")
+    option.add_argument("--check-updates",action="store_true")
+    parser.add_argument("--dry-run",action="store_true")
+    args=parser.parse_args(argv)
+    if os.geteuid()!=0 and not args.dry_run:
+        parser.error("Requer root pelo systemd")
+    if Path("/run/live/medium").exists() and not args.dry_run:
+        return 0
+    catalog=load_catalog()
+    if args.usb and not DEV_RE.fullmatch(args.usb):
+        parser.error("Nome USB incorreto")
+    if not args.dry_run:
+        LOCK.parent.mkdir(parents=True,exist_ok=True)
+        fd=os.open(LOCK,os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)
+        try:
+            fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:
+            record("service","Outro evento de driver em andamento; reavaliar pelo timer",state="deferred")
+            return 0
+    try:
+        if args.usb:
+            handle_usb(args.usb,catalog,args.dry_run)
+        elif args.check_updates:
+            check_updates(catalog)
+        else:
+            pci=scan_pci()
+            found=0
+            usb=[]
+            for dev in USB_ROOT.iterdir():
+                if DEV_RE.fullmatch(dev.name):
+                    info=detect_usb(dev.name)
+                    if info:usb.append({k:info[k] for k in ("device","vid","pid","classes","productName")})
+                    if handle_usb(dev.name,catalog,args.dry_run,notify_user=False):
+                        found+=1
+            if not args.dry_run:
+                STATE.parent.mkdir(parents=True,exist_ok=True)
+                fd,tmp=tempfile.mkstemp(dir=STATE.parent,prefix=".plugplay-")
+                try:
+                    with os.fdopen(fd,"w",encoding="utf8") as stream:
+                        json.dump({"lastScan":stamp(),"usb":usb,"pci":pci},stream,ensure_ascii=False,indent=2)
+                        stream.write("\n");stream.flush();os.fsync(stream.fileno())
+                    os.chmod(tmp,0o640);os.replace(tmp,STATE)
+                finally:
+                    if os.path.exists(tmp):os.unlink(tmp)
+            record("inventory","Inventario USB concluido: "+str(found),state="ready")
+            if not args.dry_run:check_updates(catalog)
+        return 0
+    finally:
+        if not args.dry_run:
+            os.close(fd)
+
+if __name__=="__main__":
+    sys.exit(main())

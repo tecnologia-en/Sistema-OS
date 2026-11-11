@@ -41,11 +41,17 @@ def managed(name):
         "usr/libexec/xfce4-screensaver/enfoque-",
         "usr/local/sbin/enfoque-",
         "usr/local/lib/enfoque-",
+        "usr/local/libexec/enfoque-",
+        "usr/lib/cups/filter/enfoque-",
         "usr/share/applications/enfoque-",
         "usr/share/applications/screensavers/enfoque-",
         "usr/share/backgrounds/enfoque-os/",
         "usr/share/enfoque-monitora/",
         "etc/opt/chrome/policies/managed/40-enfoque-monitora.json",
+        "etc/opt/chrome/policies/managed/82-enfoque-thermal-print.json",
+        "etc/enfoque-os/drivers/",
+        "etc/udev/rules.d/88-enfoque-",
+        "etc/udev/rules.d/89-enfoque-",
         "etc/xdg/mimeapps.list",
         "etc/X11/xorg.conf.d/90-enfoque-tela-ligada.conf",
         "usr/share/icons/EnfoqueFluent/",
@@ -117,6 +123,18 @@ def manifest():
         "usr/share/enfoque-monitora/monitora-1.1.0.crx",
         "etc/opt/chrome/policies/managed/40-enfoque-monitora.json",
         "etc/xdg/mimeapps.list",
+        "etc/opt/chrome/policies/managed/82-enfoque-thermal-print.json",
+        "etc/enfoque-os/drivers/catalog.json",
+        "etc/udev/rules.d/88-enfoque-printer-autodetect.rules",
+        "etc/udev/rules.d/89-enfoque-plugplay.rules",
+        "usr/local/sbin/enfoque-thermal-print",
+        "usr/local/sbin/enfoque-thermal-chrome",
+        "usr/local/sbin/enfoque-plugplay",
+        "usr/local/libexec/enfoque-thermal-raster-trim",
+        "usr/lib/cups/filter/enfoque-thermal-raster",
+        "etc/systemd/system/enfoque-thermal-print.timer",
+        "etc/systemd/system/enfoque-thermal-chrome.timer",
+        "etc/systemd/system/enfoque-plugplay-scan.timer",
         "etc/X11/xorg.conf.d/90-enfoque-tela-ligada.conf",
         "etc/systemd/system/enfoque-monitora-provision.timer",
         "etc/systemd/system/enfoque-monitora-provision.service",
@@ -184,7 +202,7 @@ def create(output):
             f"Package: {PACKAGE}\nVersion: {release}-{revision}\n"
             "Section: admin\nPriority: optional\nArchitecture: all\n"
             "Maintainer: Enfoque TI <tecnologia@enfoquepapelaria.com.br>\n"
-            "Depends: python3, python3-gi, python3-gi-cairo, python3-cairo, gir1.2-gtk-3.0, apt, systemd, ca-certificates, gpgv, openssh-client, openssh-server, xfce4-genmon-plugin, xfce4-appfinder, xfce4-docklike-plugin, papirus-icon-theme, timeshift, rsync, restic, smartmontools, mate-polkit, pkexec, xfce4-screensaver, xdotool, nftables, network-manager, network-manager-gnome, wpasupplicant, rfkill, onboard, firmware-iwlwifi, firmware-realtek, firmware-atheros, firmware-brcm80211, firmware-mediatek, xarchiver, thunar-archive-plugin, 7zip, zip, unzip, bluez, bluez-obexd, blueman, pulseaudio-module-bluetooth\n"
+            "Depends: python3, python3-gi, python3-gi-cairo, python3-cairo, gir1.2-gtk-3.0, apt, systemd, ca-certificates, gpgv, openssh-client, openssh-server, xfce4-genmon-plugin, xfce4-appfinder, xfce4-docklike-plugin, papirus-icon-theme, timeshift, rsync, restic, smartmontools, mate-polkit, pkexec, xfce4-screensaver, xdotool, nftables, network-manager, network-manager-gnome, wpasupplicant, rfkill, onboard, firmware-iwlwifi, firmware-realtek, firmware-atheros, firmware-brcm80211, firmware-mediatek, xarchiver, thunar-archive-plugin, 7zip, zip, unzip, bluez, bluez-obexd, blueman, pulseaudio-module-bluetooth, python3-cups, cups, cups-filters, libcupsimage2t64, firmware-amd-graphics, firmware-intel-graphics, kmod, v4l-utils\n"
             "Description: Enfoque OS corporate system components and updater\n"
             " Replaces custom Enfoque OS files on managed workstations using\n"
             " individually signed APT repository updates.\n",
@@ -211,6 +229,8 @@ def create(output):
             "  systemctl disable --now enfoque-update-apply.timer >/dev/null 2>&1 || true\n"
             "  systemctl enable enfoque-firewall.service >/dev/null 2>&1 || true\n"
             "  systemctl enable bluetooth.service >/dev/null 2>&1 || true\n"
+            "  systemctl enable enfoque-plugplay-scan.timer enfoque-thermal-print.timer enfoque-thermal-chrome.timer >/dev/null 2>&1 || true\n"
+            "  command -v udevadm >/dev/null 2>&1 && udevadm control --reload >/dev/null 2>&1 || true\n"
             "  if [ -d /run/systemd/system ] && [ ! -e /run/live/medium ]; then\n"
             "    systemctl start enfoque-monitora-provision.timer >/dev/null 2>&1 || true\n"
             "    if [ -d /sys/class/bluetooth ] && [ -n \"$(ls -A /sys/class/bluetooth 2>/dev/null)\" ]; then systemctl start bluetooth.service >/dev/null 2>&1 || true; fi\n"

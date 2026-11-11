@@ -1,0 +1,17 @@
+[Unit]
+Description=Enfoque OS - ajustar automaticamente novas filas de cupom termico
+After=cups.service
+Wants=cups.service
+ConditionPathExists=!/run/live/medium
+ConditionVirtualization=!container
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/enfoque-thermal-print --scan
+TimeoutStartSec=90
+Nice=12
+IOSchedulingClass=idle
+NoNewPrivileges=true
+ProtectHome=true
+PrivateTmp=true
+UMask=0027

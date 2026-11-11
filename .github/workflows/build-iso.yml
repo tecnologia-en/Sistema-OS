@@ -13,6 +13,11 @@ on:
       - 'scripts/check-project.sh'
       - 'test/test_release_043.py'
       - 'test/test_release_044.py'
+      - 'test/test_release_045.py'
+      - 'src/**'
+      - 'scripts/build-thermal-raster.sh'
+      - 'scripts/test-thermal-raster.sh'
+      - 'test/thermal_raster_fixture.c'
       - 'test/zero-touch-monitora.test.mjs'
       - '.github/workflows/build-iso.yml'
 
@@ -64,6 +69,7 @@ jobs:
                 syslinux-common isolinux grub-pc-bin grub-efi-amd64-bin \
                 mtools dosfstools ca-certificates git python3 \
                 build-essential pkg-config patch libxi-dev libx11-dev \
+                libcupsimage2-dev \
                 libice-dev libwnck-3-dev xfce4-dev-tools libxfce4ui-2-dev \
                 libxfce4panel-2.0-dev libxfce4windowing-0-dev intltool
               bash scripts/check-project.sh
@@ -87,6 +93,9 @@ jobs:
           dpkg-deb --contents "$pkg" > "$RUNNER_TEMP/enfoque-core-package-contents.txt"
           grep -Fq 'usr/local/sbin/enfoque-update' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
           grep -Fq 'etc/xdg/mimeapps.list' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
+          for required in usr/local/sbin/enfoque-plugplay usr/local/sbin/enfoque-thermal-print usr/local/libexec/enfoque-thermal-raster-trim usr/lib/cups/filter/enfoque-thermal-raster etc/udev/rules.d/89-enfoque-plugplay.rules etc/enfoque-os/drivers/catalog.json; do
+            grep -Fq "$required" "$RUNNER_TEMP/enfoque-core-package-contents.txt"
+          done
           dependencies=$(dpkg-deb -f "$pkg" Depends)
           for required in xarchiver thunar-archive-plugin 7zip zip unzip bluez blueman pulseaudio-module-bluetooth; do
             printf '%s\n' "$dependencies" | tr ',' '\n' | grep -Eq "^[[:space:]]*${required}([[:space:]]|\\(|$)"

@@ -14,6 +14,9 @@ command -v lb >/dev/null || { echo 'Instale o pacote live-build' >&2; exit 1; }
 test -s "$ROOT/config/package-lists/enfoque-base.list.chroot" || { echo 'Lista de pacotes ausente' >&2; exit 1; }
 # Compile the audited Docklike attention plugin before packaging the Enfoque core.
 bash "$ROOT/scripts/build-docklike.sh"
+# Compile no-zoom thermal white-space trimmer within the trusted Debian 13 builder.
+bash "$ROOT/scripts/build-thermal-raster.sh"
+bash "$ROOT/scripts/test-thermal-raster.sh"
 # Register Enfoque-owned components with dpkg, enabling future signed APT upgrades.
 python3 "$ROOT/scripts/build-update-package.py" --output "$ROOT/config/packages.chroot"
 if [[ -e "$TARGET" ]]; then echo "ISO ja existe: $TARGET (nao sobrescrita)" >&2; exit 1; fi

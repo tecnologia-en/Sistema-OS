@@ -88,6 +88,12 @@ firmware-realtek
 firmware-atheros
 firmware-brcm80211
 firmware-mediatek
+# Plug and play USB/PCI, firmware assinado Debian e pipeline termico seguro.
+firmware-amd-graphics
+firmware-intel-graphics
+kmod
+v4l-utils
+libcupsimage2t64
 # Mouse/touch accessible on-screen keyboard, including the Live installer.
 onboard
 arc-theme
@@ -115,6 +121,7 @@ xdg-utils
 dbus-user-session
 cups
 cups-client
+python3-cups
 cups-filters
 ipp-usb
 system-config-printer

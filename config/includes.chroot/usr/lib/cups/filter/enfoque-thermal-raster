@@ -1,0 +1,23 @@
+#!/bin/bash
+# CUPS raster in -> Enfoque blank-roll trimmer -> original manufacturer driver.
+# Never execute filter names from a device or the network; only allow known
+# installed filters, and retain their exact original PPD options.
+set -euo pipefail
+test "$#" -ge 5 || exit 2
+test -n "${PPD:-}" && test -f "$PPD" && test ! -L "$PPD" || exit 2
+original=$(sed -n 's/^\*enfoqueOriginalRasterFilter: "\([A-Za-z0-9_-]*\)"/\1/p' "$PPD" | head -n 1)
+case "$original" in
+    rastertohprt|rastertoescpos|rastertobematech|rastertoepson|rastertostar|rastertobixolon)
+        ;;
+    *) echo 'ERROR: unrecognized thermal raster driver' >&2; exit 2 ;;
+esac
+filter="/usr/lib/cups/filter/$original"
+test -x "$filter" && test ! -L "$filter" || exit 2
+if test "$#" -ge 6; then
+    exec 3< "$6"
+else
+    exec 3<&0
+fi
+# The converter changes only the trailing white page length, never raster
+# width, scaling or QR. A failure stops the print instead of sending garbage.
+"/usr/local/libexec/enfoque-thermal-raster-trim" <&3 | "$filter" "$1" "$2" "$3" "$4" "$5"

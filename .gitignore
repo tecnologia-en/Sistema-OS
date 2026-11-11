@@ -14,3 +14,4 @@ __pycache__/
 
 # Compiled reproducibly inside the Debian 13 GitHub CI builder.
 config/includes.chroot/usr/local/lib/enfoque-docklike/libdocklike.so
+config/includes.chroot/usr/local/libexec/enfoque-thermal-raster-trim

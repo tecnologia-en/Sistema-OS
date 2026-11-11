@@ -1,0 +1,14 @@
+[Unit]
+Description=Enfoque OS - configurar novas impressoras termicas sem alterar A4
+ConditionPathExists=!/run/live/medium
+
+[Timer]
+OnBootSec=90s
+OnUnitActiveSec=12min
+AccuracySec=40s
+RandomizedDelaySec=30s
+Persistent=true
+Unit=enfoque-thermal-print.service
+
+[Install]
+WantedBy=timers.target

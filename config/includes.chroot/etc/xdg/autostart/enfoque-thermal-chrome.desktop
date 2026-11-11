@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Configuracao de cupom termico
+Exec=/usr/local/sbin/enfoque-thermal-chrome --apply-if-closed
+Terminal=false
+NoDisplay=true
+OnlyShowIn=XFCE;

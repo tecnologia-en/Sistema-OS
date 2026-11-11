@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""Initialize the receipt print preview profile at 100%, no margins, no footer.
+
+Only on machines with a configured thermal CUPS queue; never edit a running
+Chrome session. This is run as the ordinary 'enfoque' user, not root.
+"""
+import argparse
+import datetime
+import json
+import os
+from pathlib import Path
+import pwd
+import re
+import subprocess
+import sys
+import tempfile
+
+PROFILE=Path("/home/enfoque/.config/google-chrome/Default/Preferences")
+MARKER=Path("/home/enfoque/.local/state/enfoque-os/thermal-chrome-profile.json")
+THERMAL=re.compile(r"(elgin|bematech|daruma|thermal|termic|receipt|cupom|tsp|bixolon|pos.?58|pos.?80|i9)",re.I)
+
+def active_chrome(uid):
+    for process in Path("/proc").iterdir():
+        if not process.name.isdigit():continue
+        try:
+            if process.stat().st_uid != uid:continue
+            values=(process/"cmdline").read_bytes().split(b"\0")
+            binary=values[0] if values else b""
+            if binary.endswith((b"/chrome",b"/google-chrome-stable")) and not any(
+                    v.startswith(b"--type=") for v in values[1:]):
+                return True
+        except OSError:
+            pass
+    return False
+
+def thermal_present():
+    try:
+        cmd=subprocess.run(["/usr/bin/lpstat","-v"],capture_output=True,text=True,timeout=5)
+    except (OSError,subprocess.TimeoutExpired):
+        return False
+    return cmd.returncode==0 and any(THERMAL.search(row) for row in cmd.stdout.splitlines())
+
+def atomic(path,body,mode=0o600):
+    path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+    if path.is_symlink():
+        raise ValueError("Symlink in Chrome profile")
+    fd,temp=tempfile.mkstemp(dir=path.parent,prefix=".enfoque-profile-")
+    try:
+        with os.fdopen(fd,"wb") as stream:
+            stream.write(body);stream.flush();os.fsync(stream.fileno())
+        os.chmod(temp,mode);os.replace(temp,path)
+    finally:
+        if os.path.exists(temp):os.unlink(temp)
+
+def configure():
+    expected=pwd.getpwnam("enfoque").pw_uid
+    if os.geteuid()!=expected:raise PermissionError("Must run as local desktop user")
+    if not thermal_present():
+        return "no-thermal-queue"
+    if active_chrome(expected):
+        return "chrome-active-deferred"
+    if PROFILE.is_symlink() or (PROFILE.exists() and (not PROFILE.is_file() or PROFILE.stat().st_uid!=expected)):
+        raise ValueError("Untrusted Chrome profile")
+    raw=PROFILE.read_bytes() if PROFILE.exists() else b"{}"
+    if len(raw)>20_000_000:raise ValueError("Oversized Chrome preferences")
+    data=json.loads(raw)
+    if not isinstance(data,dict):raise ValueError("Invalid Chrome preferences")
+    print_settings=data.setdefault("printing",{}).setdefault("print_preview_sticky_settings",{})
+    if not isinstance(print_settings,dict):raise ValueError("Invalid printing preferences")
+    preview=json.loads(print_settings.get("appState") or "{}")
+    if not isinstance(preview,dict):raise ValueError("Invalid print preview state")
+    preview.update({"version":2,"marginsType":1,"scaling":"100",
+                    "scalingType":0,"scalingTypePdf":0,
+                    "isHeaderFooterEnabled":False})
+    preview.pop("customMargins",None)
+    next_state=json.dumps(preview,ensure_ascii=False,separators=(",",":"))
+    if print_settings.get("appState")==next_state:
+        return "already-ready"
+    print_settings["appState"]=next_state
+    # The backup is created only once; Chrome always remains closed during write.
+    backup=PROFILE.parent/"Preferences.enfoque-thermal-backup"
+    if PROFILE.exists() and not backup.exists():atomic(backup,raw)
+    atomic(PROFILE,json.dumps(data,ensure_ascii=False,separators=(",",":")).encode("utf8"))
+    atomic(MARKER,json.dumps({"applied":True,
+                              "timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                              "margins":"none","zoom":100,"header_footer":False}).encode("utf8"))
+    return "updated"
+
+def main(argv=None):
+    p=argparse.ArgumentParser()
+    p.add_argument("--apply-if-closed",action="store_true",required=True)
+    args=p.parse_args(argv)
+    outcome=configure()
+    print("ENFOQUE_CHROME_THERMAL",outcome)
+    return 0
+
+if __name__=="__main__":sys.exit(main())

@@ -1,0 +1,230 @@
+#!/usr/bin/env python3
+"""Apply safe zero-extra-feed defaults to ALL recognized CUPS receipt queues.
+
+No print jobs are sent, no printer default/USB URI is changed. A tiny timer and
+USB hotplug cover new registrations. Manufacturer PPD filters may opt in to the
+original-scale CUPS-raster trailing-white trimmer (not A4/label printers).
+"""
+import argparse
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+
+PPD_ROOT=Path("/etc/cups/ppd")
+BACKUPS=Path("/var/lib/enfoque-os/thermal-ppd-backups")
+STATE=Path("/var/lib/enfoque-os/thermal-printers.json")
+LOCK=Path("/run/enfoque-thermal-print.lock")
+QUEUE_RE=re.compile(r"^[A-Za-z0-9_.-]{1,110}$")
+ORIGINAL_FILTERS=frozenset((
+    "rastertohprt","rastertoescpos","rastertobematech",
+    "rastertoepson","rastertostar","rastertobixolon"))
+CUPS_FILTER="enfoque-thermal-raster"
+THERMAL_HINT=re.compile(
+    r"\b(elgin|bematech|daruma|epson\s*tm|star\s*tsp|bixolon|sweda|"
+    r"thermal|receipt|ticket|cupom|pos.?58|pos.?80|rp.?80|tm.?t20|i9)\b",
+    re.I)
+LABEL_HINT=re.compile(r"(label|zebra|etiquet|dymo)",re.I)
+CUPS_LINE=re.compile(r'^\*cupsFilter:\s*"application/vnd\.cups-raster\s+(\d+)\s+([A-Za-z0-9_-]+)"\s*$',re.M)
+LPSTAT_LINE=re.compile(r"^(?:device for|dispositivo de) ([A-Za-z0-9_.-]+): (.+)$",re.I)
+
+def run(args,limit=12):
+    try:
+        p=subprocess.run(args,capture_output=True,text=True,timeout=limit)
+        return p.returncode,p.stdout,p.stderr
+    except (OSError,subprocess.TimeoutExpired) as e:
+        return 124,"",str(e)
+
+def queues():
+    rc,out,_=run(["/usr/bin/lpstat","-v"])
+    if rc:return {}
+    found={}
+    for line in out.splitlines():
+        m=LPSTAT_LINE.match(line.strip())
+        if m and QUEUE_RE.fullmatch(m.group(1)):
+            found[m.group(1)]=m.group(2).strip()
+    return found
+
+def ppd_for(queue):
+    if not QUEUE_RE.fullmatch(queue):raise ValueError("Invalid queue name")
+    f=PPD_ROOT/(queue+".ppd")
+    if (not f.is_file() or f.is_symlink() or f.stat().st_uid != 0 or
+            f.stat().st_size>2_000_000):
+        return ""
+    return f.read_text(encoding="latin1")
+
+def thermal(queue,ppd):
+    if not ppd or "*DefaultPageSize:" not in ppd:return False
+    model=" ".join((queue,*(re.findall(r'^\*(?:NickName|ModelName|ShortNickName):\s*(.+)$',ppd,re.M))))
+    # No silent auto-crop of label stock or ordinary A4 printers.
+    if LABEL_HINT.search(model):return False
+    default=re.search(r'^\*DefaultPageSize:\s*(\S+)',ppd,re.M)
+    paper=default.group(1) if default else ""
+    roll=bool(re.search(r"(?i)(?:roll|receipt|58mm|80mm|58x|80x)",paper))
+    small_roll=bool(re.search(r'(?i)^\*PageSize\s+(?:Roll|Receipt|RP)[A-Za-z0-9_-]*',ppd,re.M))
+    return (roll or small_roll) and (bool(THERMAL_HINT.search(model)) or roll)
+
+def option_choices(text):
+    opts={}
+    for row in text.splitlines():
+        if ":" not in row:continue
+        key,values=row.split(":",1)
+        name=key.split("/",1)[0]
+        if name.isidentifier():
+            opts[name]=[v.lstrip("*") for v in values.split()]
+    return opts
+
+def current_defaults(text):
+    out={}
+    for row in text.splitlines():
+        if ":" not in row:continue
+        key,values=row.split(":",1)
+        name=key.split("/",1)[0]
+        star=next((v[1:] for v in values.split() if v.startswith("*")),None)
+        if name.isidentifier() and star is not None:out[name]=star
+    return out
+
+def desired_options(opts):
+    values={
+        "PostPrintAction":"2",
+        "CutMode":"1",
+        "PaperSaveBottom":"1",
+        "PaperSaveMode":"1",
+        "FormfeedLength":"0",
+        "CutPaperLength":"0",
+        "AutoCut":"On",
+        "Cutter":"On",
+        "CutType":"Partial",
+        "FeedLength":"0",
+    }
+    # Set only native choices advertised by this specific printer PPD.
+    return {k:v for k,v in values.items() if v in opts.get(k,[])}
+
+def patch_ppd(ppd):
+    """Return (patched PPD, original executable) only for raster-based receipt drivers."""
+    if "*enfoqueOriginalRasterFilter:" in ppd:return ppd,"already"
+    match=CUPS_LINE.search(ppd)
+    if not match or match.group(2) not in ORIGINAL_FILTERS:
+        return ppd,None
+    original=match.group(2)
+    return (ppd[:match.start()]+
+            '*cupsFilter: "application/vnd.cups-raster '+match.group(1)+' '+CUPS_FILTER+'"'+
+            ppd[match.end():]+
+            '\n*enfoqueOriginalRasterFilter: "'+original+'"\n',original)
+
+def queue_idle(queue):
+    rc,out,_=run(["/usr/bin/lpstat","-W","not-completed","-o",queue],10)
+    return rc==0 and not out.strip()
+
+def register_ppd(queue,previous,patched,uri):
+    """Transactional driver wrapper: keep queue URI/default, restore PPD on failure."""
+    if patched==previous:return False
+    if not queue_idle(queue):return False
+    # Need compiled binary and executable wrapper before touching any queue.
+    if not (Path("/usr/local/libexec/enfoque-thermal-raster-trim").is_file() and
+            os.access("/usr/local/libexec/enfoque-thermal-raster-trim",os.X_OK) and
+            os.access("/usr/lib/cups/filter/"+CUPS_FILTER,os.X_OK)):
+        return False
+    BACKUPS.mkdir(parents=True,exist_ok=True,mode=0o700)
+    backup=BACKUPS/(queue+".ppd")
+    if backup.exists():
+        if backup.is_symlink() or backup.stat().st_uid!=0:raise ValueError("Invalid original PPD backup")
+    else:
+        fdesc,temp=tempfile.mkstemp(dir=BACKUPS,prefix=".backup-")
+        try:
+            with os.fdopen(fdesc,"wb") as b:b.write(previous.encode("latin1"));b.flush();os.fsync(b.fileno())
+            os.chmod(temp,0o600);os.replace(temp,backup)
+        finally:
+            if os.path.exists(temp):os.unlink(temp)
+    with tempfile.TemporaryDirectory(prefix="enfoque-ppd-",dir="/tmp") as d:
+        candidate=Path(d)/(queue+".ppd")
+        candidate.write_bytes(patched.encode("latin1"))
+        rc,_,err=run(["/usr/bin/cupstestppd","-q",str(candidate)],12)
+        if rc:
+            print("PPD validation failed for",queue,err[-140:],file=sys.stderr)
+            return False
+        rc,_,err=run(["/usr/sbin/lpadmin","-p",queue,"-P",str(candidate)],25)
+        if rc:
+            print("PPD update failed",queue,err[-140:],file=sys.stderr)
+            return False
+    # Verify both the original printer address and CUPS PPD remained correct.
+    check=ppd_for(queue)
+    if CUPS_FILTER not in check or queues().get(queue)!=uri:
+        run(["/usr/sbin/lpadmin","-p",queue,"-P",str(backup)],25)
+        raise RuntimeError("CUPS changed printer URI or discarded managed filter")
+    return True
+
+def scan(dry_run=False):
+    result={"total":0,"thermal":[],"changed":[],"errors":[]}
+    for queue,uri in sorted(queues().items()):
+        result["total"]+=1
+        try:
+            ppd=ppd_for(queue)
+            if not thermal(queue,ppd):continue
+            result["thermal"].append(queue)
+            if not queue_idle(queue):
+                result["errors"].append(queue+":queue busy, deferred")
+                continue
+            rc,opts,error=run(["/usr/bin/lpoptions","-p",queue,"-l"],10)
+            if rc:
+                result["errors"].append(queue+":CUPS options unavailable")
+                continue
+            selected=desired_options(option_choices(opts))
+            defaults=current_defaults(opts)
+            changes={key:value for key,value in selected.items() if defaults.get(key)!=value}
+            patched,origin=patch_ppd(ppd)
+            # Do not change printer name, default destination, port or scaling.
+            if dry_run:
+                result["changed"].append({"queue":queue,"options":selected,"filter":origin})
+                continue
+            installed_filter=register_ppd(queue,ppd,patched,uri) if origin not in (None,"already") else False
+            if changes:
+                args=["/usr/sbin/lpadmin","-p",queue]
+                for option,value in changes.items():args.extend(("-o",option+"="+value))
+                r,_,err=run(args,18)
+                if r:
+                    result["errors"].append(queue+":failed to set native options "+err[-110:])
+                    continue
+            if changes or installed_filter:
+                result["changed"].append({"queue":queue,"options":changes,
+                                           "trimmer":installed_filter or origin=="already"})
+        except Exception as exc:
+            result["errors"].append(queue+":"+str(exc)[:180])
+    if not dry_run:
+        STATE.parent.mkdir(parents=True,exist_ok=True)
+        fd,tmp=tempfile.mkstemp(dir=STATE.parent,prefix=".thermal-")
+        try:
+            with os.fdopen(fd,"w",encoding="utf8") as f:
+                json.dump(result,f,indent=2,ensure_ascii=False);f.write("\n")
+                f.flush();os.fsync(f.fileno())
+            os.chmod(tmp,0o640);os.replace(tmp,STATE)
+        finally:
+            if os.path.exists(tmp):os.unlink(tmp)
+    return result
+
+def main(argv=None):
+    cli=argparse.ArgumentParser()
+    cli.add_argument("--scan",action="store_true",required=True)
+    cli.add_argument("--dry-run",action="store_true")
+    args=cli.parse_args(argv)
+    if os.geteuid()!=0 and not args.dry_run:cli.error("root required")
+    if Path("/run/live/medium").exists() and not args.dry_run:return 0
+    if not args.dry_run:
+        fd=os.open(LOCK,os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)
+        try:fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:return 0
+    try:
+        out=scan(args.dry_run)
+        print(json.dumps(out,ensure_ascii=False))
+        return 0 if not out["errors"] else 0  # timer retries later
+    finally:
+        if not args.dry_run:os.close(fd)
+
+if __name__=="__main__":
+    sys.exit(main())

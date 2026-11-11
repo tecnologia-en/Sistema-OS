@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "release": "0.2.45",
+  "security": {
+    "package_sources": ["debian-signed-apt", "enfoque-signed-apt"],
+    "allow_packages": [
+      "usbutils", "pciutils", "udev", "kmod", "ipp-usb", "cups",
+      "printer-driver-gutenprint", "printer-driver-escpr", "printer-driver-hpcups",
+      "v4l-utils", "libgl1-mesa-dri", "mesa-vulkan-drivers",
+      "firmware-realtek", "firmware-iwlwifi", "firmware-atheros",
+      "firmware-brcm80211", "firmware-mediatek"
+    ],
+    "allow_modules": [
+      "usbhid", "usb_storage", "uas", "uvcvideo", "usblp",
+      "btusb", "snd_usb_audio", "cdc_acm", "r8152"
+    ]
+  },
+  "usb": {
+    "devices": {
+      "20d1:7008": {
+        "name": "Elgin i9 - impressora termica USB",
+        "category": "thermal-printer",
+        "modules": [],
+        "packages": ["cups"],
+        "manual_vendor_driver": true,
+        "generic": "USB Printer Class (IPP se o firmware suportar)"
+      }
+    },
+    "interfaces": {
+      "03": {"name": "Mouse/teclado HID", "category": "hid", "modules": ["usbhid"], "packages": []},
+      "08": {"name": "Pendrive/armazenamento USB", "category": "storage", "modules": ["usb_storage"], "packages": []},
+      "0e": {"name": "Webcam UVC", "category": "camera", "modules": ["uvcvideo"], "packages": []},
+      "07": {"name": "Impressora USB", "category": "printer", "modules": [], "packages": ["ipp-usb", "cups"]},
+      "e0": {"name": "Adaptador Bluetooth", "category": "bluetooth", "modules": ["btusb"], "packages": []},
+      "01": {"name": "Audio USB", "category": "audio", "modules": ["snd_usb_audio"], "packages": []},
+      "02": {"name": "Comunicacao USB/serial", "category": "serial", "modules": ["cdc_acm"], "packages": []}
+    }
+  }
+}

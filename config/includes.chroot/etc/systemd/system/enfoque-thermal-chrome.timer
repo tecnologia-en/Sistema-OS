@@ -1,0 +1,13 @@
+[Unit]
+Description=Enfoque OS - preparar Chrome termico apos encerramento normal
+ConditionPathExists=!/run/live/medium
+
+[Timer]
+OnBootSec=90s
+OnUnitActiveSec=8min
+AccuracySec=50s
+Unit=enfoque-thermal-chrome.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target
