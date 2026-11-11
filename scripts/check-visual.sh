@@ -48,6 +48,10 @@ do
   [ "$magic" = '89504e470d0a1a0a' ] || fail "PNG invalido: $p"
 done
 need config/includes.chroot/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml
+need config/includes.chroot/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml
+need config/includes.chroot/etc/xdg/xfce4/kiosk/kioskrc
+grep -Fq 'unlocked="root"' "$ROOT/config/includes.chroot/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'painel nao restrito a root'
+grep -Fq 'CustomizePanel=NONE' "$ROOT/config/includes.chroot/etc/xdg/xfce4/kiosk/kioskrc" || fail 'XFCE kiosk sem bloqueio de propriedades'
 if ! grep -Fq 'unlocked="root"' "$ROOT/config/includes.chroot/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml"; then fail 'wallpaper corporativo sem bloqueio de alteracao'; fi
 if ! grep -Fq 'wallpaper.jpg' "$ROOT/config/includes.chroot/usr/local/bin/enfoque-aplicar-visual"; then fail 'wallpaper desatualizado'; fi
 magic="$(od -An -tx1 -N3 "$ROOT/config/includes.chroot/usr/share/backgrounds/enfoque-os/wallpaper.jpg" | tr -d ' \n')"

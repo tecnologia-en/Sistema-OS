@@ -17,8 +17,10 @@ jobs:
             --env DEBIAN_FRONTEND=noninteractive \
             debian:trixie bash -euc '
               apt-get update -qq
-              apt-get install -y -qq --no-install-recommends gcc libcupsimage2-dev
+              apt-get install -y -qq --no-install-recommends gcc libcupsimage2-dev pkg-config xfconf libxfconf-0-3 libxfconf-0-dev dbus-x11
               bash scripts/build-thermal-raster.sh
+              gcc -std=c11 -Wall -Wextra -Werror -O2 -o /tmp/enfoque-xfce-kiosk-probe test/xfce_kiosk_probe.c $(pkg-config --cflags --libs libxfconf-0)
+              bash scripts/test-xfce-kiosk-policy.sh
             '
       - name: Validar estrutura e scripts
         run: bash ./scripts/check-project.sh

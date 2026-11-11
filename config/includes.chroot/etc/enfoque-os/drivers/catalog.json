@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "release": "0.2.45",
+  "release": "0.2.46",
   "security": {
     "package_sources": ["debian-signed-apt", "enfoque-signed-apt"],
     "allow_packages": [

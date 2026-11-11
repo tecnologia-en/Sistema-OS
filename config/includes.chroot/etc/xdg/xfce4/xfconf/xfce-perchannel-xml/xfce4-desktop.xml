@@ -2,9 +2,9 @@
 <!-- Enfoque OS: bloqueia apenas wallpaper/backdrop para usuários comuns.
      Administradores root podem atualizar a política na imagem/gerenciamento.
      Xfconf permite unlocked=root em configuração de sistema. -->
-<channel name="xfce4-desktop" version="1.0">
+<channel name="xfce4-desktop" version="1.0" unlocked="root">
   <!-- Policy for fresh desktop sessions: Lixeira plus two business shortcuts only. -->
-  <property name="desktop-icons" type="empty">
+  <property name="desktop-icons" type="empty" unlocked="root">
     <property name="style" type="int" value="2"/>
     <property name="file-icons" type="empty">
       <property name="show-trash" type="bool" value="true"/>

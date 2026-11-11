@@ -14,10 +14,14 @@ on:
       - 'test/test_release_043.py'
       - 'test/test_release_044.py'
       - 'test/test_release_045.py'
+      - 'test/test_release_046.py'
+      - 'test/xfce_kiosk_probe.c'
+      - 'scripts/test-xfce-kiosk-policy.sh'
       - 'src/**'
       - 'scripts/build-thermal-raster.sh'
       - 'scripts/test-thermal-raster.sh'
       - 'test/thermal_raster_fixture.c'
+      - 'docs/RELEASE_046_PORTAL_PANEL_LOCK.md'
       - 'test/zero-touch-monitora.test.mjs'
       - '.github/workflows/build-iso.yml'
 
@@ -45,8 +49,10 @@ jobs:
             --env DEBIAN_FRONTEND=noninteractive \
             debian:trixie bash -euc '
               apt-get update -qq
-              apt-get install -y -qq --no-install-recommends gcc libcupsimage2-dev
+              apt-get install -y -qq --no-install-recommends gcc libcupsimage2-dev pkg-config xfconf libxfconf-0-3 libxfconf-0-dev dbus-x11
               bash scripts/build-thermal-raster.sh
+              gcc -std=c11 -Wall -Wextra -Werror -O2 -o /tmp/enfoque-xfce-kiosk-probe test/xfce_kiosk_probe.c $(pkg-config --cflags --libs libxfconf-0)
+              bash scripts/test-xfce-kiosk-policy.sh
             '
 
       - name: Check project on host
@@ -106,11 +112,14 @@ jobs:
           dpkg-deb --contents "$pkg" > "$RUNNER_TEMP/enfoque-core-package-contents.txt"
           grep -Fq 'usr/local/sbin/enfoque-update' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
           grep -Fq 'etc/xdg/mimeapps.list' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
+          for required in etc/xdg/xfce4/kiosk/kioskrc etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml; do
+            grep -Fq "$required" "$RUNNER_TEMP/enfoque-core-package-contents.txt"
+          done
           for required in usr/local/sbin/enfoque-plugplay usr/local/sbin/enfoque-thermal-print usr/local/libexec/enfoque-thermal-raster-trim usr/lib/cups/filter/enfoque-thermal-raster etc/udev/rules.d/89-enfoque-plugplay.rules etc/enfoque-os/drivers/catalog.json; do
             grep -Fq "$required" "$RUNNER_TEMP/enfoque-core-package-contents.txt"
           done
           dependencies=$(dpkg-deb -f "$pkg" Depends)
-          for required in xarchiver thunar-archive-plugin 7zip zip unzip bluez blueman pulseaudio-module-bluetooth; do
+          for required in xarchiver thunar-archive-plugin 7zip zip unzip bluez blueman pulseaudio-module-bluetooth xdg-desktop-portal xdg-desktop-portal-gtk; do
             printf '%s\n' "$dependencies" | tr ',' '\n' | grep -Eq "^[[:space:]]*${required}([[:space:]]|\\(|$)"
           done
           grep -Fq 'usr/local/sbin/enfoque-zero-touch' "$RUNNER_TEMP/enfoque-core-package-contents.txt"

@@ -70,6 +70,11 @@ def managed(name):
         "etc/enfoque-os/firewall.nft",
         "etc/tmpfiles.d/enfoque-remote.conf",
         "etc/xdg/xfce4/panel/docklike.rc",
+        "etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml",
+        "etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml",
+        "etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml",
+        "etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml",
+        "etc/xdg/xfce4/kiosk/kioskrc",
         "etc/ssh/sshd_config.d/95-enfoque-suporte.conf",
         "etc/enfoque-ssh/vps-known-hosts",
         "etc/sudoers.d/97-enfoque-ti",
@@ -105,6 +110,11 @@ def manifest():
         raise RuntimeError("Suspiciously small Enfoque package")
     required = (
         "etc/enfoque-os-release",
+        "etc/xdg/xfce4/kiosk/kioskrc",
+        "etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml",
+        "etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml",
+        "etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml",
+        "etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml",
         "usr/local/sbin/enfoque-update",
         "usr/local/sbin/enfoque-update-control",
         "usr/local/sbin/enfoque-update-nextboot",
@@ -202,7 +212,7 @@ def create(output):
             f"Package: {PACKAGE}\nVersion: {release}-{revision}\n"
             "Section: admin\nPriority: optional\nArchitecture: all\n"
             "Maintainer: Enfoque TI <tecnologia@enfoquepapelaria.com.br>\n"
-            "Depends: python3, python3-gi, python3-gi-cairo, python3-cairo, gir1.2-gtk-3.0, apt, systemd, ca-certificates, gpgv, openssh-client, openssh-server, xfce4-genmon-plugin, xfce4-appfinder, xfce4-docklike-plugin, papirus-icon-theme, timeshift, rsync, restic, smartmontools, mate-polkit, pkexec, xfce4-screensaver, xdotool, nftables, network-manager, network-manager-gnome, wpasupplicant, rfkill, onboard, firmware-iwlwifi, firmware-realtek, firmware-atheros, firmware-brcm80211, firmware-mediatek, xarchiver, thunar-archive-plugin, 7zip, zip, unzip, bluez, bluez-obexd, blueman, pulseaudio-module-bluetooth, python3-cups, cups, cups-filters, libcupsimage2t64, firmware-amd-graphics, firmware-intel-graphics, kmod, v4l-utils\n"
+            "Depends: python3, python3-gi, python3-gi-cairo, python3-cairo, gir1.2-gtk-3.0, apt, systemd, ca-certificates, gpgv, openssh-client, openssh-server, xfce4-genmon-plugin, xfce4-appfinder, xfce4-docklike-plugin, papirus-icon-theme, timeshift, rsync, restic, smartmontools, mate-polkit, pkexec, xfce4-screensaver, xdotool, nftables, network-manager, network-manager-gnome, wpasupplicant, rfkill, xdg-desktop-portal, xdg-desktop-portal-gtk, onboard, firmware-iwlwifi, firmware-realtek, firmware-atheros, firmware-brcm80211, firmware-mediatek, xarchiver, thunar-archive-plugin, 7zip, zip, unzip, bluez, bluez-obexd, blueman, pulseaudio-module-bluetooth, python3-cups, cups, cups-filters, libcupsimage2t64, firmware-amd-graphics, firmware-intel-graphics, kmod, v4l-utils\n"
             "Description: Enfoque OS corporate system components and updater\n"
             " Replaces custom Enfoque OS files on managed workstations using\n"
             " individually signed APT repository updates.\n",

@@ -117,7 +117,10 @@ fonts-liberation
 adwaita-icon-theme
 usbutils
 pciutils
+# Native file chooser for Google Chrome / GTK on XFCE (planilhas .xlsx/.xls).
 xdg-utils
+xdg-desktop-portal
+xdg-desktop-portal-gtk
 dbus-user-session
 cups
 cups-client

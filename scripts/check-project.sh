@@ -59,6 +59,7 @@ grep -q 'timezone=America/Sao_Paulo' "$ROOT/scripts/build-iso.sh"
 echo "Versao definida: $version"
 python3 -m unittest discover -s "$ROOT/test" -p "test_release_044.py" -q
 python3 -m unittest discover -s "$ROOT/test" -p "test_release_045.py" -q
+python3 -m unittest discover -s "$ROOT/test" -p "test_release_046.py" -q
 # Debian Security e incluido via repositorio oficial explicito. --security false
 # desativa somente a origem padrao incompatível do live-build Ubuntu.
 for f in "$ROOT/config/archives/trixie-security.list.chroot" "$ROOT/config/archives/trixie-security.list.binary"; do
