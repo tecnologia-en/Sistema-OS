@@ -1,0 +1,136 @@
+#!/usr/bin/python3
+"""Wallpaper escurecido para o tema nativo do xfce4-screensaver.
+
+Este processo nao desbloqueia nem autentica a sessao: a senha continua
+exclusivamente com o xfce4-screensaver/PAM. Ele apenas prepara a imagem do
+papel de parede do usuario e executa o slideshow do proprio XFCE.
+"""
+import hashlib
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+
+DEFAULT_WALLPAPER = Path("/usr/share/backgrounds/enfoque-os/wallpaper.jpg")
+SLIDESHOW = "/usr/libexec/xfce4-screensaver/slideshow"
+MAX_FILE_BYTES = 64 * 1024 * 1024
+
+
+def configured_wallpaper():
+    """Escolhe imagem configurada pelo XFCE, sem executar texto da configuracao."""
+    try:
+        result = subprocess.run(
+            ["/usr/bin/xfconf-query", "-c", "xfce4-desktop", "-lv"],
+            capture_output=True, text=True, check=True, timeout=4,
+        )
+        entries = {}
+        for line in result.stdout.splitlines():
+            pieces = line.strip().split(None, 1)
+            if len(pieces) == 2 and pieces[0].endswith("/last-image"):
+                entries[pieces[0]] = pieces[1].strip()
+        # Prioriza monitor principal e workspace 0, sem caminhos inventados.
+        keys = sorted(entries, key=lambda p: (
+            0 if "/monitor0/workspace0/" in p else 1 if "/workspace0/" in p else 2,
+            p,
+        ))
+        for key in keys:
+            path = Path(entries[key])
+            if valid_image(path):
+                return path
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return DEFAULT_WALLPAPER
+
+
+def valid_image(path):
+    try:
+        return (path.is_absolute() and path.is_file()
+                and 0 < path.stat().st_size <= MAX_FILE_BYTES)
+    except OSError:
+        return False
+
+
+def render_dimmed(source, destination):
+    # GdkPixbuf pertence ao stack GTK3 ja instalado no Enfoque OS.
+    import gi
+    gi.require_version("GdkPixbuf", "2.0")
+    from gi.repository import GdkPixbuf
+
+    pix = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+        str(source), 2560, 1440, True,
+    )
+    width, height = pix.get_width(), pix.get_height()
+    if not width or not height:
+        raise ValueError("Imagem de papel de parede invalida")
+    dim = GdkPixbuf.Pixbuf.new(
+        GdkPixbuf.Colorspace.RGB, False, 8, width, height,
+    )
+    dim.fill(0x080C12FF)  # Base escura, nunca preta pura.
+    # Preserva as formas e as cores; reduz a luminosidade em ~44%.
+    pix.composite(
+        dim, 0, 0, width, height, 0, 0, 1, 1,
+        GdkPixbuf.InterpType.BILINEAR, 143,
+    )
+    dim.savev(str(destination), "png", [], [])
+
+
+def prepare():
+    cache_base = Path(os.environ.get("XDG_CACHE_HOME") or
+                      str(Path.home() / ".cache"))
+    dest_dir = cache_base / "enfoque-os" / "idle-wallpaper-042"
+    dest_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(dest_dir, 0o700)
+    source = configured_wallpaper()
+    if not valid_image(source):
+        raise FileNotFoundError("Papel de parede indisponivel")
+    s = source.stat()
+    fingerprint = hashlib.sha256(
+        f"{source}:{s.st_mtime_ns}:{s.st_size}:042".encode("utf8")
+    ).hexdigest()
+    image = dest_dir / "wallpaper.png"
+    metadata = dest_dir / ".source.json"
+    try:
+        existing = json.loads(metadata.read_text("utf8"))
+        if existing.get("fingerprint") == fingerprint and valid_image(image):
+            return dest_dir
+    except (OSError, ValueError, json.JSONDecodeError):
+        pass
+
+    # Nao expoe arquivo parcialmente escrito ao protetor de tela.
+    fd, tmp_name = tempfile.mkstemp(prefix=".image-", suffix=".png", dir=dest_dir)
+    os.close(fd)
+    tmp = Path(tmp_name)
+    try:
+        render_dimmed(source, tmp)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, image)
+        fd, meta_tmp = tempfile.mkstemp(prefix=".meta-", dir=dest_dir)
+        with os.fdopen(fd, "w", encoding="utf8") as handle:
+            json.dump({"fingerprint": fingerprint}, handle)
+        os.replace(meta_tmp, metadata)
+        os.chmod(metadata, 0o600)
+    finally:
+        tmp.unlink(missing_ok=True)
+    return dest_dir
+
+
+def main():
+    try:
+        location = prepare()
+    except Exception as error:
+        # Nao desabilita o bloqueio de senha se o wallpaper estiver com erro.
+        print(f"Enfoque OS: imagem do descanso indisponivel: {error}", file=sys.stderr)
+        location = DEFAULT_WALLPAPER.parent
+    if "--prepare-only" in sys.argv:
+        print(location)
+        return
+    # O slideshow oficial usa XSCREENSAVER_WINDOW do XFCE; nao cria tela
+    # independente sobre o bloqueio e nao interfere com PAM.
+    os.execv(SLIDESHOW, [SLIDESHOW, "--location=" + str(location),
+                          "--sort-images"])
+
+
+if __name__ == "__main__":
+    main()

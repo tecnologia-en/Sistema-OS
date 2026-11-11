@@ -22,7 +22,7 @@ PACKAGE_BUILDER = ROOT / "scripts/build-update-package.py"
 
 class ScreenFirewall036Tests(unittest.TestCase):
     def test_release_and_core_packages(self):
-        self.assertIn('VERSION="0.2.41"', (SYS / "etc/enfoque-os-release").read_text())
+        self.assertIn('VERSION="0.2.42"', (SYS / "etc/enfoque-os-release").read_text())
         packages = (ROOT / "config/package-lists/enfoque-base.list.chroot").read_text()
         self.assertIn("\nxfce4-screensaver\n", packages)
         self.assertIn("\nnftables\n", packages)
@@ -31,17 +31,18 @@ class ScreenFirewall036Tests(unittest.TestCase):
         self.assertIn("OnlyShowIn=XFCE;", desktop)
         self.assertIn("Exec=/usr/local/bin/enfoque-proteger-tela", desktop)
 
-    def test_screen_is_dark_3_minutes_then_locked_at_15(self):
+    def test_wallpaper_dimmed_3_minutes_then_locked_at_15(self):
         code = LOCK_SCRIPT.read_text()
         self.assertIn("if [ -e /run/live/medium ]; then", code)
-        self.assertIn("set_value /saver/enabled bool false", code)
+        self.assertIn("set_value xfce4-screensaver /saver/enabled bool false", code)
         self.assertIn("xfce4-screensaver-command --exit", code)
-        self.assertIn("set_value /saver/mode int 0", code)
-        self.assertIn("set_value /saver/idle-activation/delay int 3", code)
-        self.assertIn("set_value /lock/saver-activation/delay int 12", code)
-        self.assertIn("set_value /lock/enabled bool true", code)
-        self.assertIn("set_value /lock/sleep-activation bool true", code)
-        self.assertIn("set_value /saver/fullscreen-inhibit bool false", code)
+        self.assertIn("set_value xfce4-screensaver /saver/mode int 2", code)
+        self.assertIn("enfoque-wallpaper-dim",code)
+        self.assertIn("set_value xfce4-screensaver /saver/idle-activation/delay int 3", code)
+        self.assertIn("set_value xfce4-screensaver /lock/saver-activation/delay int 12", code)
+        self.assertIn("set_value xfce4-screensaver /lock/enabled bool true", code)
+        self.assertIn("set_value xfce4-screensaver /lock/sleep-activation bool true", code)
+        self.assertIn("set_value xfce4-screensaver /saver/fullscreen-inhibit bool false", code)
 
     def test_installed_session_applies_config_once_without_root(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -64,7 +65,17 @@ class ScreenFirewall036Tests(unittest.TestCase):
             env = dict(os.environ)
             env.update(HOME=tmp, DISPLAY=":777", TEST_XFCONF_LOG=str(log),
                        PATH=str(executables) + ":/usr/bin:/bin")
-            run = subprocess.run(["/bin/sh", str(LOCK_SCRIPT)], env=env,
+            # Mock the installed theme and executable, without touching a real PC.
+            theme = base / "enfoque-wallpaper-dim.desktop"
+            theme.write_text("[Desktop Entry]\n")
+            saver = base / "enfoque-papel-parede-ocioso"
+            saver.write_text("#!/bin/sh\nexit 0\n")
+            saver.chmod(0o755)
+            policy = base / "policy.sh"
+            policy.write_text(LOCK_SCRIPT.read_text()
+                .replace("/usr/local/bin/enfoque-papel-parede-ocioso", str(saver))
+                .replace("/usr/share/applications/screensavers/enfoque-wallpaper-dim.desktop", str(theme)))
+            run = subprocess.run(["/bin/sh", str(policy)], env=env,
                                  text=True, capture_output=True, timeout=8)
             self.assertEqual(run.returncode, 0, run.stderr)
             configured = log.read_text()
@@ -76,11 +87,11 @@ class ScreenFirewall036Tests(unittest.TestCase):
             ):
                 self.assertIn(term, configured)
             count = len(log.read_text().splitlines())
-            again = subprocess.run(["/bin/sh", str(LOCK_SCRIPT)], env=env,
+            again = subprocess.run(["/bin/sh", str(policy)], env=env,
                                    text=True, capture_output=True, timeout=8)
             self.assertEqual(again.returncode, 0, again.stderr)
             self.assertEqual(count, len(log.read_text().splitlines()))
-            self.assertTrue((base / ".config/enfoque-os/tela-036-configurada").is_file())
+            self.assertTrue((base / ".config/enfoque-os/tela-042-configurada").is_file())
 
     def test_firewall_does_not_modify_other_tables_or_block_outbound(self):
         rules = FIREWALL.read_text()

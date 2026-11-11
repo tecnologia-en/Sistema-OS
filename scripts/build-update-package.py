@@ -32,9 +32,11 @@ def managed(name):
         return False
     dirs = (
         "usr/local/bin/enfoque-",
+        "usr/libexec/xfce4-screensaver/enfoque-",
         "usr/local/sbin/enfoque-",
         "usr/local/lib/enfoque-",
         "usr/share/applications/enfoque-",
+        "usr/share/applications/screensavers/enfoque-",
         "usr/share/backgrounds/enfoque-os/",
         "usr/share/icons/EnfoqueFluent/",
         "usr/share/doc/enfoque-os/",
@@ -98,6 +100,9 @@ def manifest():
         "etc/systemd/system/enfoque-firewall.service",
         "etc/enfoque-os/firewall.nft",
         "usr/local/bin/enfoque-proteger-tela",
+        "usr/local/bin/enfoque-papel-parede-ocioso",
+        "usr/libexec/xfce4-screensaver/enfoque-wallpaper-dim",
+        "usr/share/applications/screensavers/enfoque-wallpaper-dim.desktop",
         "usr/local/bin/enfoque-admin-status",
         "etc/xdg/autostart/enfoque-proteger-tela.desktop",
         "usr/local/sbin/enfoque-ssh-support",

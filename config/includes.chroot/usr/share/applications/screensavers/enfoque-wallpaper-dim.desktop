@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Enfoque OS - Papel de parede esmaecido
+Comment=Exibe o papel de parede escurecido sem desligar o monitor
+Exec=/usr/libexec/xfce4-screensaver/enfoque-wallpaper-dim
+TryExec=/usr/libexec/xfce4-screensaver/enfoque-wallpaper-dim
+Categories=Screensaver;
+OnlyShowIn=XFCE;
