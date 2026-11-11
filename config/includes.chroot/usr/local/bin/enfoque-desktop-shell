@@ -46,6 +46,8 @@ import unicodedata
 APP_IDS = [
     ("google-chrome.desktop", "Google Chrome", "google-chrome"),
     ("thunar.desktop", "Arquivos", "system-file-manager"),
+    ("xarchiver.desktop", "Compactador ZIP / 7z", "package-x-generic"),
+    ("blueman-manager.desktop", "Bluetooth", "bluetooth"),
     ("enfoque-intranet.desktop", "Intranet", "enfoque-intranet"),
     ("enfoque-sige.desktop", "SIGE", "enfoque-sige"),
     ("libreoffice-writer.desktop", "Writer", "libreoffice-writer"),

@@ -57,6 +57,7 @@ grep -q 'keyboard-layouts=br' "$ROOT/scripts/build-iso.sh"
 grep -q 'keyboard-model=abnt2' "$ROOT/scripts/build-iso.sh"
 grep -q 'timezone=America/Sao_Paulo' "$ROOT/scripts/build-iso.sh"
 echo "Versao definida: $version"
+python3 -m unittest discover -s "$ROOT/test" -p "test_release_044.py" -q
 # Debian Security e incluido via repositorio oficial explicito. --security false
 # desativa somente a origem padrao incompatível do live-build Ubuntu.
 for f in "$ROOT/config/archives/trixie-security.list.chroot" "$ROOT/config/archives/trixie-security.list.binary"; do

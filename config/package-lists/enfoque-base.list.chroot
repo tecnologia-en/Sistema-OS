@@ -63,14 +63,25 @@ fonts-crosextra-carlito
 mousepad
 ristretto
 xfconf
+# Gerenciador grafico ZIP/7z/TAR e clique direito no Thunar.
 thunar
+thunar-archive-plugin
+xarchiver
+7zip
+zip
+unzip
 gvfs
 network-manager
 network-manager-gnome
 nftables
 # Wireless authentication is a hard requirement: apt-recommends=false omits it otherwise.
 wpasupplicant
+# BlueZ + Blueman (pareamento XFCE) e audio Bluetooth no PulseAudio atual.
 rfkill
+bluez
+bluez-obexd
+blueman
+pulseaudio-module-bluetooth
 # Offline firmware for common Wi-Fi adapters. Included both in Live ISO and installed OS.
 firmware-iwlwifi
 firmware-realtek

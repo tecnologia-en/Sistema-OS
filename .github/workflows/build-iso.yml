@@ -12,6 +12,7 @@ on:
       - 'scripts/build-iso.sh'
       - 'scripts/check-project.sh'
       - 'test/test_release_043.py'
+      - 'test/test_release_044.py'
       - 'test/zero-touch-monitora.test.mjs'
       - '.github/workflows/build-iso.yml'
 
@@ -85,6 +86,11 @@ jobs:
           test "$(dpkg-deb -f "$pkg" Version)" = "${version}-${revision:-1}"
           dpkg-deb --contents "$pkg" > "$RUNNER_TEMP/enfoque-core-package-contents.txt"
           grep -Fq 'usr/local/sbin/enfoque-update' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
+          grep -Fq 'etc/xdg/mimeapps.list' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
+          dependencies=$(dpkg-deb -f "$pkg" Depends)
+          for required in xarchiver thunar-archive-plugin 7zip zip unzip bluez blueman pulseaudio-module-bluetooth; do
+            printf '%s\n' "$dependencies" | tr ',' '\n' | grep -Eq "^[[:space:]]*${required}([[:space:]]|\\(|$)"
+          done
           grep -Fq 'usr/local/sbin/enfoque-zero-touch' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
           grep -Fq 'usr/local/sbin/enfoque-tunnel' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
           grep -Fq 'usr/local/sbin/enfoque-live-session' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
