@@ -9,6 +9,17 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - name: Preparar filtro termico Debian 13 para validacao
+        run: |
+          docker run --rm \
+            --mount type=bind,source="$GITHUB_WORKSPACE",target=/workspace \
+            --workdir /workspace \
+            --env DEBIAN_FRONTEND=noninteractive \
+            debian:trixie bash -euc '
+              apt-get update -qq
+              apt-get install -y -qq --no-install-recommends gcc libcupsimage2-dev
+              bash scripts/build-thermal-raster.sh
+            '
       - name: Validar estrutura e scripts
         run: bash ./scripts/check-project.sh
       - name: Testar tela grafica, inscricao Mesh e dispositivos USB

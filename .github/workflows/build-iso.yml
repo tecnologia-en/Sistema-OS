@@ -36,6 +36,19 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      - name: Compile Debian 13 thermal filter before host tests
+        run: |
+          # The CUPS thermal raster binary is reproducibly built, not stored in Git.
+          docker run --rm \
+            --mount type=bind,source="$GITHUB_WORKSPACE",target=/workspace \
+            --workdir /workspace \
+            --env DEBIAN_FRONTEND=noninteractive \
+            debian:trixie bash -euc '
+              apt-get update -qq
+              apt-get install -y -qq --no-install-recommends gcc libcupsimage2-dev
+              bash scripts/build-thermal-raster.sh
+            '
+
       - name: Check project on host
         run: bash scripts/check-project.sh
 
