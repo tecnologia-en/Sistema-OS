@@ -10,7 +10,7 @@ test -f "$DEB"
 NAME="$(dpkg-deb -f "$DEB" Package)"
 VER="$(dpkg-deb -f "$DEB" Version)"
 ARCH="$(dpkg-deb -f "$DEB" Architecture)"
-[[ "$NAME" == "enfoque-os-core" && "$VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+-1$ && "$ARCH" == "all" ]] || {
+[[ "$NAME" == "enfoque-os-core" && "$VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[1-9][0-9]*$ && "$ARCH" == "all" ]] || {
   echo "Invalid Enfoque package" >&2; exit 1;
 }
 ROOT=/srv/enfoque-os-archive

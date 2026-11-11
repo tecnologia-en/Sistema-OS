@@ -79,7 +79,8 @@ jobs:
           test -s "$pkg"
           test "$(dpkg-deb -f "$pkg" Package)" = 'enfoque-os-core'
           version=$(sed -n 's/^VERSION="\([^"]*\)"/\1/p' config/includes.chroot/etc/enfoque-os-release)
-          test "$(dpkg-deb -f "$pkg" Version)" = "${version}-1"
+          revision=$(sed -n 's/^PACKAGE_REVISION="\([1-9][0-9]*\)"/\1/p' config/includes.chroot/etc/enfoque-os-release)
+          test "$(dpkg-deb -f "$pkg" Version)" = "${version}-${revision:-1}"
           dpkg-deb --contents "$pkg" > "$RUNNER_TEMP/enfoque-core-package-contents.txt"
           grep -Fq 'usr/local/sbin/enfoque-update' "$RUNNER_TEMP/enfoque-core-package-contents.txt"
           grep -Fq 'usr/local/sbin/enfoque-zero-touch' "$RUNNER_TEMP/enfoque-core-package-contents.txt"

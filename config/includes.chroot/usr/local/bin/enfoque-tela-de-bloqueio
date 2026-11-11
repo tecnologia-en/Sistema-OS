@@ -1,9 +1,9 @@
 #!/usr/bin/python3
-"""Visual corporativo do xfce4-screensaver 0.2.43 (NUNCA autentica usuario).
+"""Visual do descanso Enfoque OS 0.2.43, sem obter teclado ou senha.
 
-O processo e incorporado pelo XSCREENSAVER_WINDOW / GtkPlug do XFCE. O
-xfce4-screensaver continua com controle exclusivo do teclado, PAM e senha.
-Ao sair, anima apenas o painel de fundo, sem interferir na autorizacao.
+Renderiza DIRETAMENTE na janela X11 fornecida pelo xfce4-screensaver via
+XSCREENSAVER_WINDOW (nao cria uma janela nem GtkPlug independente).
+O proprio XFCE decide quando bloquear, mostrar dialogo PAM e liberar a sessao.
 """
 import datetime
 import importlib.machinery
@@ -17,130 +17,138 @@ FALLBACK = "/usr/libexec/xfce4-screensaver/slideshow"
 WALL_HELPER = "/usr/local/bin/enfoque-papel-parede-ocioso"
 
 
-def fallback():
-    # Um problema visual NUNCA desabilita a autenticacao do XFCE.
+def wallpaper():
     try:
-        loader=importlib.machinery.SourceFileLoader("enfoque_wall",WALL_HELPER)
-        spec=importlib.util.spec_from_loader(loader.name,loader)
-        helper=importlib.util.module_from_spec(spec)
+        loader = importlib.machinery.SourceFileLoader("enfoque_wall", WALL_HELPER)
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        helper = importlib.util.module_from_spec(spec)
         loader.exec_module(helper)
-        folder=helper.prepare()
+        folder = helper.prepare()
+        image = folder / "wallpaper.png"
+        if image.is_file():
+            return image, folder
     except Exception:
-        folder=Path("/usr/share/backgrounds/enfoque-os")
-    os.execv(FALLBACK,[FALLBACK,"--location="+str(folder),"--sort-images"])
+        pass
+    return Path("/usr/share/backgrounds/enfoque-os/wallpaper.jpg"), Path("/usr/share/backgrounds/enfoque-os")
+
+
+def fallback():
+    # Se falhar o relogio, a tela de descanso nativa continua disponivel
+    # e o XFCE nunca perde a responsabilidade da autenticacao por senha.
+    _, folder = wallpaper()
+    os.execv(FALLBACK, [FALLBACK, "--location=" + str(folder), "--sort-images"])
+
+
+def draw_label(cr, label, cx, cy, size, bold=False, alpha=1.0):
+    import cairo
+    cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL,
+                        cairo.FONT_WEIGHT_BOLD if bold else cairo.FONT_WEIGHT_NORMAL)
+    cr.set_font_size(size)
+    ext = cr.text_extents(label)
+    cr.set_source_rgba(1, 1, 1, alpha)
+    cr.move_to(cx - ext.width / 2 - ext.x_bearing, cy)
+    cr.show_text(label)
 
 
 def main():
-    xid=os.environ.get("XSCREENSAVER_WINDOW","").strip()
-    if not xid or not xid.lower().startswith(("0x",)) and not xid.isdigit():
+    raw = os.environ.get("XSCREENSAVER_WINDOW", "").strip()
+    try:
+        xid = int(raw, 0)
+        if not 1 <= xid <= 0xFFFFFFFF:
+            raise ValueError("XID invalido")
+    except (TypeError, ValueError):
         fallback()
+        return
+
     try:
         import gi
-        gi.require_version("Gtk","3.0")
-        gi.require_version("GdkPixbuf","2.0")
-        from gi.repository import Gtk,Gdk,GdkPixbuf,GLib
+        # Conversao PyCairo <-> Gdk depende da ponte GI-Cairo.
+        gi.require_foreign("cairo")
+        gi.require_version("Gdk", "3.0")
+        gi.require_version("GdkX11", "3.0")
+        gi.require_version("GdkPixbuf", "2.0")
+        from gi.repository import Gdk, GdkX11, GdkPixbuf, GLib
         import cairo
 
-        # Nunca criar janela independente: somente desenhar dentro da janela
-        # de bloqueio gerenciada pelo proprio XFCE.
-        plug=Gtk.Plug.new(int(xid,0))
-        plug.set_title("Enfoque OS - Tela de descanso")
-        overlay=Gtk.Overlay()
-        plug.add(overlay)
+        # Use exatamente a superficie X11 cedida pelo protetor nativo.
+        Gdk.init([])
+        display = Gdk.Display.get_default()
+        if display is None or not isinstance(display, GdkX11.X11Display):
+            raise RuntimeError("Sessao X11 indisponivel")
+        window = GdkX11.X11Window.foreign_new_for_display(display, xid)
+        if window is None:
+            raise RuntimeError("Janela de descanso nao existe")
+        filename, _ = wallpaper()
         try:
-            loader=importlib.machinery.SourceFileLoader("enfoque_wall",WALL_HELPER)
-            spec=importlib.util.spec_from_loader(loader.name,loader)
-            helper=importlib.util.module_from_spec(spec)
-            loader.exec_module(helper)
-            image=helper.prepare()/"wallpaper.png"
-            if not image.is_file():
-                image=Path("/usr/share/backgrounds/enfoque-os/wallpaper.jpg")
-            background=GdkPixbuf.Pixbuf.new_from_file(str(image))
+            background = GdkPixbuf.Pixbuf.new_from_file(str(filename))
         except Exception:
-            background=None
+            background = None
 
-        canvas=Gtk.DrawingArea()
-        def draw(widget, cr):
-            w=max(1,widget.get_allocated_width())
-            h=max(1,widget.get_allocated_height())
-            cr.set_source_rgb(.025,.045,.07)
+        loop = GLib.MainLoop()
+        exit_frame = [0]
+        exiting = [False]
+
+        def redraw():
+            width = max(1, window.get_width())
+            height = max(1, window.get_height())
+            cr = Gdk.cairo_create(window)
+            cr.set_source_rgb(0.022, 0.045, 0.07)
             cr.paint()
-            if background:
-                iw,ih=background.get_width(),background.get_height()
-                scale=max(w/iw,h/ih)
-                dw,dh=iw*scale,ih*scale
+            if background is not None:
+                iw, ih = background.get_width(), background.get_height()
+                ratio = max(width / max(1, iw), height / max(1, ih))
+                cw, ch = iw * ratio, ih * ratio
                 cr.save()
-                cr.translate((w-dw)/2,(h-dh)/2)
-                cr.scale(scale,scale)
-                Gdk.cairo_set_source_pixbuf(cr,background,0,0)
+                cr.translate((width - cw) / 2, (height - ch) / 2)
+                cr.scale(ratio, ratio)
+                Gdk.cairo_set_source_pixbuf(cr, background, 0, 0)
                 cr.paint()
                 cr.restore()
-            # Vinheta translucida discreta para legibilidade do relogio.
-            cr.set_source_rgba(.018,.038,.06,.29)
-            cr.rectangle(0,0,w,h)
-            cr.fill()
-            return False
-        canvas.connect("draw",draw)
-        overlay.add(canvas)
-        content=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12)
-        content.set_halign(Gtk.Align.CENTER)
-        content.set_valign(Gtk.Align.CENTER)
-        content.set_margin_bottom(85)
-        content.set_margin_top(40)
-        clock=Gtk.Label()
-        clock.set_name("enfoque-lock-clock")
-        date=Gtk.Label()
-        date.set_name("enfoque-lock-date")
-        sub=Gtk.Label(label="ENFOQUE OS")
-        sub.set_name("enfoque-lock-brand")
-        hint=Gtk.Label(label="Pressione qualquer tecla para continuar")
-        hint.set_name("enfoque-lock-hint")
-        for item in (clock,date,sub,hint):
-            content.pack_start(item,False,False,0)
-        overlay.add_overlay(content)
-        css=Gtk.CssProvider()
-        css.load_from_data(b'''
-          #enfoque-lock-clock {font-size:92px;font-weight:300;color:#fff;}
-          #enfoque-lock-date {font-size:24px;font-weight:500;color:#fff;}
-          #enfoque-lock-brand {font-size:13px;font-weight:700;color:rgba(255,255,255,.82);}
-          #enfoque-lock-hint {font-size:15px;color:rgba(255,255,255,.9);margin-top:35px;}
-        ''')
-        Gtk.StyleContext.add_provider_for_screen(
-            Gdk.Screen.get_default(),css,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-        def redraw_clock():
-            now=datetime.datetime.now()
-            clock.set_text(now.strftime("%H:%M"))
-            days=("segunda-feira","terca-feira","quarta-feira","quinta-feira",
-                  "sexta-feira","sabado","domingo")
-            date.set_text(f"{days[now.weekday()].capitalize()}, {now.day:02d}/{now.month:02d}/{now.year}")
+            cr.set_source_rgba(0.016, 0.028, 0.05, 0.29)
+            cr.paint()
+
+            now = datetime.datetime.now()
+            daynames = ("segunda-feira", "terca-feira", "quarta-feira",
+                        "quinta-feira", "sexta-feira", "sabado", "domingo")
+            trans = 0 if not exiting[0] else exit_frame[0] * min(22, height * .025)
+            alpha = 1.0 if not exiting[0] else max(0, 1.0 - exit_frame[0] / 14)
+            cx = width / 2
+            cy = height * 0.42 - trans
+            draw_label(cr, now.strftime("%H:%M"), cx, cy, min(100, width * .1), alpha=alpha)
+            draw_label(cr, f"{daynames[now.weekday()].capitalize()}, {now.day:02d}/{now.month:02d}/{now.year}",
+                       cx, cy + 47, min(24, width * .027), bold=True, alpha=alpha)
+            draw_label(cr, "ENFOQUE OS", cx, cy + 90, 13, bold=True, alpha=alpha * .85)
+            draw_label(cr, "Pressione qualquer tecla para continuar",
+                       cx, cy + 152, 15, alpha=alpha * .85)
+            cr.get_target().flush()
+            del cr
             return True
-        redraw_clock()
-        GLib.timeout_add_seconds(3,redraw_clock)
-        exiting=[False]
-        def exit_animated():
-            if exiting[0]:
+
+        def finish_frame():
+            if not exiting[0]:
                 return False
-            exiting[0]=True
-            # O protetor XFCE ja validou a saida; somente transicao visual.
-            index=[0]
-            def frame():
-                index[0]+=1
-                step=index[0]
-                content.set_margin_bottom(85+step*13)
-                content.set_opacity(max(0,1-step/13))
-                if step>=13:
-                    Gtk.main_quit()
-                    return False
-                return True
-            GLib.timeout_add(17,frame)
-            return False
-        signal.signal(signal.SIGTERM,lambda *_:GLib.idle_add(exit_animated))
-        plug.show_all()
-        Gtk.main()
-    except (Exception,KeyboardInterrupt) as error:
-        print("Enfoque lock theme fallback: "+type(error).__name__,file=sys.stderr)
+            exit_frame[0] += 1
+            redraw()
+            if exit_frame[0] >= 14:
+                loop.quit()
+                return False
+            return True
+
+        def leave(*_args):
+            if not exiting[0]:
+                exiting[0] = True
+                GLib.timeout_add(18, finish_frame)
+
+        signal.signal(signal.SIGTERM, lambda *_: GLib.idle_add(leave))
+        signal.signal(signal.SIGINT, lambda *_: GLib.idle_add(leave))
+        redraw()
+        GLib.timeout_add_seconds(15, lambda: redraw() if not exiting[0] else False)
+        loop.run()
+    except Exception as error:
+        print("Enfoque OS: tema nativo indisponivel: " + type(error).__name__,
+              file=sys.stderr)
         fallback()
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     main()

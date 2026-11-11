@@ -127,7 +127,7 @@ class UpdateSecurityTests(unittest.TestCase):
             name = subprocess.check_output(["dpkg-deb", "-f", str(package), "Package"], text=True).strip()
             ver = subprocess.check_output(["dpkg-deb", "-f", str(package), "Version"], text=True).strip()
             self.assertEqual(name, "enfoque-os-core")
-            self.assertEqual(ver, builder.version() + "-1")
+            self.assertEqual(ver, builder.version() + "-" + builder.package_revision())
             names = subprocess.check_output(["dpkg-deb", "-c", str(package)], text=True)
             self.assertIn("./usr/local/sbin/enfoque-update", names)
             self.assertIn("./usr/share/keyrings/enfoque-os-archive-keyring.gpg", names)

@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {installZeroTouchRoutes} from "../server/zero-touch-routes.mjs";
+import {installZeroTouchRoutes,monitoraIdForZeroTouch} from "../server/zero-touch-routes.mjs";
 const base={deviceId:"de153222-5311-496c-a7c6-2cc9c8223e0f",pcName:"Teste",unitName:"Itaipu",status:"approved"};
 function setup(record,cb) {
   const paths={};
@@ -16,6 +16,13 @@ function setup(record,cb) {
     return response;
   };
 }
+test("Zero Touch UUID maps to the same per-PC Monitora identifier",()=>{
+  assert.equal(monitoraIdForZeroTouch("74db1aa3-ac5c-4c49-a1ed-b03e9fb082fe"),
+    "enfoqueos-74db1aa3-ac5c-4c49-a1ed-b03e9fb082fe");
+  assert.throws(()=>monitoraIdForZeroTouch("enfoqueos-74db1aa3-ac5c-4c49-a1ed-b03e9fb082fe"));
+  assert.throws(()=>monitoraIdForZeroTouch("../../etc/passwd"));
+});
+
 test("Old clients never enroll Monitora",async()=>{
   let calls=0;
   const run=setup(base,async()=>{calls++;return "a".repeat(48)});

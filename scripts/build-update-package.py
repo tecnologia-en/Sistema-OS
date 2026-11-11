@@ -17,6 +17,12 @@ RELEASE = TREE / "etc/enfoque-os-release"
 PACKAGE = "enfoque-os-core"
 
 
+def package_revision():
+    match = re.search(r'^PACKAGE_REVISION="([1-9][0-9]*)"$',
+                      RELEASE.read_text("utf8"), re.MULTILINE)
+    return match.group(1) if match else "1"
+
+
 def version():
     match = re.search(r'^VERSION="(\d+\.\d+\.\d+)"$',
                       RELEASE.read_text("utf8"), re.MULTILINE)
@@ -156,7 +162,8 @@ def create(output):
     target = Path(output).resolve()
     target.mkdir(parents=True, exist_ok=True)
     release = version()
-    dest = target / f"{PACKAGE}_{release}-1_all.deb"
+    revision = package_revision()
+    dest = target / f"{PACKAGE}_{release}-{revision}_all.deb"
     if dest.exists():
         raise FileExistsError("Package will not overwrite existing file: " + str(dest))
     files = manifest()
@@ -172,10 +179,10 @@ def create(output):
         debian = root / "DEBIAN"
         debian.mkdir()
         (debian / "control").write_text(
-            f"Package: {PACKAGE}\nVersion: {release}-1\n"
+            f"Package: {PACKAGE}\nVersion: {release}-{revision}\n"
             "Section: admin\nPriority: optional\nArchitecture: all\n"
             "Maintainer: Enfoque TI <tecnologia@enfoquepapelaria.com.br>\n"
-            "Depends: python3, python3-gi, gir1.2-gtk-3.0, apt, systemd, ca-certificates, gpgv, openssh-client, openssh-server, xfce4-genmon-plugin, xfce4-appfinder, xfce4-docklike-plugin, papirus-icon-theme, timeshift, rsync, restic, smartmontools, mate-polkit, pkexec, xfce4-screensaver, xdotool, nftables, network-manager, network-manager-gnome, wpasupplicant, rfkill, onboard, firmware-iwlwifi, firmware-realtek, firmware-atheros, firmware-brcm80211, firmware-mediatek\n"
+            "Depends: python3, python3-gi, python3-gi-cairo, python3-cairo, gir1.2-gtk-3.0, apt, systemd, ca-certificates, gpgv, openssh-client, openssh-server, xfce4-genmon-plugin, xfce4-appfinder, xfce4-docklike-plugin, papirus-icon-theme, timeshift, rsync, restic, smartmontools, mate-polkit, pkexec, xfce4-screensaver, xdotool, nftables, network-manager, network-manager-gnome, wpasupplicant, rfkill, onboard, firmware-iwlwifi, firmware-realtek, firmware-atheros, firmware-brcm80211, firmware-mediatek\n"
             "Description: Enfoque OS corporate system components and updater\n"
             " Replaces custom Enfoque OS files on managed workstations using\n"
             " individually signed APT repository updates.\n",
@@ -202,6 +209,7 @@ def create(output):
             "  systemctl disable --now enfoque-update-apply.timer >/dev/null 2>&1 || true\n"
             "  systemctl enable enfoque-firewall.service >/dev/null 2>&1 || true\n"
             "  if [ -d /run/systemd/system ] && [ ! -e /run/live/medium ]; then\n"
+            "    systemctl start enfoque-monitora-provision.timer >/dev/null 2>&1 || true\n"
             "    /usr/local/sbin/enfoque-tela-ativa >/dev/null 2>&1 || true\n"
             "    /usr/local/sbin/enfoque-hostname-repair >/dev/null 2>&1 || true\n"
             "    if ! systemctl start enfoque-firewall.service; then echo \"AVISO: verifique o firewall Enfoque OS\" >&2; fi\n"

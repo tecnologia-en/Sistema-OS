@@ -9,15 +9,25 @@ const execFileAsync = promisify(execFile);
 const LIMIT_WINDOW = 10 * 60_000;
 const MONITORA_PROVISIONER = "/opt/monitora-src/server/auto_provision.py";
 const MONITORA_TOKEN = /^[A-Za-z0-9_-]{40,100}$/;
+const ZERO_TOUCH_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+export function monitoraIdForZeroTouch(uuid) {
+  if (typeof uuid !== "string" || !ZERO_TOUCH_UUID.test(uuid)) {
+    throw new Error("Zero Touch device UUID invalid");
+  }
+  // Monitora registry uses the public agent-facing identifier, unlike the
+  // bare UUID used for Zero Touch Ed25519 enrollment.
+  return "enfoqueos-" + uuid;
+}
 // Called ONLY after registry.poll validates the signed, approved Zero Touch
 // identity. The child drops to the restricted Monitora account.
 async function getApprovedMonitoraToken(record) {
+  const monitoraDeviceId = monitoraIdForZeroTouch(record.deviceId);
   const { stdout } = await execFileAsync("/usr/sbin/runuser",
     ["-u", "monitora", "--", "/usr/bin/python3", MONITORA_PROVISIONER,
-     "issue", record.deviceId, record.unitName, record.pcName],
+     "issue", monitoraDeviceId, record.unitName, record.pcName],
     { timeout: 9000, maxBuffer: 4096, windowsHide: true });
   const result = JSON.parse(stdout);
-  if (result.deviceId !== record.deviceId ||
+  if (result.deviceId !== monitoraDeviceId ||
       typeof result.token !== "string" || !MONITORA_TOKEN.test(result.token)) {
     throw new Error("Monitora provision response invalid");
   }
