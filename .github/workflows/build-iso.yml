@@ -11,6 +11,8 @@ on:
       - 'config/**'
       - 'scripts/build-iso.sh'
       - 'scripts/check-project.sh'
+      - 'test/test_release_043.py'
+      - 'test/zero-touch-monitora.test.mjs'
       - '.github/workflows/build-iso.yml'
 
 permissions:

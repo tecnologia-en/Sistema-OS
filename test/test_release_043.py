@@ -2,6 +2,7 @@
 import importlib.machinery
 import importlib.util
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -58,6 +59,12 @@ class Release043Tests(unittest.TestCase):
             prior=module.POLICY
             module.POLICY=Path(tmp)/"managed"/"41-enfoque-monitora-device.json"
             try:
+                # CI roda como usuario sem privilegios. Nesse caso, a
+                # seguranca esperada e negar configuracao de policy root.
+                if os.geteuid() != 0:
+                    with self.assertRaises(PermissionError):
+                        module.policy_file("T"*48)
+                    return
                 self.assertTrue(module.policy_file("T"*48))
                 self.assertFalse(module.policy_file("T"*48))
                 obj=json.loads(module.POLICY.read_text())
