@@ -48,6 +48,9 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      - name: Stage pinned and verified Canfoque/RustDesk binaries
+        run: bash scripts/stage-canfoque-iso.sh
+
       - name: Compile Debian 13 thermal filter before host tests
         run: |
           # The CUPS thermal raster binary is reproducibly built, not stored in Git.

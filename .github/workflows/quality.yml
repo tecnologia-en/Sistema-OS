@@ -9,6 +9,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - name: Stage pinned and verified Canfoque/RustDesk binaries
+        run: bash scripts/stage-canfoque-iso.sh
+
       - name: Preparar filtro termico Debian 13 para validacao
         run: |
           docker run --rm \
