@@ -1,0 +1,10 @@
+[Unit]
+Description=Enfoque OS - iniciar monitor de paginas apos cadastro do computador
+
+[Timer]
+OnBootSec=45s
+OnCalendar=*-*-* *:*:00
+Unit=enfoque-print-pages.service
+
+[Install]
+WantedBy=timers.target

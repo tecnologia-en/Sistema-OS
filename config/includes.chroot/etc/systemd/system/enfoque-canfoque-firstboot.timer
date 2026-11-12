@@ -1,0 +1,10 @@
+[Unit]
+Description=Enfoque OS - verificar cadastro Canfoque apos primeiro uso
+
+[Timer]
+OnBootSec=3min
+OnUnitInactiveSec=10min
+Unit=enfoque-canfoque-firstboot.service
+
+[Install]
+WantedBy=timers.target

@@ -111,6 +111,7 @@ sudo
 ca-certificates
 gpgv
 curl
+wget
 openssh-client
 openssh-server
 openssl
@@ -142,6 +143,8 @@ libnotify-bin
 
 x11-utils
 xdotool
+# AppImage runtime for Canfoque Pilot (Electron).
+libfuse2t64
 
 wmctrl
 

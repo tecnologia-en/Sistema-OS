@@ -7,6 +7,7 @@ on:
       - main
       - feat/paygo-wine-os-027
       - feat/lowram-kiosk-028
+      - feature/canfoque-v2-iso-048
     paths:
       - 'config/**'
       - 'scripts/build-iso.sh'
@@ -17,6 +18,9 @@ on:
       - 'test/test_release_046.py'
       - 'test/test_release_047.py'
       - 'test/test_storage_detection_047.py'
+      - 'test/test_release_048.py'
+      - 'test/test_print_pages_048.py'
+      - 'scripts/stage-canfoque-iso.sh'
       - 'test/xfce_kiosk_probe.c'
       - 'scripts/test-xfce-kiosk-policy.sh'
       - 'scripts/test-xfce-diversion.sh'
@@ -33,7 +37,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: build-iso
+  group: build-iso-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -43,6 +47,9 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+
+      - name: Stage pinned and verified Canfoque/RustDesk binaries
+        run: bash scripts/stage-canfoque-iso.sh
 
       - name: Compile Debian 13 thermal filter before host tests
         run: |
@@ -209,7 +216,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish complete ISO chunks permanently as a GitHub prerelease
-        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/lowram-kiosk-028'
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/feat/lowram-kiosk-028' || github.ref == 'refs/heads/feature/canfoque-v2-iso-048')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

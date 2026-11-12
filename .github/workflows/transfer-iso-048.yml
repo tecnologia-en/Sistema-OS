@@ -1,0 +1,102 @@
+name: Transferir ISO 0.2.48 verificada para VPS
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/canfoque-v2-iso-048
+    paths:
+      - '.github/workflows/transfer-iso-048.yml'
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: enfoque-iso-run102-upload-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  transfer-iso:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - name: Stop superseded transfer attempt safely
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run cancel 43260078719 --repo "$GITHUB_REPOSITORY" || true
+
+      - name: Download exact successful ISO build 102
+        uses: actions/download-artifact@v4
+        with:
+          name: enfoque-os-iso-full-102
+          repository: tecnologia-en/Sistema-OS
+          run-id: 43255084301
+          github-token: ${{ github.token }}
+          path: dist
+
+      - name: Verify the complete ISO checksum from GitHub build 102
+        run: |
+          set -euo pipefail
+          test -s dist/enfoque-os-0.2.48-piloto-amd64.iso
+          test -s dist/SHA256SUMS
+          (cd dist && sha256sum -c SHA256SUMS)
+          echo "APPROVED_BUILD=43255084301"
+          sha256sum dist/enfoque-os-0.2.48-piloto-amd64.iso
+          stat -c 'ISO_BYTES=%s' dist/enfoque-os-0.2.48-piloto-amd64.iso
+
+      - name: Prepare one-time SSH identity for restricted VPS receiver
+        run: |
+          set -euo pipefail
+          ssh-keygen -q -t ed25519 -N '' -f "$RUNNER_TEMP/enfoque-run102-key" -C "github-iso-run-$GITHUB_RUN_ID"
+          chmod 0600 "$RUNNER_TEMP/enfoque-run102-key"
+          printf '%s\n' 'intranet.enfoquepapelaria.com.br ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGOakfLuJ2yiGbLKAu+yw+ElQXhfwF3CRBMOKEh1XUJw' >"$RUNNER_TEMP/known-vps-host"
+          printf '\nEPHEMERAL_PUBLIC_KEY_START\n'
+          cat "$RUNNER_TEMP/enfoque-run102-key.pub"
+          printf 'EPHEMERAL_PUBLIC_KEY_END\n\n'
+
+      - name: Share one-time public key for authorized VPS receiver
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-run102-public-key
+          path: ${{ runner.temp }}/enfoque-run102-key.pub
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Wait for restricted upload authorization on VPS
+        run: |
+          set -euo pipefail
+          ready=0
+          for n in $(seq 1 120); do
+            if ssh -T -i "$RUNNER_TEMP/enfoque-run102-key" \
+              -o BatchMode=yes -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes \
+              -o UserKnownHostsFile="$RUNNER_TEMP/known-vps-host" \
+              -o ConnectTimeout=8 enfoqueiso48@intranet.enfoquepapelaria.com.br ready 2>/dev/null \
+              | grep -Fxq 'READY_FOR_UPLOAD_RUN102'; then
+              ready=1
+              break
+            fi
+            sleep 5
+          done
+          test "$ready" -eq 1 || { echo 'Authorization not received before timeout'; exit 1; }
+          echo 'VPS receiver accepted ephemeral SSH key'
+
+      - name: Send full verified ISO over encrypted SSH stream
+        run: |
+          set -euo pipefail
+          file=dist/enfoque-os-0.2.48-piloto-amd64.iso
+          checksum=$(sha256sum "$file" | cut -d ' ' -f 1)
+          echo 'Streaming verified 0.2.48 ISO to dedicated upload directory on VPS'
+          ssh -T -i "$RUNNER_TEMP/enfoque-run102-key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/known-vps-host" \
+            -o ConnectTimeout=12 -o ServerAliveInterval=30 -o ServerAliveCountMax=15 \
+            -o Compression=no \
+            enfoqueiso48@intranet.enfoquepapelaria.com.br "upload $checksum" <"$file" \
+            | tee "$RUNNER_TEMP/transfer-result.txt"
+          grep -Eq '^TRANSFER_VERIFIED_RUN102 [a-f0-9]{64} [0-9]+ bytes$|^ALREADY_VERIFIED_RUN102 [a-f0-9]{64}$' "$RUNNER_TEMP/transfer-result.txt"
+
+      - name: Record transfer result
+        run: |
+          echo "ISO 0.2.48 run102 transferred via SSH with SHA-256 verification to /srv/enfoque-os-iso-transfer/run102." >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/transfer-result.txt" >> "$GITHUB_STEP_SUMMARY"

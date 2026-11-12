@@ -1,0 +1,15 @@
+[Unit]
+Description=Enfoque OS - registrar ID individual do Canfoque
+After=enfoque-device-id.service
+ConditionPathExists=/var/lib/enfoque-os/firstboot.json
+ConditionPathExists=!/run/live/medium
+ConditionPathExists=!/var/lib/enfoque-os/canfoque-binding.json
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/enfoque-canfoque-firstboot
+NoNewPrivileges=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/enfoque-os
+PrivateTmp=yes

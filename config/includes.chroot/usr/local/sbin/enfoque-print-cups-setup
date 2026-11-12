@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+"""Enable CUPS page accounting conservatively after install or signed update."""
+import argparse
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+CONFIG=Path("/etc/cups/cupsd.conf")
+BACKUP=Path("/var/lib/enfoque-os/print-telemetry/cupsd.conf.before-print-telemetry")
+FORMAT="PageLogFormat %p %u %j %T %P %C"
+REGEX=re.compile(r"^[ \t]*PageLogFormat(?:[ \t]+[^\n]*)?$",re.M)
+LIVE=Path("/run/live/medium")
+
+def new_config(text):
+    replaced,n=REGEX.subn(FORMAT,text)
+    if n>1:raise ValueError("Múltiplas regras PageLogFormat")
+    if n==0:replaced=text.rstrip()+"\n"+FORMAT+"\n"
+    return replaced
+
+def cups_busy():
+    try:
+        proc=subprocess.run(["/usr/bin/lpstat","-W","not-completed","-o"],
+          capture_output=True,text=True,timeout=9)
+    except (OSError,subprocess.TimeoutExpired):
+        return True
+    # If scheduler is unreachable, defer changes until a healthy boot.
+    return proc.returncode!=0 or bool(proc.stdout.strip())
+
+def apply(config=CONFIG,backup=BACKUP,*,image=False,checker=None,restart=None,busy=cups_busy):
+    if config.is_symlink() or not config.is_file():
+        raise ValueError("Configuração CUPS inválida")
+    before=config.read_text(encoding="utf8")
+    after=new_config(before)
+    if before==after:return False
+    if not image and busy():
+        print("CUPS tem fila ativa ou indisponível: atualização do log adiada.")
+        return False
+    original=config.stat()
+    backup.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+    if not backup.exists():
+        shutil.copy2(config,backup)
+        os.chmod(backup,0o600)
+    fd,temporary=tempfile.mkstemp(prefix=".print-page-",dir=str(config.parent))
+    os.close(fd)
+    try:
+        Path(temporary).write_text(after,encoding="utf8")
+        os.chmod(temporary,original.st_mode & 0o777)
+        os.chown(temporary,original.st_uid,original.st_gid)
+        os.replace(temporary,config)
+        check=checker or (lambda:subprocess.run(["/usr/sbin/cupsd","-t"],
+          capture_output=True,timeout=12))
+        result=check()
+        if result.returncode!=0:
+            # Restore previous configuration before returning failure.
+            config.write_text(before,encoding="utf8")
+            os.chmod(config,original.st_mode & 0o777)
+            raise RuntimeError("CUPS rejeitou configuração; versão anterior restaurada")
+        if not image:
+            action=restart or (lambda:subprocess.run(
+              ["systemctl","try-restart","cups.service"],timeout=20,check=False))
+            action()
+        print("Contagem de páginas habilitada sem imprimir nenhum documento.")
+        return True
+    finally:
+        try:os.unlink(temporary)
+        except FileNotFoundError:pass
+
+def main():
+    parser=argparse.ArgumentParser()
+    parser.add_argument("--image",action="store_true",
+      help="Somente configuração do chroot; não reiniciar CUPS")
+    args=parser.parse_args()
+    if os.geteuid()!=0:raise PermissionError("Somente root")
+    if LIVE.exists() and not args.image:return 0
+    apply(image=args.image)
+    return 0
+
+if __name__=="__main__":
+    try:sys.exit(main())
+    except (OSError,RuntimeError,ValueError) as exc:
+        print("Contagem CUPS indisponível:",type(exc).__name__,file=sys.stderr)
+        sys.exit(1)
