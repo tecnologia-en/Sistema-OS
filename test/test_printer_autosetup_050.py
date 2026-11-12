@@ -44,6 +44,14 @@ class PrinterAuto050(unittest.TestCase):
    f.chmod(0o666)
    with self.assertRaises(ValueError):mod.load_catalog(f)
 
+ def test_catalog_requires_root_owner_in_service(self):
+  with tempfile.TemporaryDirectory() as t:
+   f=Path(t)/"unsafe.json"
+   f.write_text('{"schema":1,"networks":{}}')
+   with mock.patch.object(mod.os,"geteuid",return_value=0):
+    with mock.patch.object(Path,"stat",autospec=True,side_effect=lambda *args, **kwargs: mock.Mock(st_uid=1000,st_mode=0o100644,st_size=20)):
+     with self.assertRaises(ValueError):mod.trusted_json(f)
+
  def test_profile_unit(self):
   with tempfile.TemporaryDirectory() as t:
    f=Path(t)/"firstboot.json"

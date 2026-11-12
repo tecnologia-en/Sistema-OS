@@ -56,7 +56,10 @@ def audit(event, **details):
 def trusted_json(path, max_size=32768):
     if path.is_symlink() or not path.is_file() or path.stat().st_size > max_size:
         raise ValueError("Configuracao ausente, simbolica ou invalida")
-    if path.stat().st_uid != 0 or path.stat().st_mode & 0o022:
+    # The installed oneshot runs as root and enforces root ownership.
+    # Non-root CI fixtures may be owned by the runner, but can never be
+    # group/other writable or symlinks. Deployment always runs as root.
+    if (os.geteuid() == 0 and path.stat().st_uid != 0) or path.stat().st_mode & 0o022:
         raise ValueError("Configuracao sem proprietario/permissao segura")
     return json.loads(path.read_text(encoding="utf8"))
 
