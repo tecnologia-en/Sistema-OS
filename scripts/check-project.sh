@@ -66,6 +66,7 @@ python3 -m unittest discover -s "$ROOT/test" -p "test_release_045.py" -q
 python3 -m unittest discover -s "$ROOT/test" -p "test_release_046.py" -q
 python3 -m unittest discover -s "$ROOT/test" -p "test_release_047.py" -q
 python3 -m unittest discover -s "$ROOT/test" -p "test_release_048.py" -q
+python3 -m unittest discover -s "$ROOT/test" -p "test_printer_autosetup_050.py" -q
 python3 -m unittest discover -s "$ROOT/test" -p "test_print_pages_048.py" -q
 bash -n "$ROOT/scripts/stage-canfoque-iso.sh"
 sh -n "$ROOT/config/hooks/normal/105-enfoque-canfoque.hook.chroot"

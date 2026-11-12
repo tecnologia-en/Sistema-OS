@@ -1,0 +1,17 @@
+[Unit]
+Description=Enfoque OS - descobrir e configurar impressoras conhecidas sem duplicar
+Wants=cups.service
+After=cups.service network.target
+ConditionPathExists=!/run/live/medium
+ConditionVirtualization=!container
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/enfoque-printer-autosetup --scan
+TimeoutStartSec=100
+Nice=12
+IOSchedulingClass=idle
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+UMask=0027

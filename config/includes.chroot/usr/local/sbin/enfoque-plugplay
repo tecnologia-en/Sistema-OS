@@ -276,6 +276,9 @@ def handle_usb(instance,catalog,dry_run=False,notify_user=True):
         # IPP Everywhere only if exactly one unconfigured local USB device is found.
         # Vendor-specific / ESC-POS printers keep their known working queue.
         usb_ipp_auto_queue(info)
+        # Reconcile known USB/serial vendor queues and store IPP.
+        # The timer retries after delayed ipp-usb discovery.
+        run(["/usr/local/sbin/enfoque-printer-autosetup","--scan"],35)
         run(["/usr/local/sbin/enfoque-thermal-print","--scan"],30)
     if plan["categories"] and notify_user:
         notify("Dispositivo conectado",name+" - driver verificado ou generico")

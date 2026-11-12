@@ -21,7 +21,7 @@ class ZeroTouchUnit040Tests(unittest.TestCase):
         self.assertIn("administracao", mod["STORES"])
 
     def test_version_and_regression_documentation(self):
-        self.assertIn('VERSION="0.2.49"', (ROOT/"config/includes.chroot/etc/enfoque-os-release").read_text())
+        self.assertIn('VERSION="0.2.50"', (ROOT/"config/includes.chroot/etc/enfoque-os-release").read_text())
         server = (ROOT/"server/zero-touch-registry.mjs").read_text()
         self.assertIn('unitId === "administracao" && name === "Administracao / TI"', server)
         self.assertIn("validUnitName(data.unitId, data.unitName)", server)

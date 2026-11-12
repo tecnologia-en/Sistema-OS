@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "version": "0.2.50",
+  "networks": {
+    "ilha-plaza": [
+      {
+        "name": "Enfoque_Canon_GX7100_Rede",
+        "uri": "ipp://192.168.0.31/ipp/print"
+      }
+    ],
+    "centro": [
+      {
+        "name": "Enfoque_Pantum_M6550_Rede92",
+        "uri": "ipp://192.168.111.92/ipp/print"
+      },
+      {
+        "name": "Enfoque_Pantum_M6550_Listas",
+        "uri": "ipp://192.168.111.240/ipp/print"
+      },
+      {
+        "name": "Enfoque_Pantum_BM5100_Rede150",
+        "uri": "ipp://192.168.111.150/ipp/print"
+      },
+      {
+        "name": "Enfoque_Pantum_BM5100_Rede121",
+        "uri": "ipp://192.168.111.121/ipp/print"
+      },
+      {
+        "name": "Enfoque_Canon_iR1643_Rede",
+        "uri": "ipp://192.168.111.191/ipp/print"
+      }
+    ]
+  },
+  "usb": {
+    "thermal": [
+      {
+        "vendor": "ELGIN",
+        "model": "i9",
+        "pattern": "elgin.*i9",
+        "driverHint": "elgin i9"
+      },
+      {
+        "vendor": "Bematech",
+        "model": "MP-4200 TH",
+        "pattern": "bematech.*mp.?4200",
+        "driverHint": "bematech mp-4200"
+      }
+    ]
+  },
+  "notes": "Somente modelos fisicos validados no inventario de 12/11/2026; endpoints historicos e termicos em servidores externos nao sao autoaplicados."
+}

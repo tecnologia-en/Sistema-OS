@@ -1,0 +1,340 @@
+#!/usr/bin/env python3
+"""Enfoque OS 0.2.50 - conservative, store-aware CUPS printer provisioning.
+
+Supports verified store IPP endpoints, local IPP-over-USB, and USB/serial
+thermal printers only when an already-installed matching driver is available.
+Never runs vendor commands, installs unsigned drivers, prints test pages, sets
+a default printer, changes an existing queue, or duplicates an existing URI.
+"""
+import argparse
+import hashlib
+import ipaddress
+import json
+import os
+from pathlib import Path
+import re
+import socket
+import subprocess
+import sys
+import unicodedata
+from urllib.parse import unquote, urlsplit
+
+PROFILE = Path("/var/lib/enfoque-os/firstboot.json")
+CATALOG = Path("/etc/enfoque-os/drivers/printer-catalog.json")
+PPDS = Path("/etc/cups/ppd")
+SERIAL = Path("/dev/serial/by-id")
+EVENT_LOG = Path("/var/log/enfoque-os/printer-autosetup.jsonl")
+NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{1,90}$")
+IPP_USB = re.compile(r"^ipp://(?:localhost|127\.0\.0\.1):[0-9]{2,5}/ipp/print$")
+STORE_IDS = frozenset(("ilha-plaza", "centro", "itaipu", "icarai", "sao-goncalo",
+                       "copacabana", "papel-arte", "administracao", "deposito"))
+
+
+def run(argv, timeout=12):
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout,
+                           env={**os.environ, "LC_ALL": "C"})
+        return p.returncode, p.stdout, p.stderr
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return 124, "", str(exc)
+
+
+def audit(event, **details):
+    obj = {"event": event, **{k: str(v)[:180] for k, v in details.items()
+                             if k in ("name", "device", "result", "reason", "unit")}}
+    print(json.dumps(obj, ensure_ascii=False), flush=True)
+    if os.geteuid() != 0:
+        return
+    try:
+        EVENT_LOG.parent.mkdir(parents=True, exist_ok=True, mode=0o750)
+        with EVENT_LOG.open("a", encoding="utf8") as out:
+            out.write(json.dumps(obj, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
+def trusted_json(path, max_size=32768):
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > max_size:
+        raise ValueError("Configuracao ausente, simbolica ou invalida")
+    if path.stat().st_uid != 0 or path.stat().st_mode & 0o022:
+        raise ValueError("Configuracao sem proprietario/permissao segura")
+    return json.loads(path.read_text(encoding="utf8"))
+
+
+def load_profile(path=PROFILE):
+    try:
+        value = trusted_json(path)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return None
+    unit = value.get("unitId")
+    if value.get("schema") != 1 or unit not in STORE_IDS:
+        return None
+    return unit
+
+
+def valid_ipp(uri):
+    try:
+        p = urlsplit(uri)
+        ip = ipaddress.ip_address(p.hostname or "")
+    except ValueError:
+        return False
+    return (p.scheme == "ipp" and p.username is None and p.password is None
+            and p.port in (None, 631) and ip.version == 4 and ip.is_private
+            and not ip.is_loopback and not ip.is_link_local
+            and p.path == "/ipp/print" and not p.query and not p.fragment)
+
+
+def load_catalog(path=CATALOG):
+    doc = trusted_json(path)
+    if doc.get("schema") != 1 or not isinstance(doc.get("networks"), dict):
+        raise ValueError("Catalogo de impressoras invalido")
+    for unit, printers in doc["networks"].items():
+        if unit not in STORE_IDS or not isinstance(printers, list) or len(printers) > 20:
+            raise ValueError("Loja invalida no catalogo")
+        for item in printers:
+            if (not isinstance(item, dict) or not NAME.fullmatch(item.get("name", ""))
+                    or not valid_ipp(item.get("uri", ""))):
+                raise ValueError("Impressora de rede nao aprovada")
+    return doc
+
+
+def list_queues():
+    rc, output, error = run(["/usr/bin/lpstat", "-v"], 12)
+    if rc and not any(s in (output + error).lower() for s in ("no destinations", "no printers", "nenhuma impressora")):
+        return None
+    found = {}
+    for line in output.splitlines():
+        match = re.match(r"^(?:device for|dispositivo de)\s+([A-Za-z0-9_.-]+):\s*(.+)$", line, re.I)
+        if match:
+            found[match.group(1)] = match.group(2).strip()
+    return found
+
+
+def device_uris():
+    rc, output, _ = run(["/usr/sbin/lpinfo", "-v"], 15)
+    if rc:
+        return []
+    uris = []
+    for line in output.splitlines():
+        fields = line.strip().split(maxsplit=1)
+        if len(fields) == 2 and fields[0] in ("direct", "network"):
+            value = fields[1].strip()
+            if value.startswith(("usb://", "ipp://localhost:", "ipp://127.0.0.1:")):
+                uris.append(value)
+    return list(dict.fromkeys(uris))
+
+
+def same_uri(a, b):
+    a, b = str(a).strip(), str(b).strip()
+    if a == b:
+        return True
+    if a.startswith("usb://") and b.startswith("usb://"):
+        # Compare percent-encoded names with the serial included.
+        return unquote(a).rstrip("/").lower() == unquote(b).rstrip("/").lower()
+    return False
+
+
+def existing_uri(queues, uri):
+    return any(same_uri(value, uri) for value in queues.values())
+
+
+def local_network_ready(host, timeout=1.0):
+    try:
+        with socket.create_connection((host, 631), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def create_queue(name, uri, driver, queues, dry_run=False, ppd=False):
+    if not NAME.fullmatch(name):
+        raise ValueError("Nome de fila invalido")
+    if existing_uri(queues, uri):
+        return "already-configured"
+    if name in queues:
+        # Do not overwrite a queue that was manually assigned by IT.
+        return "name-in-use"
+    if dry_run:
+        return "would-create"
+    args = ["/usr/sbin/lpadmin", "-p", name, "-E", "-v", uri]
+    if ppd:
+        args += ["-P", str(driver)]
+    else:
+        args += ["-m", driver]
+    args += ["-o", "printer-is-shared=false"]
+    rc, _, error = run(args, 27)
+    if rc:
+        audit("failed", name=name, reason="CUPS rejected queue: " + error[-110:])
+        return "failed"
+    queues[name] = uri
+    audit("configured", name=name, device=uri, result="queue-created")
+    return "created"
+
+
+def provision_network(unit, catalog, queues, dry_run=False, reachable=local_network_ready):
+    results = []
+    if not unit:
+        return results
+    for printer in catalog["networks"].get(unit, []):
+        name, uri = printer["name"], printer["uri"]
+        if existing_uri(queues, uri):
+            results.append((name, "already-configured"))
+            continue
+        if name in queues:
+            results.append((name, "name-in-use"))
+            continue
+        if not reachable(urlsplit(uri).hostname):
+            results.append((name, "offline-or-not-local"))
+            continue
+        results.append((name, create_queue(name, uri, "everywhere", queues, dry_run)))
+    return results
+
+
+def normalize(text):
+    value = unicodedata.normalize("NFKD", str(text))
+    return re.sub(r"[^a-z0-9]+", " ", value.encode("ascii", "ignore").decode("ascii").lower()).strip()
+
+
+def model_key(label):
+    text = normalize(label)
+    if "elgin" in text and re.search(r"\bi9\b", text):
+        return ("elgin", "i9")
+    if "bematech" in text and "mp 4200" in text:
+        return ("bematech", "mp 4200")
+    return None
+
+
+def installed_drivers():
+    rc, output, _ = run(["/usr/sbin/lpinfo", "-m"], 20)
+    if rc:
+        return []
+    rows = []
+    for row in output.splitlines():
+        parts = row.strip().split(maxsplit=1)
+        if len(parts) == 2:
+            rows.append((parts[0], parts[1]))
+    return rows
+
+
+def choose_model_driver(kind, driver_rows):
+    # CUPS model IDs are supplied by installed signed distro or verified IT drivers.
+    for identifier, description in driver_rows:
+        if model_key(description) == kind and not identifier.lower().endswith(".drv"):
+            return (identifier, False)
+    for identifier, description in driver_rows:
+        if model_key(description) == kind:
+            return (identifier, False)
+    return None
+
+
+def choose_local_ppd(kind, root=PPDS):
+    # Reuse a known-good matching PPD installed on THIS computer, never a file
+    # fetched from mutable shared Mentes or an untrusted URL.
+    try:
+        candidates = sorted(root.glob("*.ppd"))
+    except OSError:
+        return None
+    for candidate in candidates[:80]:
+        try:
+            stat = candidate.lstat()
+            if not candidate.is_file() or candidate.is_symlink() or stat.st_uid != 0 or stat.st_size > 250000:
+                continue
+            text = candidate.read_text(encoding="latin1", errors="replace")
+            declared = " ".join(re.findall(r'^\*(?:NickName|ModelName):\s*"?([^"\n]+)', text, re.M))
+            if model_key(declared) != kind:
+                continue
+            filters = re.findall(r'^\*cupsFilter:\s*"[^"]+\s+([A-Za-z0-9_-]+)"', text, re.M)
+            if not filters:
+                continue
+            if not all((Path("/usr/lib/cups/filter") / f).is_file() for f in filters):
+                continue
+            return (candidate, True)
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def usb_devices(uris):
+    for uri in uris:
+        if not uri.startswith("usb://"):
+            continue
+        name = unquote(urlsplit(uri).netloc + " " + urlsplit(uri).path)
+        kind = model_key(name)
+        if kind:
+            yield uri, kind
+
+
+def serial_devices(root=SERIAL):
+    if not root.is_dir():
+        return
+    for dev in sorted(root.iterdir()):
+        if "bematech" in normalize(dev.name) and "mp 4200" in normalize(dev.name):
+            if dev.is_symlink() and dev.resolve().exists():
+                uri = "serial:" + str(dev) + "?baud=115200+size=8+parity=none+flow=none"
+                yield uri, ("bematech", "mp 4200")
+
+
+def provision_usb(queues, uris, dry_run=False, drivers=None, ppd_finder=choose_local_ppd, serial_finder=serial_devices):
+    results = []
+    available_drivers = installed_drivers() if drivers is None else drivers
+    # Non-IPP receipt devices need an exact installed model driver.
+    discovered = list(usb_devices(uris)) + list(serial_finder())
+    for uri, kind in discovered:
+        if existing_uri(queues, uri):
+            results.append((uri, "already-configured"))
+            continue
+        found = choose_model_driver(kind, available_drivers) or ppd_finder(kind)
+        if not found:
+            results.append((uri, "driver-required"))
+            audit("needs-driver", device=uri, reason="modelo termico exige driver validado")
+            continue
+        driver, is_ppd = found
+        digest = hashlib.sha256(uri.encode()).hexdigest()[:8]
+        name = "Enfoque_" + ("Elgin_i9" if kind[0] == "elgin" else "Bematech_MP4200") + "_" + digest
+        status = create_queue(name, uri, driver, queues, dry_run, ppd=is_ppd)
+        results.append((uri, status))
+    # Driverless IPP-over-USB remains valid when the source is unambiguous.
+    # Several printers/localhost endpoints on one PC must not be guessed.
+    ipp = [u for u in uris if IPP_USB.fullmatch(u)]
+    if (len(ipp) == 1 and not any(u.startswith(("usb://", "ipp://localhost:", "ipp://127.0.0.1:"))
+                                  for u in queues.values())):
+        name = "Enfoque_USB_IPP"
+        results.append((ipp[0], create_queue(name, ipp[0], "everywhere", queues, dry_run)))
+    elif len(ipp) > 1:
+        results.append(("ipp-over-usb", "multiple-endpoints"))
+    return results
+
+
+def scan(dry_run=False):
+    if Path("/run/live/medium").exists() and not dry_run:
+        return []
+    try:
+        catalog = load_catalog()
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        audit("catalog-error", reason=type(error).__name__)
+        return []
+    unit = load_profile()
+    queues = list_queues()
+    if queues is None:
+        audit("cups-unavailable", reason="lpstat -v sem resposta")
+        return []
+    results = [("network", row) for row in provision_network(unit, catalog, queues, dry_run)]
+    results += [("usb", row) for row in provision_usb(queues, device_uris(), dry_run)]
+    if dry_run:
+        print(json.dumps({"unit": unit, "results": results}, ensure_ascii=False))
+    return results
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--scan", action="store_true", required=True)
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args()
+    if os.geteuid() != 0 and not args.dry_run:
+        parser.error("A instalacao precisa do servico root do Enfoque OS")
+    scan(dry_run=args.dry_run)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

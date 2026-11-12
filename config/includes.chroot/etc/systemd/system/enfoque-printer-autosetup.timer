@@ -1,0 +1,14 @@
+[Unit]
+Description=Enfoque OS - verificar novas impressoras USB e da loja
+ConditionPathExists=!/run/live/medium
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+RandomizedDelaySec=25s
+AccuracySec=30s
+Persistent=true
+Unit=enfoque-printer-autosetup.service
+
+[Install]
+WantedBy=timers.target

@@ -65,7 +65,7 @@ class VisualInput041(unittest.TestCase):
         self.assertIn('"gui", "screenshot"', bridge)
         self.assertIn('from visual import capture, gui, VisualError', session)
         self.assertIn("xdotool", (BASE/"config/package-lists/enfoque-base.list.chroot").read_text())
-        self.assertIn('VERSION="0.2.49"', (BASE/"config/includes.chroot/etc/enfoque-os-release").read_text())
+        self.assertIn('VERSION="0.2.50"', (BASE/"config/includes.chroot/etc/enfoque-os-release").read_text())
 
 
 if __name__=="__main__":

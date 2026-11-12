@@ -24,8 +24,8 @@ MIME_TYPES = {
 class Release044(unittest.TestCase):
     def test_number_and_packages(self):
         release = (TREE / "etc/enfoque-os-release").read_text()
-        self.assertIn('VERSION="0.2.49"', release)
-        self.assertIn('PACKAGE_REVISION="2"', release)
+        self.assertIn('VERSION="0.2.50"', release)
+        self.assertIn('PACKAGE_REVISION="1"', release)
         packages = {s.strip() for s in PKGS.read_text().splitlines()
                     if s.strip() and not s.lstrip().startswith("#")}
         self.assertFalse((REQUIRED_ARCHIVES | REQUIRED_BLUETOOTH) - packages)

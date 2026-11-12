@@ -150,6 +150,9 @@ def manifest():
         "usr/local/sbin/enfoque-thermal-print",
         "usr/local/sbin/enfoque-thermal-chrome",
         "usr/local/sbin/enfoque-plugplay",
+        "usr/local/sbin/enfoque-printer-autosetup",
+        "etc/enfoque-os/drivers/printer-catalog.json",
+        "etc/systemd/system/enfoque-printer-autosetup.timer",
         "usr/local/libexec/enfoque-thermal-raster-trim",
         "usr/lib/cups/filter/enfoque-thermal-raster",
         "etc/systemd/system/enfoque-thermal-print.timer",
@@ -282,11 +285,11 @@ def create(output):
             "  systemctl disable --now enfoque-update-apply.timer >/dev/null 2>&1 || true\n"
             "  systemctl enable enfoque-firewall.service >/dev/null 2>&1 || true\n"
             "  systemctl enable bluetooth.service >/dev/null 2>&1 || true\n"
-            "  systemctl enable enfoque-plugplay-scan.timer enfoque-thermal-print.timer enfoque-thermal-chrome.timer >/dev/null 2>&1 || true\n"
+            "  systemctl enable enfoque-plugplay-scan.timer enfoque-thermal-print.timer enfoque-thermal-chrome.timer enfoque-printer-autosetup.timer >/dev/null 2>&1 || true\n"
             "  systemctl enable enfoque-canfoque-firstboot.timer enfoque-print-pages.timer enfoque-print-cups-setup.timer >/dev/null 2>&1 || true\n"
             "  command -v udevadm >/dev/null 2>&1 && udevadm control --reload >/dev/null 2>&1 || true\n"
             "  if [ -d /run/systemd/system ] && [ ! -e /run/live/medium ]; then\n"
-            "    systemctl start enfoque-monitora-provision.timer enfoque-canfoque-firstboot.timer enfoque-print-pages.timer enfoque-print-cups-setup.timer >/dev/null 2>&1 || true\n"
+            "    systemctl start enfoque-monitora-provision.timer enfoque-canfoque-firstboot.timer enfoque-print-pages.timer enfoque-print-cups-setup.timer enfoque-printer-autosetup.timer >/dev/null 2>&1 || true\n"
             "    if [ -d /sys/class/bluetooth ] && [ -n \"$(ls -A /sys/class/bluetooth 2>/dev/null)\" ]; then systemctl start bluetooth.service >/dev/null 2>&1 || true; fi\n"
             "    /usr/local/sbin/enfoque-tela-ativa >/dev/null 2>&1 || true\n"
             "    /usr/local/sbin/enfoque-hostname-repair >/dev/null 2>&1 || true\n"

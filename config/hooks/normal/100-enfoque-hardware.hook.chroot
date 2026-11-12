@@ -3,7 +3,7 @@
 set -eu
 chmod 755 /usr/local/sbin/enfoque-hardware-setup /usr/local/bin/enfoque-desktop-shell /usr/local/bin/enfoque-super-key
 chmod 755 /usr/local/bin/enfoque-relogio-painel /usr/local/bin/enfoque-notificacoes-painel /usr/local/bin/enfoque-impressoras-painel
-systemctl enable enfoque-hardware-inicial.timer >/dev/null
+systemctl enable enfoque-hardware-inicial.timer enfoque-printer-autosetup.timer >/dev/null
 # CUPS manages explicitly configured real printers; avoid auto-created
 # duplicate network and IPP-over-USB queues from cups-browsed.
 systemctl disable cups-browsed.service >/dev/null 2>&1 || :
