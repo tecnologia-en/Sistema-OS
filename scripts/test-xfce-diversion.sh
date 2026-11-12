@@ -16,7 +16,11 @@ dpkg-query -s xfce4-settings | grep -Fxq 'Status: install ok installed' ||
 TMP="$(mktemp -d /tmp/enfoque-xfce-diversion.XXXXXXXX)"
 trap 'rm -rf "$TMP"' EXIT
 python3 "$ROOT/scripts/build-update-package.py" --output "$TMP"
-PKG="$TMP/enfoque-os-core_0.2.46-1_all.deb"
+RELEASE_FILE="$ROOT/config/includes.chroot/etc/enfoque-os-release"
+VERSION="$(sed -n 's/^VERSION="\([^"]*\)"/\1/p' "$RELEASE_FILE")"
+REVISION="$(sed -n 's/^PACKAGE_REVISION="\([1-9][0-9]*\)"/\1/p' "$RELEASE_FILE")"
+test -n "$VERSION" && test -n "$REVISION"
+PKG="$TMP/enfoque-os-core_${VERSION}-${REVISION}_all.deb"
 test -s "$PKG"
 dpkg-deb -e "$PKG" "$TMP/controls"
 CONF=/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml

@@ -39,6 +39,9 @@ class Release047(unittest.TestCase):
         self.assertIn("gh release create",flow)
         self.assertNotIn("publish-update-repo.sh",flow)
         self.assertIn('test_release_047.py', (ROOT/"scripts/check-project.sh").read_text())
+        diversion=(ROOT/"scripts/test-xfce-diversion.sh").read_text()
+        self.assertIn('PKG="$TMP/enfoque-os-core_${VERSION}-${REVISION}_all.deb"',diversion)
+        self.assertNotIn('enfoque-os-core_0.2.46-1_all.deb',diversion)
         self.assertTrue((ROOT/"docs/RELEASE_047_ARMAZENAMENTO_INSTALADOR.md").is_file())
 
 
