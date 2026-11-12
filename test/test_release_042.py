@@ -72,7 +72,7 @@ class Version042Tests(unittest.TestCase):
 
     def test_versao_e_manifesto(self):
         release = (TREE / "etc/enfoque-os-release").read_text("utf8")
-        self.assertIn('VERSION="0.2.48"', release)
+        self.assertIn('VERSION="0.2.49"', release)
         p = (ROOT / "scripts/build-update-package.py").read_text("utf8")
         self.assertIn('"usr/share/applications/screensavers/enfoque-"', p)
         self.assertIn('"usr/share/applications/screensavers/enfoque-wallpaper-dim.desktop"', p)

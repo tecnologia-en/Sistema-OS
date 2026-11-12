@@ -5,7 +5,7 @@ ROOT=Path(__file__).resolve().parents[1]
 TREE=ROOT/"config/includes.chroot"
 class Release048(unittest.TestCase):
     def test_iso_release_and_pinned_binaries(self):
-        self.assertIn('VERSION="0.2.48"',(TREE/"etc/enfoque-os-release").read_text())
+        self.assertIn('VERSION="0.2.49"',(TREE/"etc/enfoque-os-release").read_text())
         self.assertIn("Canfoque",(TREE/"usr/share/applications/enfoque-canfoque.desktop").read_text())
         self.assertIn("stage-canfoque-iso.sh",(ROOT/"scripts/build-iso.sh").read_text())
         stage=(ROOT/"scripts/stage-canfoque-iso.sh").read_text()

@@ -11,6 +11,8 @@ import os
 import socket
 import ssl
 import struct
+import threading
+import time
 from urllib.parse import urlsplit
 
 GUID="258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -24,6 +26,9 @@ class WebSocket:
         self.timeout=timeout
         self.sock=None
         self.buf=b""
+        # Results and control-frame replies may come from separate threads.
+        self.send_lock=threading.Lock()
+        self.last_received_at=time.monotonic()
 
     def connect(self):
         parsed=urlsplit(self.url)
@@ -71,6 +76,7 @@ class WebSocket:
             self.sock=sock
             self.buf=extra
             self.sock.settimeout(25)
+            self.last_received_at=time.monotonic()
             return self
         except Exception:
             try:raw.close()
@@ -106,7 +112,8 @@ class WebSocket:
             header.extend([0x80|127])
             header.extend(struct.pack("!Q",length))
         payload=bytes(byte^mask[i%4] for i,byte in enumerate(data))
-        self.sock.sendall(bytes(header)+mask+payload)
+        with self.send_lock:
+            self.sock.sendall(bytes(header)+mask+payload)
 
     def send_json(self,value):
         self.send_frame(json.dumps(value,ensure_ascii=False,separators=(",",":")))
@@ -116,6 +123,10 @@ class WebSocket:
             try:
                 first,second=self._recv_exact(2)
             except socket.timeout:
+                # Do not remain half-connected forever when a router/proxy
+                # silently drops the other end of an established TLS socket.
+                if time.monotonic()-self.last_received_at>85:
+                    raise ConnectionError("Heartbeat WebSocket expirou")
                 self.send_frame(b"ping",9)
                 continue
             opcode=first&15
@@ -130,6 +141,7 @@ class WebSocket:
                 raise ValueError("Comando remoto excessivo")
             mask=self._recv_exact(4) if second&0x80 else None
             payload=self._recv_exact(length) if length else b""
+            self.last_received_at=time.monotonic()
             if mask:
                 payload=bytes(byte^mask[i%4] for i,byte in enumerate(payload))
             if opcode==8:

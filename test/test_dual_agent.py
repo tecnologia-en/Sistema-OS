@@ -3,8 +3,11 @@ import importlib.machinery
 import importlib.util
 import io
 from pathlib import Path
+import socket
 import struct
 import sys
+import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -97,6 +100,52 @@ class DualAgentUnitTests(unittest.TestCase):
         payload=bytes(ch^mask[i%4] for i,ch in enumerate(encoded))
         self.assertIn(b'"type":"ping"',payload)
 
+    def test_websocket_reader_stays_responsive_while_command_runs(self):
+        """Long local CUPS/GUI tasks cannot block server Ping/Pong handling."""
+        reader_advanced=threading.Event()
+        result_sent=threading.Event()
+        command_done=threading.Event()
+        seen=[]
+        class FakeSocket:
+            def __init__(self,*_a,**_kw):
+                self.calls=0
+            def connect(self):return self
+            def send_json(self,obj):
+                seen.append(obj)
+                if obj.get('type')=='result': result_sent.set()
+            def recv_json(self):
+                self.calls+=1
+                if self.calls==1:
+                    return {'type':'command','command':{'id':'test-1',
+                            'action':'run','args':{'program':'sleep'}}}
+                reader_advanced.set()
+                if not result_sent.wait(timeout=2):
+                    raise AssertionError('Reader blocked while command executes')
+                raise ConnectionError('Test transport closed')
+            def close(self):pass
+        def slow_command(_action,_args):
+            if not reader_advanced.wait(timeout=2):
+                raise AssertionError('WebSocket reader stopped processing frames')
+            command_done.set()
+            return {'ok':True}
+        with patch.object(channel,'WebSocket',FakeSocket), \
+             patch.object(sys_agent,'display_identity',return_value=('123456789012-6','LIVRARIA1 / Centro')), \
+             patch.object(sys_agent,'handle_action',side_effect=slow_command), \
+             patch.object(sys_agent,'audit_remote'):
+            with self.assertRaises(ConnectionError):
+                sys_agent.websocket_cycle({'deviceId':'enfoqueos-test','token':'test'})
+        self.assertTrue(reader_advanced.is_set())
+        self.assertTrue(command_done.is_set())
+        self.assertTrue(result_sent.is_set())
+
+    def test_websocket_reconnects_after_missing_heartbeat(self):
+        ws=channel.WebSocket('wss://localhost/','device','token')
+        ws.last_received_at=0
+        with patch.object(channel.time,'monotonic',return_value=100):
+            with patch.object(ws,'_recv_exact',side_effect=socket.timeout):
+                with self.assertRaisesRegex(ConnectionError,'Heartbeat'):
+                    ws.recv_json()
+
     def test_cross_user_group_membership_alone_does_not_grant_ipc(self):
         import os
         # UID 1001 in the IPC group cannot impersonate the network service.
@@ -125,7 +174,7 @@ class DualAgentUnitTests(unittest.TestCase):
 
     def test_agent_version_and_ws_fallback(self):
         code=(BIN/"enfoque-remote-agent").read_text()
-        self.assertIn('AGENT_VERSION = "0.2.41-linux-visual-ondemand"',code)
+        self.assertIn('AGENT_VERSION = "0.2.49-linux-visual-ondemand"',code)
         self.assertIn("websocket_cycle(state)",code)
         self.assertIn("run_cycle(state)",code)
 

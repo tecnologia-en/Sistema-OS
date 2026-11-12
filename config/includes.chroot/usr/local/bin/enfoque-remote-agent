@@ -16,6 +16,7 @@ import shlex
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -27,7 +28,7 @@ DEVICE = Path("/var/lib/enfoque-os/device-identity.json")
 LIVE_DEVICE = Path("/run/enfoque-os/device-identity.json")
 PROFILE = Path("/var/lib/enfoque-os/firstboot.json")
 STORE_SUFFIX = {"ilha-plaza":"1","copacabana":"2","itaipu":"3","icarai":"4","sao-goncalo":"5","centro":"6","deposito":"7","administracao":"8","papel-arte":"9"}
-AGENT_VERSION = "0.2.41-linux-visual-ondemand"
+AGENT_VERSION = "0.2.49-linux-visual-ondemand"
 
 def installed_version():
     try:
@@ -325,30 +326,59 @@ def websocket_cycle(state, base=SERVER, *, max_commands=None):
     uri = "wss://" + parsed.netloc + parsed.path.rstrip("/") + "/ws"
     short, store = display_identity()
     ws = WebSocket(uri, state["deviceId"], state["token"])
-    count = 0
+    # Run at most one local command in a worker, but always keep the reader
+    # handling WebSocket Ping/Pong. Previously one slow CUPS/GUI command could
+    # block up to 95 seconds and make the VPS kill a healthy agent as offline.
+    busy=threading.Lock()
+    finished=threading.Event()
+    completed=[0]
+    closed=threading.Event()
+
+    def execute(task, ident):
+        try:
+            action=task.get("action")
+            args=task.get("args")
+            try:
+                result=handle_action(action,args)
+            except Exception as error:
+                result={"ok":False,"error":"Falha no agente: "+type(error).__name__}
+            audit_remote(ident,action,args,result)
+            if not closed.is_set():
+                ws.send_json({"type":"result","id":ident,"result":result})
+            completed[0]+=1
+        except (OSError,RuntimeError,ValueError,ConnectionError,AttributeError):
+            # Reader will reconnect on lost socket/heartbeat; never expose tokens.
+            pass
+        finally:
+            busy.release()
+            if max_commands is not None and completed[0]>=max_commands:
+                finished.set()
+
     try:
         ws.connect()
         ws.send_json({"type":"hello",
              "hostname":("Enfoque OS "+short+" "+store)[:100],
              "username":"enfoque-agent",
              "platform":platform.platform(),"agentVersion":AGENT_VERSION})
-        while True:
-            packet = ws.recv_json()
-            if packet.get("type") != "command":
+        while not finished.is_set():
+            packet=ws.recv_json()
+            if packet.get("type")!="command":
                 continue
-            task = packet.get("command")
+            task=packet.get("command")
             if not isinstance(task,dict):
                 continue
-            ident = task.get("id")
+            ident=task.get("id")
             if not isinstance(ident,str) or not 1<=len(ident)<=80:
                 continue
-            result = handle_action(task.get("action"),task.get("args"))
-            audit_remote(ident, task.get("action"), task.get("args"), result)
-            ws.send_json({"type":"result","id":ident,"result":result})
-            count += 1
-            if max_commands is not None and count>=max_commands:
-                return count
+            if not busy.acquire(blocking=False):
+                ws.send_json({"type":"result","id":ident,"result":{
+                    "ok":False,"error":"Agente ocupado com comando anterior"}})
+                continue
+            threading.Thread(target=execute,args=(task,ident),daemon=True).start()
+            # Test-only bounded cycles can be ended by a test-controlled socket.
+        return completed[0]
     finally:
+        closed.set()
         ws.close()
 
 def main():
