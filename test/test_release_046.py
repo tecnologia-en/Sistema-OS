@@ -120,6 +120,7 @@ class PortalAndAdminLock(unittest.TestCase):
         workflow=(ROOT/".github/workflows/build-iso.yml").read_text()
         self.assertIn("test/test_release_046.py",workflow)
         self.assertIn("test-xfce-kiosk-policy.sh",workflow)
+        self.assertIn("test-xfce-diversion.sh",workflow)
         self.assertIn("xfce_kiosk_probe.c",workflow)
         self.assertIn("xdg-desktop-portal-gtk",workflow)
         self.assertNotIn("publish-update-repo.sh",workflow)

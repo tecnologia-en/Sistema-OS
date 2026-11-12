@@ -204,7 +204,9 @@ def create(output):
             target_file = root / rel
             target_file.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target_file, follow_symlinks=False)
-            if rel.startswith("etc/") and rel != "etc/enfoque-os-release":
+            if (rel.startswith("etc/") and rel not in (
+                    "etc/enfoque-os-release",
+                    "etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml")):
                 confiles.append("/" + rel)
         debian = root / "DEBIAN"
         debian.mkdir()
@@ -220,6 +222,37 @@ def create(output):
         )
         (debian / "conffiles").write_text(
             "\n".join(sorted(confiles)) + "\n", encoding="utf8")
+        # The official xfce4-settings package also owns xsettings.xml.
+        # Divert the vendor config before unpacking our root-owned policy.
+        # This avoids force-overwrite or untracked mutation of Debian's files.
+        xsettings = "/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml"
+        preinst = debian / "preinst"
+        preinst.write_text(
+            "#!/bin/sh\nset -eu\n"
+            "case \"$1\" in\n"
+            "  install|upgrade)\n"
+            f"    current=\"$(dpkg-divert --listpackage {xsettings} 2>/dev/null || true)\"\n"
+            "    if [ -z \"$current\" ]; then\n"
+            f"      dpkg-divert --package enfoque-os-core --add --rename --divert {xsettings}.distrib {xsettings}\n"
+            "    elif [ \"$current\" != enfoque-os-core ]; then\n"
+            "      echo 'Refusing to replace XFCE policy diversion owned by another package' >&2\n"
+            "      exit 1\n"
+            "    fi\n"
+            "    ;;\n"
+            "esac\n", encoding="utf8",
+        )
+        preinst.chmod(0o755)
+        postrm = debian / "postrm"
+        postrm.write_text(
+            "#!/bin/sh\nset -eu\n"
+            "if [ \"$1\" = remove ] || [ \"$1\" = purge ]; then\n"
+            f"  current=\"$(dpkg-divert --listpackage {xsettings} 2>/dev/null || true)\"\n"
+            "  if [ \"$current\" = enfoque-os-core ]; then\n"
+            f"    dpkg-divert --package enfoque-os-core --remove --rename --divert {xsettings}.distrib {xsettings}\n"
+            "  fi\n"
+            "fi\n", encoding="utf8",
+        )
+        postrm.chmod(0o755)
         postinst = debian / "postinst"
         postinst.write_text(
             "#!/bin/sh\nset -e\n"

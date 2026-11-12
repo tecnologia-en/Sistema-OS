@@ -17,6 +17,7 @@ on:
       - 'test/test_release_046.py'
       - 'test/xfce_kiosk_probe.c'
       - 'scripts/test-xfce-kiosk-policy.sh'
+      - 'scripts/test-xfce-diversion.sh'
       - 'src/**'
       - 'scripts/build-thermal-raster.sh'
       - 'scripts/test-thermal-raster.sh'
@@ -49,9 +50,10 @@ jobs:
             --env DEBIAN_FRONTEND=noninteractive \
             debian:trixie bash -euc '
               apt-get update -qq
-              apt-get install -y -qq --no-install-recommends gcc libcupsimage2-dev pkg-config xfconf libxfconf-0-3 libxfconf-0-dev dbus-x11
+              apt-get install -y -qq --no-install-recommends gcc python3 libcupsimage2-dev pkg-config xfconf libxfconf-0-3 libxfconf-0-dev dbus-x11 xfce4-settings
               bash scripts/build-thermal-raster.sh
               gcc -std=c11 -Wall -Wextra -Werror -O2 -o /tmp/enfoque-xfce-kiosk-probe test/xfce_kiosk_probe.c $(pkg-config --cflags --libs libxfconf-0)
+              bash scripts/test-xfce-diversion.sh
               bash scripts/test-xfce-kiosk-policy.sh
             '
 

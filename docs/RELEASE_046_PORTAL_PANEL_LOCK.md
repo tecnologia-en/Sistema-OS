@@ -45,6 +45,13 @@ mas não impedia clique direito nas propriedades do botão Iniciar. Agora:
   janelas recebem política pontual `unlocked="root"` em
   `xsettings.xml` e `xfwm4.xml`. Não bloqueia parâmetros de mouse,
   teclado, escala por monitor ou sessão de usuário.
+  **Compatibilidade com Debian:** o pacote oficial `xfce4-settings` também
+  contém `xsettings.xml`. A 0.2.46 utiliza `dpkg-divert` no `preinst`
+  para preservar o arquivo original como `xsettings.xml.distrib`.
+  O arquivo corporativo não é declarado como `conffile`, evitando
+  perguntas interativas durante a atualização. Na remoção do pacote,
+  o `postrm` restaura o original do Debian. A reinstalação do XFCE,
+  sem perda da configuração corporativa, foi testada no Debian 13.
 - O canal da área de trabalho recebe bloqueio de root: o papel de
   parede já era protegido, e o controle de exibir/remover ícones agora
   também é exclusivo da TI. Validado com a API nativa Xfconf.
@@ -70,6 +77,7 @@ administrativos e reiniciar a sessão gráfica na manutenção.
 - `bash scripts/check-project.sh`
 - `bash scripts/check-visual.sh`
 - `python3 scripts/build-update-package.py --output ...`
+- `bash scripts/test-xfce-diversion.sh` (apenas em contêiner descartável Debian 13)
 - Instalar pacote só em contêiner/VM de homologação, não em lojas.
 - Testar usuário comum tentando alterar painel, tema e o botão Iniciar:
   as mudanças não podem ser aplicadas. A API nativa
