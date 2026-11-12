@@ -51,7 +51,7 @@ class Release045(unittest.TestCase):
     def test_version_and_policy(self):
         release=(INC/"etc/enfoque-os-release").read_text()
         self.assertIn('VERSION="0.2.49"',release)
-        self.assertIn('PACKAGE_REVISION="1"',release)
+        self.assertIn('PACKAGE_REVISION="2"',release)
         self.assertEqual(json.loads((INC/"etc/opt/chrome/policies/managed/82-enfoque-thermal-print.json").read_text()),{"PrintHeaderFooter":False})
         self.assertNotIn('"scaling"',(INC/"etc/opt/chrome/policies/managed/82-enfoque-thermal-print.json").read_text())
 

@@ -29,7 +29,7 @@ class PortalAndAdminLock(unittest.TestCase):
     def test_version(self):
         release=(TREE/"etc/enfoque-os-release").read_text()
         self.assertIn('VERSION="0.2.49"',release)
-        self.assertIn('PACKAGE_REVISION="1"',release)
+        self.assertIn('PACKAGE_REVISION="2"',release)
 
     def test_file_chooser_portal_installed_in_iso(self):
         packages=(ROOT/"config/package-lists/enfoque-base.list.chroot").read_text().splitlines()

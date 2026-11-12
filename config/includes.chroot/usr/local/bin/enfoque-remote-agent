@@ -28,7 +28,7 @@ DEVICE = Path("/var/lib/enfoque-os/device-identity.json")
 LIVE_DEVICE = Path("/run/enfoque-os/device-identity.json")
 PROFILE = Path("/var/lib/enfoque-os/firstboot.json")
 STORE_SUFFIX = {"ilha-plaza":"1","copacabana":"2","itaipu":"3","icarai":"4","sao-goncalo":"5","centro":"6","deposito":"7","administracao":"8","papel-arte":"9"}
-AGENT_VERSION = "0.2.49-linux-visual-ondemand"
+AGENT_VERSION = "0.2.49p2-linux-poll-reliable"
 
 def installed_version():
     try:
@@ -313,6 +313,26 @@ def run_cycle(state, base=SERVER):
     return True
 
 
+def polling_cycle(state, *, duration=None, interval=3, base=SERVER):
+    """Authenticated, short-lived HTTPS requests instead of a stale long-lived TLS socket.
+
+    `duration=None` keeps polling until this systemd service stops; a timed
+    cycle lets normal WebSocket clients cool down after a broken connection.
+    """
+    deadline = time.monotonic() + duration if duration is not None else None
+    while deadline is None or time.monotonic() < deadline:
+        try:
+            if not run_cycle(state, base=base):
+                return False
+        except (OSError, ValueError, RuntimeError, ConnectionError,
+                urllib.error.URLError, json.JSONDecodeError) as error:
+            print("Enfoque HTTP: " + type(error).__name__ + ". Nova tentativa.",
+                  file=sys.stderr)
+            time.sleep(7)
+        time.sleep(interval)
+    return True
+
+
 def websocket_cycle(state, base=SERVER, *, max_commands=None):
     """Outgoing WSS only; HTTP polling remains fallback for older network paths."""
     library = Path(__file__).resolve().parent.parent / "lib/enfoque-session"
@@ -394,22 +414,22 @@ def main():
             if registered.get("approved") is not True:
                 time.sleep(25)
                 continue
-            # Normal operation: persistent outgoing websocket, no port at PC.
-            # If blocked by a firewall/proxy, use proven HTTP polling temporarily.
+            # Store devices may sit behind routers that silently drop long-lived
+            # TLS sessions. The TI can select HTTP polling per PC without a new
+            # identity, a local password, or disabling server authentication.
+            if os.environ.get("ENFOQUE_AGENT_TRANSPORT", "").lower() == "polling":
+                polling_cycle(state)
+                time.sleep(15)
+                continue
+            # Default websocket, with a prolonged reliable HTTPS cooldown after
+            # any WS error; never retry a broken socket every few seconds.
             try:
                 websocket_cycle(state)
             except (OSError, ValueError, RuntimeError, ConnectionError,
                     urllib.error.URLError, json.JSONDecodeError) as error:
-                print("Enfoque WebSocket: "+type(error).__name__+
-                      ". Usando fallback HTTP.",file=sys.stderr)
-                for _ in range(4):
-                    try:
-                        if not run_cycle(state):
-                            break
-                    except (OSError, ValueError, RuntimeError, urllib.error.URLError,
-                            json.JSONDecodeError):
-                        break
-                    time.sleep(4)
+                print("Enfoque WebSocket: " + type(error).__name__ +
+                      ". Usando fallback HTTP prolongado.", file=sys.stderr)
+                polling_cycle(state, duration=600)
         except (OSError, ValueError, RuntimeError, urllib.error.URLError,
                 json.JSONDecodeError) as error:
             print("Enfoque agente remoto: "+type(error).__name__,file=sys.stderr)

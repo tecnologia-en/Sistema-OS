@@ -146,6 +146,13 @@ class DualAgentUnitTests(unittest.TestCase):
                 with self.assertRaisesRegex(ConnectionError,'Heartbeat'):
                     ws.recv_json()
 
+    def test_polling_cycle_keeps_authorized_commands_responsive(self):
+        with patch.object(sys_agent,'run_cycle',side_effect=[True,True,False]) as run, \
+             patch.object(sys_agent.time,'sleep'):
+            result=sys_agent.polling_cycle({'deviceId':'test'},duration=None)
+        self.assertFalse(result)
+        self.assertEqual(run.call_count,3)
+
     def test_cross_user_group_membership_alone_does_not_grant_ipc(self):
         import os
         # UID 1001 in the IPC group cannot impersonate the network service.
@@ -174,7 +181,7 @@ class DualAgentUnitTests(unittest.TestCase):
 
     def test_agent_version_and_ws_fallback(self):
         code=(BIN/"enfoque-remote-agent").read_text()
-        self.assertIn('AGENT_VERSION = "0.2.49-linux-visual-ondemand"',code)
+        self.assertIn('AGENT_VERSION = "0.2.49p2-linux-poll-reliable"',code)
         self.assertIn("websocket_cycle(state)",code)
         self.assertIn("run_cycle(state)",code)
 
