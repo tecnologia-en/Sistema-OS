@@ -10,6 +10,13 @@ spec=importlib.util.spec_from_loader(loader.name,loader)
 mod=importlib.util.module_from_spec(spec)
 loader.exec_module(mod)
 
+def source_catalog():
+ # GitHub builds in Docker as root but repository bind mounts belong to the
+ # unprivileged runner. Test the source fixture as a runner-owned document;
+ # real service still rejects non-root configuration when euid=0.
+ with mock.patch.object(mod.os, "geteuid", return_value=1000):
+  return mod.load_catalog(INC/"etc/enfoque-os/drivers/printer-catalog.json")
+
 class PrinterAuto050(unittest.TestCase):
  def test_package_and_timer(self):
   self.assertIn('VERSION="0.2.50"',(INC/"etc/enfoque-os-release").read_text())
@@ -26,7 +33,7 @@ class PrinterAuto050(unittest.TestCase):
   self.assertIn("opt/enfoque/canfoque-pilot.AppImage",(ROOT/"scripts/build-update-package.py").read_text())
 
  def test_catalog_only_approved_ips(self):
-  x=mod.load_catalog(INC/"etc/enfoque-os/drivers/printer-catalog.json")
+  x=source_catalog()
   self.assertEqual(len(x["networks"]["centro"]),5)
   self.assertEqual(len(x["networks"]["ilha-plaza"]),1)
   self.assertNotIn("itaipu",x["networks"])
@@ -61,7 +68,7 @@ class PrinterAuto050(unittest.TestCase):
    self.assertIsNone(mod.load_profile(f))
 
  def test_isolate_stores(self):
-  x=mod.load_catalog(INC/"etc/enfoque-os/drivers/printer-catalog.json")
+  x=source_catalog()
   with mock.patch.object(mod,"create_queue",return_value="would-create") as create:
    self.assertEqual(len(mod.provision_network("centro",x,{},True,reachable=lambda h:True)),5)
    self.assertTrue(all("192.168.111." in r.args[1] for r in create.call_args_list))
@@ -70,7 +77,7 @@ class PrinterAuto050(unittest.TestCase):
    self.assertIn("192.168.0.31",create.call_args.args[1])
 
  def test_network_no_duplicate_and_offline(self):
-  x=mod.load_catalog(INC/"etc/enfoque-os/drivers/printer-catalog.json")
+  x=source_catalog()
   q={"Existing":"ipp://192.168.0.31/ipp/print"}
   with mock.patch.object(mod,"create_queue",side_effect=AssertionError("duplicate")):
    self.assertEqual(mod.provision_network("ilha-plaza",x,q,False),
