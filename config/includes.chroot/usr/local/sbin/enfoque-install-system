@@ -74,34 +74,136 @@ def disk_tree_busy(node, swaps):
     return any(disk_tree_busy(child, swaps) for child in (node.get("children") or []))
 
 
-def available_disks():
+def storage_controller_hints():
+    """Read-only PCI hints for drives invisible to lsblk (RST/VMD/RAID)."""
+    try:
+        result = subprocess.run(["lspci", "-nn"], check=False,
+                                capture_output=True, text=True, timeout=8)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if result.returncode:
+        return []
+    found = set()
+    for line in result.stdout.splitlines():
+        text = line.lower()
+        if "volume management device" in text or re.search(r"\bvmd\b", text):
+            found.add("Intel VMD/RST")
+        elif "raid bus controller" in text:
+            found.add("Controladora RAID/RST")
+        elif "non-volatile memory controller" in text or "nvme" in text:
+            found.add("Controladora NVMe")
+        elif "sata controller" in text:
+            found.add("Controladora SATA/AHCI")
+    return sorted(found)
+
+
+def load_storage_modules():
+    """Safe, non-destructive controller discovery. Never resets PCI or disks."""
+    if os.geteuid() != 0 or not LIVE.is_dir():
+        raise PermissionError("Deteccao de drivers exclusiva da sessao Live com sudo.")
+    modules = ("vmd", "nvme", "ahci", "sd_mod")
+    result = {}
+    for module in modules:
+        try:
+            proc = subprocess.run(["modprobe", "-q", module],
+                                  capture_output=True, text=True, timeout=9)
+            result[module] = proc.returncode == 0 or Path("/sys/module", module).exists()
+        except (OSError, subprocess.SubprocessError):
+            result[module] = False
+    # Wait for block devices created by the kernel; do not mount or format.
+    try:
+        subprocess.run(["udevadm", "settle", "--timeout=12"],
+                       capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return result
+
+
+def disk_has_unsupported_stack(node):
+    """Do not offer raw RAID/LVM/crypt members as erase targets."""
+    fs = str(node.get("fstype") or "").lower()
+    if ("raid_member" in fs or "lvm2_member" in fs or
+            fs.startswith("ldm") or fs == "crypto_luks"):
+        return True
+    for child in node.get("children") or []:
+        kind = str(child.get("type") or "").lower()
+        if kind not in ("", "part"):
+            return True
+        if disk_has_unsupported_stack(child):
+            return True
+    return False
+
+
+DISK_REASONS = {
+    "live_media": "Pendrive/disco usado para iniciar o Enfoque OS; protegido.",
+    "usb": "Armazenamento USB externo; bloqueado para evitar apagar o instalador.",
+    "removable": "Dispositivo removivel; nao permitido como destino.",
+    "read_only": "Disco protegido contra gravacao.",
+    "too_small": "Capacidade inferior a 24 GiB.",
+    "busy": "Particao montada ou swap em uso. Desmonte com seguranca e atualize a lista.",
+    "complex_stack": "RAID, LVM ou criptografia em camadas: migracao assistida pela TI.",
+    "not_block": "Dispositivo inexistente ou nao reconhecido pelo kernel.",
+}
+
+
+def disk_inventory():
+    """Return eligible AND excluded drives, without changing any filesystem.
+
+    An NTFS Windows partition mounted by a Live file manager previously made
+    its entire disk silently disappear from the installer. Show why instead.
+    """
     data = json.loads(run(["lsblk", "--json", "--tree", "--bytes", "--output",
-                           "PATH,TYPE,SIZE,RM,RO,TRAN,MODEL,MOUNTPOINTS"],
+                           "PATH,TYPE,SIZE,RM,RO,TRAN,MODEL,MOUNTPOINTS,FSTYPE"],
                           quiet=True).stdout)
     excluded = live_media_disk()
     swaps = active_swap_devices()
-    disks = []
+    disks, blocked = [], []
     for obj in data.get("blockdevices", []):
-        if obj.get("type") != "disk" or obj.get("rm") or obj.get("ro"):
-            continue
-        if obj.get("tran") == "usb" or obj.get("path") == excluded:
+        if obj.get("type") != "disk":
             continue
         path = obj.get("path", "")
-        size = obj.get("size", 0)
-        if not isinstance(size, int) or size < MIN_BYTES:
-            continue
-        if disk_tree_busy(obj, swaps):
-            continue
         if not re.fullmatch(r"/dev/[a-zA-Z0-9_+.-]+", path):
             continue
-        try:
-            actual = Path(path).resolve(strict=True)
-            if not stat.S_ISBLK(actual.stat().st_mode):
-                continue
-        except OSError:
+        size = obj.get("size", 0)
+        if type(size) is not int or size < 0:
             continue
-        disks.append({"path": path, "size": size, "model": obj.get("model") or "Disco interno"})
-    return disks
+        model = re.sub(r"[\x00-\x1f\x7f]", " ", str(obj.get("model") or "Disco interno")).strip()[:85]
+        reason = None
+        if obj.get("path") == excluded:
+            reason = "live_media"
+        elif str(obj.get("tran") or "").lower() == "usb":
+            reason = "usb"
+        elif obj.get("rm"):
+            reason = "removable"
+        elif obj.get("ro"):
+            reason = "read_only"
+        elif size < MIN_BYTES:
+            reason = "too_small"
+        elif disk_tree_busy(obj, swaps):
+            reason = "busy"
+        elif disk_has_unsupported_stack(obj):
+            reason = "complex_stack"
+        else:
+            try:
+                actual = Path(path).resolve(strict=True)
+                if not stat.S_ISBLK(actual.stat().st_mode):
+                    reason = "not_block"
+            except OSError:
+                reason = "not_block"
+        record = {"path": path, "size": size, "model": model}
+        if reason:
+            blocked.append({**record, "reason": reason,
+                            "message": DISK_REASONS[reason]})
+        else:
+            disks.append(record)
+    return {"eligible": disks, "blocked": blocked,
+            "controllers": storage_controller_hints(),
+            "safe": True}
+
+
+def available_disks():
+    # Re-evaluate immediately before formatting; never reuse a GUI snapshot.
+    return disk_inventory()["eligible"]
 
 
 def original_data_partitions(disk):
@@ -418,6 +520,9 @@ def install(disk, confirmation, *, mode="erase", setup_code=None):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--list-disks", action="store_true")
+    parser.add_argument("--diagnose-disks", action="store_true")
+    parser.add_argument("--probe-disks", action="store_true",
+                        help="Live/root: load VMD/NVMe/AHCI modules then diagnose; never writes disks")
     parser.add_argument("--disk")
     parser.add_argument("--confirm")
     parser.add_argument("--mode", choices=("erase", "preserve"), default="erase")
@@ -425,6 +530,10 @@ def main():
     try:
         if args.list_disks:
             print(json.dumps(available_disks()))
+        elif args.diagnose_disks or args.probe_disks:
+            if args.probe_disks:
+                load_storage_modules()
+            print(json.dumps(disk_inventory(), ensure_ascii=False))
         else:
             if not args.disk:
                 parser.error("--disk e obrigatorio")

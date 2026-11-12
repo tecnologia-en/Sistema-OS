@@ -88,6 +88,8 @@ firmware-realtek
 firmware-atheros
 firmware-brcm80211
 firmware-mediatek
+# Firmware adicional do Debian para controladoras PCI/storage pouco comuns.
+firmware-misc-nonfree
 # Plug and play USB/PCI, firmware assinado Debian e pipeline termico seguro.
 firmware-amd-graphics
 firmware-intel-graphics

@@ -1,6 +1,6 @@
 NAME="Enfoque OS"
-VERSION="0.2.46"
+VERSION="0.2.47"
 PACKAGE_REVISION="1"
 CHANNEL="piloto"
 BASE="Debian 13 (trixie)"
-STATUS="piloto-filechooser-xfce-admin-lock-046"
+STATUS="piloto-storage-vmd-inventory-diagnostics-047"

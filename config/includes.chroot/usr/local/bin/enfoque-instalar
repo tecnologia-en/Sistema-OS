@@ -27,6 +27,7 @@ class Installer(Gtk.Window):
         self.running = False
         self.progress_determinate = False
         self.disks = []
+        self.disk_report = {"eligible": [], "blocked": [], "controllers": []}
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
         self.add(box)
         title = Gtk.Label()
@@ -79,12 +80,15 @@ class Installer(Gtk.Window):
         self.progress.set_show_text(False)
         box.pack_start(self.progress, False, False, 0)
         row = Gtk.Box(spacing=12)
-        self.refresh = Gtk.Button(label="Atualizar discos")
+        self.refresh = Gtk.Button(label="Atualizar discos / detectar SSD")
         self.refresh.connect("clicked", self.refresh_disks)
+        self.diagnose = Gtk.Button(label="Por que meu HD/SSD nao aparece?")
+        self.diagnose.connect("clicked", self.show_disk_diagnostics)
         self.submit = Gtk.Button(label="Instalar no disco selecionado")
         self.submit.get_style_context().add_class("destructive-action")
         self.submit.connect("clicked", self.start)
         row.pack_start(self.refresh, False, False, 0)
+        row.pack_start(self.diagnose, False, False, 0)
         row.pack_end(self.submit, False, False, 0)
         box.pack_end(row, False, False, 0)
         self.update_mode()
@@ -106,22 +110,73 @@ class Installer(Gtk.Window):
         dialog.destroy()
 
     def refresh_disks(self, *_):
+        if self.running:
+            return
         self.disk.remove_all()
         self.disks = []
+        self.disk_report = {"eligible": [], "blocked": [], "controllers": []}
+        self.submit.set_sensitive(False)
         try:
-            run = subprocess.run([INSTALLER, "--list-disks"], capture_output=True,
-                                 text=True, timeout=15, check=True)
-            self.disks = json.loads(run.stdout)
+            # The same Live sudo privilege used for installing safely probes
+            # VMD, NVMe and AHCI drivers. If unavailable, show passive results.
+            try:
+                report = subprocess.run(
+                    ["sudo", "-n", INSTALLER, "--probe-disks"],
+                    capture_output=True, text=True, timeout=42, check=True)
+            except (OSError, subprocess.SubprocessError):
+                report = subprocess.run(
+                    [INSTALLER, "--diagnose-disks"],
+                    capture_output=True, text=True, timeout=18, check=True)
+            result = json.loads(report.stdout)
+            if not isinstance(result, dict) or result.get("safe") is not True:
+                raise ValueError("Inventario de discos invalido")
+            self.disk_report = result
+            self.disks = result.get("eligible", [])
             for disk in self.disks:
                 gib = disk["size"] / 1024 ** 3
                 self.disk.append(disk["path"], f'{disk["path"]} - {gib:.0f} GiB - {disk["model"]}')
+            self.submit.set_sensitive(bool(self.disks))
+            blocked = result.get("blocked", [])
             if self.disks:
                 self.disk.set_active(0)
-                self.status.set_text(f'{len(self.disks)} disco(s) interno(s) elegivel(is).')
+                self.status.set_text(
+                    f'{len(self.disks)} disco(s) pronto(s). '
+                    f'{len(blocked)} outro(s) bloqueado(s)/protegido(s). '
+                    'Confira o disco de destino antes de apagar o Windows.')
             else:
-                self.status.set_text("Nenhum disco interno elegivel. Nenhum dispositivo sera alterado.")
-        except (OSError, ValueError, subprocess.SubprocessError) as error:
-            self.status.set_text("Nao foi possivel consultar discos: " + str(error)[:100])
+                self.status.set_text(
+                    "Nenhum disco interno pronto para instalacao. "
+                    "Clique em 'Por que meu HD/SSD nao aparece?' para ver os motivos. "
+                    "NENHUM disco sera alterado.")
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
+            self.submit.set_sensitive(False)
+            self.status.set_text("Erro ao verificar discos: " + str(error)[:160])
+
+    def show_disk_diagnostics(self, *_):
+        details = self.disk_report
+        eligible = details.get("eligible", [])
+        blocked = details.get("blocked", [])
+        controllers = details.get("controllers", [])
+        lines = [f"Discos prontos: {len(eligible)} | Discos protegidos: {len(blocked)}"]
+        for item in (eligible + blocked)[:12]:
+            gib = item.get("size", 0) / 1024 ** 3
+            reason = item.get("message", "Pronto para instalacao (APAGA o Windows).")
+            lines.append(f"{item.get('path', '?')} ({gib:.0f} GiB): {reason}")
+        if len(eligible) + len(blocked) > 12:
+            lines.append("Outros dispositivos omitidos; consulte a TI.")
+        if controllers:
+            lines.append("Controladoras detectadas: " + ", ".join(controllers))
+        if not eligible:
+            lines.append(
+                "Se o Windows inicia normalmente, mas o SSD nao aparece sequer na lista, "
+                "a controladora pode usar Intel RST/VMD/RAID. "
+                "Nao altere o modo SATA/AHCI na BIOS sem backup: o Windows pode parar de iniciar. "
+                "Anote o modelo do PC/controladora e encaminhe o diagnostico para a TI.")
+        lines.append(
+            "Discos com particoes montadas ou swap em uso nao sao disponibilizados. "
+            "Feche as janelas que estejam usando o disco e desmonte de forma segura; "
+            "nao remova o pendrive da instalacao. O diagnostico nao formata discos.")
+        self.message("\n".join(lines)[:2100], bool(not eligible))
 
     def update_mode(self, *_):
         keeping = self.keep_mode.get_active()
@@ -171,6 +226,7 @@ class Installer(Gtk.Window):
         self.running = True
         self.submit.set_sensitive(False)
         self.refresh.set_sensitive(False)
+        self.diagnose.set_sensitive(False)
         self.disk.set_sensitive(False)
         self.confirm.set_sensitive(False)
         self.code.set_sensitive(False)
@@ -246,8 +302,9 @@ class Installer(Gtk.Window):
             self.progress.set_fraction(1.0)
             self.progress.set_show_text(True)
             self.progress.set_text("100% - instalacao concluida")
-        self.submit.set_sensitive(not success)
+        self.submit.set_sensitive(not success and bool(self.disks))
         self.refresh.set_sensitive(not success)
+        self.diagnose.set_sensitive(not success)
         if success:
             # The live desktop still reads files from the USB. Removing it before
             # poweroff can crash XFCE plug-ins and cause I/O errors in the session.

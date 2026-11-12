@@ -26,7 +26,8 @@ class InstallSafetyTests(unittest.TestCase):
         gui = (ROOT / "config/includes.chroot/usr/local/bin/enfoque-instalar").read_text()
         self.assertNotIn("calamares-install-debian", gui)
         self.assertIn("APAGAR", gui)
-        self.assertIn("--list-disks", gui)
+        self.assertIn("--diagnose-disks", gui)
+        self.assertIn("--probe-disks", gui)
 
     def test_usb_must_stay_inserted_until_poweroff(self):
         gui = (ROOT / "config/includes.chroot/usr/local/bin/enfoque-instalar").read_text()
@@ -103,10 +104,10 @@ class InstallSafetyTests(unittest.TestCase):
     def test_minimum_disk_size_and_no_usb_drive(self):
         src = SOURCE.read_text()
         self.assertIn('MIN_BYTES = 24 * 1024 ** 3', src)
-        self.assertIn('obj.get("tran") == "usb"', src)
+        self.assertIn('str(obj.get("tran") or "").lower() == "usb"', src)
         self.assertIn('"lsblk", "--json", "--tree"', src)
         self.assertIn('obj.get("path") == excluded', src)
-        self.assertIn('if disk_tree_busy(obj, swaps):', src)
+        self.assertIn('elif disk_tree_busy(obj, swaps):', src)
 
 
 if __name__ == "__main__":

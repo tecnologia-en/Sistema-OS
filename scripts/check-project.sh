@@ -17,6 +17,10 @@ for pkg in parted squashfs-tools dosfstools e2fsprogs grub2-common grub-pc-bin g
   }
 done
 python3 -m unittest discover -s "$ROOT/test" -p 'test_branded_installer.py'
+python3 -m unittest discover -s "$ROOT/test" -p 'test_storage_detection_047.py' -q
+for pkg in firmware-misc-nonfree pciutils kmod; do
+  grep -Fxq "$pkg" "$ROOT/config/package-lists/enfoque-base.list.chroot" || { echo "ERRO: driver/diagnostico de armazenamento ausente: $pkg" >&2; exit 1; }
+done
 
 # Falha detectada no primeiro boot do piloto 0.1:
 # user-setup precisa ser explicitamente instalado se o apt-recommends esta desativado.
@@ -60,6 +64,7 @@ echo "Versao definida: $version"
 python3 -m unittest discover -s "$ROOT/test" -p "test_release_044.py" -q
 python3 -m unittest discover -s "$ROOT/test" -p "test_release_045.py" -q
 python3 -m unittest discover -s "$ROOT/test" -p "test_release_046.py" -q
+python3 -m unittest discover -s "$ROOT/test" -p "test_release_047.py" -q
 # Debian Security e incluido via repositorio oficial explicito. --security false
 # desativa somente a origem padrao incompatível do live-build Ubuntu.
 for f in "$ROOT/config/archives/trixie-security.list.chroot" "$ROOT/config/archives/trixie-security.list.binary"; do
