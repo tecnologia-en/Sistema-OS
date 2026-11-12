@@ -8,11 +8,11 @@ on:
       - '.github/workflows/transfer-iso-048.yml'
 
 permissions:
-  actions: read
+  actions: write
   contents: read
 
 concurrency:
-  group: enfoque-iso-run102-upload
+  group: enfoque-iso-run102-upload-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -20,6 +20,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:
+      - name: Stop superseded transfer attempt safely
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run cancel 43260078719 --repo "$GITHUB_REPOSITORY" || true
+
       - name: Download exact successful ISO build 102
         uses: actions/download-artifact@v4
         with:
@@ -48,6 +54,14 @@ jobs:
           printf '\nEPHEMERAL_PUBLIC_KEY_START\n'
           cat "$RUNNER_TEMP/enfoque-run102-key.pub"
           printf 'EPHEMERAL_PUBLIC_KEY_END\n\n'
+
+      - name: Share one-time public key for authorized VPS receiver
+        uses: actions/upload-artifact@v4
+        with:
+          name: enfoque-run102-public-key
+          path: ${{ runner.temp }}/enfoque-run102-key.pub
+          retention-days: 1
+          if-no-files-found: error
 
       - name: Wait for restricted upload authorization on VPS
         run: |
