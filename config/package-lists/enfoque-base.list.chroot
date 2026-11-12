@@ -111,6 +111,7 @@ sudo
 ca-certificates
 gpgv
 curl
+wget
 openssh-client
 openssh-server
 openssl

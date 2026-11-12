@@ -13,6 +13,13 @@ class Release048(unittest.TestCase):
         self.assertIn("81096d2f65fd43352540c351bca15bb0712a2a6f9efa4c95e9fff25cb97b3b81",stage)
         self.assertIn("sha256sum -c --status",stage)
 
+    def test_chrome_wget_preinstalled_before_hook(self):
+        packages=(ROOT/"config/package-lists/enfoque-base.list.chroot").read_text().splitlines()
+        self.assertIn("wget", packages)
+        hook=(ROOT/"config/hooks/normal/090-google-chrome.hook.chroot").read_text()
+        self.assertIn("dpkg-query -W -f=",hook)
+        self.assertIn("Acquire::Retries=5",hook)
+
     def test_firstboot_device_identity_is_not_shared(self):
         binding=(TREE/"usr/local/sbin/enfoque-canfoque-firstboot").read_text()
         self.assertIn('"authorisedForRemoteControl": False',binding)
