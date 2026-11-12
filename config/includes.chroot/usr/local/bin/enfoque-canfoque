@@ -1,0 +1,18 @@
+#!/bin/sh
+# Enfoque OS 0.2.48: Canfoque Pilot without an endpoint account.
+set -eu
+app=/opt/enfoque/canfoque-pilot.AppImage
+if [ -e /run/live/medium ]; then
+  echo "Canfoque: instale o Enfoque OS para ter um ID individual." >&2
+  exit 1
+fi
+if [ ! -f /var/lib/enfoque-os/firstboot.json ]; then
+  echo "Canfoque: conclua o Primeiro Uso do Enfoque OS." >&2
+  exit 1
+fi
+if [ ! -x "$app" ]; then
+  echo "Canfoque Pilot nao instalado corretamente. Contate a Central de TI." >&2
+  exit 1
+fi
+# Keep Electron's native sandbox enabled.
+exec "$app" "$@"

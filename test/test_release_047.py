@@ -1,4 +1,4 @@
-"""0.2.47 release contract: storage is inspectable and boot ISO is safe."""
+"""0.2.48 release contract: storage is inspectable and boot ISO is safe."""
 from pathlib import Path
 import unittest
 
@@ -9,8 +9,8 @@ BASE=ROOT/"config/includes.chroot"
 class Release047(unittest.TestCase):
     def test_release_version_and_firmware(self):
         release=(BASE/"etc/enfoque-os-release").read_text()
-        self.assertIn('VERSION="0.2.47"',release)
-        self.assertIn('STATUS="piloto-storage-vmd-inventory-diagnostics-047"',release)
+        self.assertIn('VERSION="0.2.48"',release)
+        self.assertIn('STATUS="piloto-canfoque-print-pages-048"',release)
         packages=(ROOT/"config/package-lists/enfoque-base.list.chroot").read_text()
         for pkg in ("firmware-misc-nonfree","pciutils","kmod","parted"):
             self.assertIn("\n"+pkg+"\n",packages)

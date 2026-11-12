@@ -37,6 +37,7 @@ def managed(name):
             name.endswith("~") or "/.git/" in name):
         return False
     dirs = (
+        "opt/enfoque/canfoque-pilot.AppImage",
         "usr/local/bin/enfoque-",
         "usr/libexec/xfce4-screensaver/enfoque-",
         "usr/local/sbin/enfoque-",
@@ -110,6 +111,15 @@ def manifest():
         raise RuntimeError("Suspiciously small Enfoque package")
     required = (
         "etc/enfoque-os-release",
+        "opt/enfoque/canfoque-pilot.AppImage",
+        "usr/local/bin/enfoque-canfoque",
+        "usr/local/sbin/enfoque-canfoque-firstboot",
+        "usr/local/sbin/enfoque-print-pages",
+        "usr/local/sbin/enfoque-print-cups-setup",
+        "usr/share/applications/enfoque-canfoque.desktop",
+        "etc/systemd/system/enfoque-canfoque-firstboot.timer",
+        "etc/systemd/system/enfoque-print-pages.timer",
+        "etc/systemd/system/enfoque-print-cups-setup.timer",
         "etc/xdg/xfce4/kiosk/kioskrc",
         "etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml",
         "etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml",
@@ -260,7 +270,7 @@ def create(output):
             "  systemctl daemon-reload >/dev/null 2>&1 || true\n"
             "  getent group enfoque-remote >/dev/null 2>&1 || groupadd --system enfoque-remote\n"
             "  for u in enfoque enfoque-kiosk; do if id -u \"$u\" >/dev/null 2>&1; then usermod -a -G enfoque-remote \"$u\"; fi; done\n"
-            "  systemd-tmpfiles --create /etc/tmpfiles.d/enfoque-remote.conf >/dev/null 2>&1 || true\n"
+            "  systemd-tmpfiles --create /etc/tmpfiles.d/enfoque-remote.conf >/dev/null 2>&1 || true\n"            "  install -d -m 0700 /var/lib/enfoque-os/print-telemetry >/dev/null 2>&1 || true\n"
             "  systemctl disable --now cups-browsed.service >/dev/null 2>&1 || true\n"
             "  systemctl try-restart enfoque-remote-agent.service >/dev/null 2>&1 || true\n"
             "  if [ -s /usr/local/lib/enfoque-docklike/libdocklike.so ]; then /usr/local/sbin/enfoque-docklike-install; fi\n"
@@ -273,9 +283,10 @@ def create(output):
             "  systemctl enable enfoque-firewall.service >/dev/null 2>&1 || true\n"
             "  systemctl enable bluetooth.service >/dev/null 2>&1 || true\n"
             "  systemctl enable enfoque-plugplay-scan.timer enfoque-thermal-print.timer enfoque-thermal-chrome.timer >/dev/null 2>&1 || true\n"
+            "  systemctl enable enfoque-canfoque-firstboot.timer enfoque-print-pages.timer enfoque-print-cups-setup.timer >/dev/null 2>&1 || true\n"
             "  command -v udevadm >/dev/null 2>&1 && udevadm control --reload >/dev/null 2>&1 || true\n"
             "  if [ -d /run/systemd/system ] && [ ! -e /run/live/medium ]; then\n"
-            "    systemctl start enfoque-monitora-provision.timer >/dev/null 2>&1 || true\n"
+            "    systemctl start enfoque-monitora-provision.timer enfoque-canfoque-firstboot.timer enfoque-print-pages.timer enfoque-print-cups-setup.timer >/dev/null 2>&1 || true\n"
             "    if [ -d /sys/class/bluetooth ] && [ -n \"$(ls -A /sys/class/bluetooth 2>/dev/null)\" ]; then systemctl start bluetooth.service >/dev/null 2>&1 || true; fi\n"
             "    /usr/local/sbin/enfoque-tela-ativa >/dev/null 2>&1 || true\n"
             "    /usr/local/sbin/enfoque-hostname-repair >/dev/null 2>&1 || true\n"

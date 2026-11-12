@@ -142,6 +142,8 @@ libnotify-bin
 
 x11-utils
 xdotool
+# AppImage runtime for Canfoque Pilot (Electron).
+libfuse2t64
 
 wmctrl
 

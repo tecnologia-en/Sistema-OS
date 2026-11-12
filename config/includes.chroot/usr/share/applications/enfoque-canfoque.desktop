@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Canfoque
+GenericName=Acesso remoto da Enfoque
+Comment=Canfoque 2.0 Pilot - identificacao automatica Enfoque OS
+Exec=/usr/local/bin/enfoque-canfoque
+Icon=computer
+Terminal=false
+Categories=Network;RemoteAccess;
+StartupNotify=true

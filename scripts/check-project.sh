@@ -65,6 +65,14 @@ python3 -m unittest discover -s "$ROOT/test" -p "test_release_044.py" -q
 python3 -m unittest discover -s "$ROOT/test" -p "test_release_045.py" -q
 python3 -m unittest discover -s "$ROOT/test" -p "test_release_046.py" -q
 python3 -m unittest discover -s "$ROOT/test" -p "test_release_047.py" -q
+python3 -m unittest discover -s "$ROOT/test" -p "test_release_048.py" -q
+python3 -m unittest discover -s "$ROOT/test" -p "test_print_pages_048.py" -q
+bash -n "$ROOT/scripts/stage-canfoque-iso.sh"
+sh -n "$ROOT/config/hooks/normal/105-enfoque-canfoque.hook.chroot"
+sh -n "$ROOT/config/hooks/normal/106-enfoque-print-pages.hook.chroot"
+python3 -m py_compile "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-print-pages"
+python3 -m py_compile "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-print-cups-setup"
+python3 -m py_compile "$ROOT/config/includes.chroot/usr/local/sbin/enfoque-canfoque-firstboot"
 # Debian Security e incluido via repositorio oficial explicito. --security false
 # desativa somente a origem padrao incompatível do live-build Ubuntu.
 for f in "$ROOT/config/archives/trixie-security.list.chroot" "$ROOT/config/archives/trixie-security.list.binary"; do

@@ -1,0 +1,29 @@
+[Unit]
+Description=Enfoque OS - contar e sincronizar paginas CUPS por computador
+After=cups.service enfoque-device-id.service network-online.target
+Wants=cups.service network-online.target
+ConditionPathExists=/var/lib/enfoque-os/firstboot.json
+ConditionPathExists=!/run/live/medium
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/enfoque-print-pages --loop
+Restart=always
+RestartSec=8s
+User=root
+Group=root
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/enfoque-os/print-telemetry
+ReadOnlyPaths=/var/log/cups /etc/enfoque-os /var/lib/enfoque-os
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectControlGroups=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+LimitNOFILE=1024
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=Enfoque OS - habilitar registro de paginas CUPS sem interromper a fila
+After=cups.service
+Wants=cups.service
+ConditionPathExists=!/run/live/medium
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/enfoque-print-cups-setup
+UMask=0077
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes

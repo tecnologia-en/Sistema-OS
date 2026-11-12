@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+# Capture only page accounting fields; document names and print users never
+# leave the local CUPS daemon. Recording is disabled by default on Debian.
+cups=/etc/cups/cupsd.conf
+test -s "$cups"
+# Same validator used on future APT updates; never restarts CUPS in chroot.
+test -x /usr/local/sbin/enfoque-print-cups-setup
+/usr/local/sbin/enfoque-print-cups-setup --image
+test -x /usr/local/sbin/enfoque-print-pages
+systemctl enable enfoque-print-pages.timer enfoque-print-cups-setup.timer >/dev/null
+install -d -m 0700 /var/lib/enfoque-os/print-telemetry
+# Do not create machine credentials or copy queue/history into installation.
+rm -f -- /var/lib/enfoque-os/print-telemetry/events.sqlite3
+echo "Enfoque OS: contador CUPS habilitado, dados enviados apos cadastro e aprovacao."

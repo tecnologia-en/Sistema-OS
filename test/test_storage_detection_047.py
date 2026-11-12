@@ -1,4 +1,4 @@
-"""0.2.47: verify Windows SSD detection and all destructive disk exclusions.
+"""0.2.48: verify Windows SSD detection and all destructive disk exclusions.
 
 No real disk is accessed, mounted, partitioned, formatted or erased.
 """

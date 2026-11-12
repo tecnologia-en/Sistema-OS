@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+"""Link Canfoque to individual Enfoque OS First Boot identity (no credentials)."""
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import tempfile
+from uuid import UUID
+
+DEVICE = Path("/var/lib/enfoque-os/device-identity.json")
+PROFILE = Path("/var/lib/enfoque-os/firstboot.json")
+BINDING = Path("/var/lib/enfoque-os/canfoque-binding.json")
+LIVE = Path("/run/live/medium")
+ID_RE = re.compile(r"^[0-9]{12}-[0-9]$")
+
+
+def parse_binding(device, profile):
+    if not isinstance(device, dict) or not isinstance(profile, dict):
+        raise ValueError("Cadastro inválido")
+    uid = str(UUID(str(device.get("uuid"))))
+    if UUID(uid).version != 4 or uid != str(profile.get("uuid")):
+        raise ValueError("UUID inconsistente entre dispositivo e Primeiro Uso")
+    if (not ID_RE.fullmatch(str(profile.get("displayId", ""))) or
+            str(profile.get("shortId", "")) != str(device.get("shortId", "")) or
+            not str(profile.get("pcName", "")).strip()):
+        raise ValueError("Nome ou identificador do Enfoque OS inválido")
+    return {
+        "schema": 1,
+        "enfoqueId": str(profile["displayId"]),
+        "uuid": uid,
+        "pcName": str(profile["pcName"]).strip()[:90],
+        "unit": str(profile.get("unitName", "")).strip()[:90],
+        "provider": "rustdesk-oss",
+        "transportId": None,
+        # Registration is NOT remote-control authorization.
+        "authorisedForRemoteControl": False,
+    }
+
+
+def safe_json(path):
+    if path.is_symlink():
+        raise ValueError("Identidade não pode ser link")
+    return json.loads(path.read_text(encoding="utf8"))
+
+
+def write_unique(path, data):
+    if path.is_symlink():
+        raise ValueError("Vínculo não pode ser link")
+    if path.exists():
+        old = safe_json(path)
+        if old.get("uuid") != data["uuid"]:
+            raise ValueError("Vínculo de outro equipamento já registrado")
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".canfoque-", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf8") as out:
+            json.dump(data, out, ensure_ascii=False, indent=2)
+            out.write("\n")
+            out.flush()
+            os.fsync(out.fileno())
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+    return True
+
+
+def main():
+    if os.geteuid() != 0 or LIVE.exists():
+        return 2
+    if not DEVICE.is_file() or not PROFILE.is_file():
+        return 0
+    try:
+        record = parse_binding(safe_json(DEVICE), safe_json(PROFILE))
+        write_unique(BINDING, record)
+    except (ValueError, OSError, json.JSONDecodeError) as exc:
+        print("Canfoque: cadastro incompleto:", str(exc)[:160])
+        return 2
+    # RustDesk still requires host-session authentication/consent.
+    # This does not enroll an admin or grant unattended access.
+    subprocess.run(["systemctl", "start", "--no-block", "rustdesk.service"],
+                   check=False, timeout=8)
+    print("Canfoque: ID individual vinculado, sem liberar controle remoto.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

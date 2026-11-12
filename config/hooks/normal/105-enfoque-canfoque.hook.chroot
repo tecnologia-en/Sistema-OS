@@ -1,0 +1,26 @@
+#!/bin/sh
+set -eu
+echo "Enfoque OS: validando motor RustDesk e interface Canfoque Pilot"
+test "$(dpkg-query -W rustdesk | cut -f2)" = "1.5.3"
+test -x /usr/share/rustdesk/rustdesk
+test -f /usr/share/rustdesk/files/systemd/rustdesk.service
+test -x /opt/enfoque/canfoque-pilot.AppImage
+test -x /usr/local/bin/enfoque-canfoque
+test -x /usr/local/sbin/enfoque-canfoque-firstboot
+test -s /usr/share/applications/enfoque-canfoque.desktop
+install -d -m 0755 /etc/systemd/system/rustdesk.service.d
+# Official package installs a unit only if chroot PID 1 is systemd.
+install -m 0644 /usr/share/rustdesk/files/systemd/rustdesk.service /etc/systemd/system/rustdesk.service
+# Do not initialize a RustDesk identity during ISO build/live session.
+cat >/etc/systemd/system/rustdesk.service.d/10-enfoque-firstboot.conf <<'UNIT'
+[Unit]
+After=enfoque-device-id.service
+ConditionPathExists=/var/lib/enfoque-os/firstboot.json
+ConditionPathExists=!/run/live/medium
+UNIT
+systemctl enable rustdesk.service >/dev/null
+systemctl enable enfoque-canfoque-firstboot.timer >/dev/null
+rm -rf -- /root/.config/rustdesk /var/lib/rustdesk /etc/rustdesk
+test ! -e /var/lib/enfoque-os/device-identity.json
+test ! -e /var/lib/enfoque-os/canfoque-binding.json
+echo "Enfoque OS: Canfoque Pilot instalado sem identidade/credencial global."
