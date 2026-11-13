@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+"""Replace only known official UI files, preserving custom user settings."""
+from pathlib import Path
+import hashlib, shutil
+FILES={'gtk-3.0/gtk.css': '0a0b8121dea1b96ea2a299672bd553cb99fbe2185dd967d088c7e1e7fe899245', 'xfce4/panel/launcher-1/enfoque-menu.desktop': None, 'xfce4/panel/launcher-8/enfoque-background.desktop': None, 'xfce4/panel/launcher-12/enfoque-id.desktop': '0e127ba2e21ca779c00be8424178325ac92543d3aff90d19443592e07e95f059', 'xfce4/panel/genmon-16.rc': '979a40aacec7bd031ea9bef9d0b9587cb2d724fe703a1a2966f04c84e2b55ab2', 'xfce4/panel/genmon-17.rc': '060235a940ec06d2bddd60831ca9b36627ed250a8af8b0beed29395d741703b1', 'xfce4/panel/genmon-11.rc': '390a569e30ce33d42f5c79ec3b1c5cf12a4ee4a934657e26c49f1f3a5364ca3f'}
+for rel,previous in FILES.items():
+    p=Path.home()/'.config'/rel
+    source=Path('/etc/skel/.config')/rel
+    if p.is_symlink() or not source.is_file():
+        continue
+    if not p.exists() or (previous and hashlib.sha256(p.read_bytes()).hexdigest()==previous):
+        p.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copyfile(source,p)

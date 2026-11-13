@@ -24,7 +24,7 @@ class DesktopV024Tests(unittest.TestCase):
                          "alsa-utils"}.issubset(packages))
 
     def test_wifi_connected_and_available_networks(self):
-        self.assertEqual(plugin(8).get("value"), "systray")
+        self.assertEqual(plugin(8).get("value"), "launcher")
         pkg = (BASE / "config/package-lists/enfoque-base.list.chroot").read_text()
         self.assertIn("\nnetwork-manager-gnome\n", pkg)
         autostart = (CONFIG / "etc/xdg/autostart/enfoque-rede.desktop").read_text()
@@ -69,7 +69,7 @@ class DesktopV024Tests(unittest.TestCase):
             self.assertEqual(icon.get("viewBox"), "0 0 64 64")
             self.assertGreater(len(list(icon)), 3)
         settings = (CONFIG / "etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml").read_text()
-        self.assertIn('value="Arc"', settings)
+        self.assertIn('value="EnfoqueModern"', settings)
         css = CONFIG / "etc/skel/.config/gtk-3.0/gtk.css"
         self.assertTrue(css.is_file())
 

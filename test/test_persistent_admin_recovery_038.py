@@ -86,7 +86,7 @@ class Recovery038Tests(unittest.TestCase):
                          "etc/systemd/system/enfoque-update-nextboot.timer"):
             self.assertIn(required, source)
         self.assertIn("enfoque-update-nextboot.timer enfoque-zero-touch.timer", source)
-        self.assertIn('VERSION="0.2.51"', (BASE/"etc/enfoque-os-release").read_text())
+        self.assertIn('VERSION="0.2.52"', (BASE/"etc/enfoque-os-release").read_text())
 
 
 class Nextboot038Tests(unittest.TestCase):

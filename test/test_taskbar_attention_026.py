@@ -35,11 +35,11 @@ class DocklikeAttentionTests(unittest.TestCase):
         self.assertNotIn("g_timeout_add(100",patch)
 
     def test_style_distinguishes_open_active_and_attention(self):
-        style=(BASE/"etc/skel/.config/gtk-3.0/gtk.css").read_text()
+        style=(BASE/"usr/share/themes/EnfoqueModern/gtk-3.0/panel.css").read_text()
         self.assertIn("#docklike-plugin .group.open_group {",style)
         self.assertIn("#docklike-plugin .group.open_group.active_group {",style)
         self.assertIn("#docklike-plugin .group.enfoque_attention {",style)
-        self.assertIn("rgba(255, 167, 64, .93)",style)
+        self.assertIn("#ffb454",style)
 
     def test_pinned_source_archive_immutable(self):
         archive=ROOT/"third_party/xfce4-docklike-plugin-0.4.3.tar.bz2"
@@ -63,7 +63,7 @@ class DocklikeAttentionTests(unittest.TestCase):
 
     def test_release_number(self):
         release=(BASE/"etc/enfoque-os-release").read_text()
-        self.assertIn('VERSION="0.2.51"',release)
+        self.assertIn('VERSION="0.2.52"',release)
 
 if __name__=="__main__":
     unittest.main()

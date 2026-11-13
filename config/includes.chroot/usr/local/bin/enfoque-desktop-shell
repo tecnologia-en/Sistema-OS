@@ -9,7 +9,7 @@ import socket
 
 def _fast_client():
     command = sys.argv[1] if len(sys.argv) > 1 else "menu"
-    if command not in ("menu", "notifications", "printers", "calendar", "hide"):
+    if command not in ("menu", "notifications", "printers", "calendar", "background", "hide"):
         return False
     uid = os.getuid()
     runtime = os.environ.get("XDG_RUNTIME_DIR")
@@ -53,6 +53,9 @@ APP_IDS = [
     ("libreoffice-writer.desktop", "Writer", "libreoffice-writer"),
     ("libreoffice-calc.desktop", "Calc", "libreoffice-calc"),
     ("xfce4-terminal.desktop", "Terminal", "utilities-terminal"),
+    ("org.xfce.taskmanager.desktop", "Gerenciador de tarefas", "enfoque-taskmanager"),
+    ("galculator.desktop", "Calculadora", "enfoque-calculator"),
+    ("xfce4-screenshooter.desktop", "Captura de tela", "enfoque-screenshot"),
     ("mousepad.desktop", "Editor", "accessories-text-editor"),
     ("enfoque-impressoras.desktop", "Impressoras", "enfoque-printer"),
     ("enfoque-recuperacao.desktop", "Consertar meu PC", "enfoque-recuperacao"),
@@ -62,11 +65,11 @@ APP_IDS = [
 ]
 CSS = b"""
 .enfoque-surface {
- background: rgba(20, 37, 68, 0.98);
- border: 1px solid rgba(131, 182, 239, 0.65);
- border-radius: 19px;
+ background: #1c293c;
+ border: 1px solid #465b78;
+ border-radius: 12px;
  color: #f1f7ff;
- box-shadow: 0 17px 39px rgba(5, 23, 54, .44);
+ box-shadow: none;
 }
 .enfoque-surface label { color: #f1f7ff; }
 .enfoque-title {font-weight: 700; font-size: 15px; color: #f7fbff;}
@@ -224,7 +227,11 @@ class DesktopShell:
         self.build_notifications()
         self.build_printers()
         self.build_calendar()
-        GLib.timeout_add(1800,self.refresh)
+        import importlib.util
+        spec=importlib.util.spec_from_file_location("enfoque_background","/usr/local/lib/enfoque-background/tray.py")
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        self.background=module.BackgroundDrawer(self,self.window("background","Em segundo plano"))
+        GLib.timeout_add_seconds(5,self.refresh)
     def init_css(self):
         provider=Gtk.CssProvider()
         provider.load_from_data(CSS)
@@ -235,6 +242,9 @@ class DesktopShell:
         if name=="menu":
             w,h=min(612,sw-20),min(585,sh-76)
             x=max(7,(sw-w)//2)
+        elif name=="background":
+            w,h=min(344,sw-22),min(240,sh-76)
+            x=sw-w-12
         elif name=="notifications":
             w,h=min(422,sw-22),min(580,sh-76)
             x=sw-w-12
@@ -262,6 +272,21 @@ class DesktopShell:
         win.move(x,y)
         win.connect("focus-out-event", lambda *_:GLib.idle_add(win.hide))
         win.connect("key-press-event", lambda _,event: win.hide() if event.keyval==Gdk.KEY_Escape else None)
+        # XShape supplies rounded corners without enabling a compositor.
+        def shape(widget,allocation):
+            if not widget.get_window():
+                return
+            import cairo, math
+            w,h=allocation.width,allocation.height
+            radius=min(12,w//2,h//2)
+            region=cairo.Region(cairo.RectangleInt(0,radius,w,max(1,h-2*radius)))
+            for y in range(radius):
+                inset=round(radius-math.sqrt(max(0,radius*radius-(radius-y-.5)**2)))
+                region.union(cairo.RectangleInt(inset,y,max(1,w-2*inset),1))
+                region.union(cairo.RectangleInt(inset,h-y-1,max(1,w-2*inset),1))
+            widget.get_window().shape_combine_region(region,0,0)
+        win.connect("size-allocate",shape)
+        win.connect("realize",lambda widget: shape(widget,widget.get_allocation()))
         self.windows[name]=win
         return win
     def header(self,heading,win):
@@ -307,7 +332,10 @@ class DesktopShell:
         fl.set_column_spacing(4)
         fl.set_margin_start(20);fl.set_margin_end(20)
         self.fl=fl
-        outer.pack_start(fl,False,False,0)
+        apps_scroll=self.scroll(fl)
+        apps_scroll.set_min_content_height(170)
+        apps_scroll.set_max_content_height(300)
+        outer.pack_start(apps_scroll,True,True,0)
         self.populate_apps()
         spacer=Gtk.Box()
         outer.pack_start(spacer,True,True,0)
@@ -551,7 +579,9 @@ class DesktopShell:
         self.hide_all()
         if was:
             return
-        if name=="notifications":
+        if name=="background":
+            self.background.prepare()
+        elif name=="notifications":
             self.refresh_notifications(force=True)
         elif name=="printers":
             self.refresh_printers()
@@ -593,8 +623,8 @@ def send_existing(sock_path,command):
 
 def main():
     cmd=sys.argv[1] if len(sys.argv)>1 else "menu"
-    if cmd not in {"menu","notifications","printers","calendar","daemon","hide"}:
-        print("Uso: enfoque-desktop-shell {menu|notifications|printers|calendar|daemon|hide}")
+    if cmd not in {"menu","notifications","printers","calendar","background","daemon","hide"}:
+        print("Uso: enfoque-desktop-shell {menu|notifications|printers|calendar|background|daemon|hide}")
         return 2
     path=get_sock()
     if send_existing(path,cmd):

@@ -28,7 +28,7 @@ def values(node):
 class PortalAndAdminLock(unittest.TestCase):
     def test_version(self):
         release=(TREE/"etc/enfoque-os-release").read_text()
-        self.assertIn('VERSION="0.2.51"',release)
+        self.assertIn('VERSION="0.2.52"',release)
         self.assertIn('PACKAGE_REVISION="1"',release)
 
     def test_file_chooser_portal_installed_in_iso(self):
@@ -72,7 +72,7 @@ class PortalAndAdminLock(unittest.TestCase):
     def test_appearance_themes_are_restricted_not_keyboard_or_accessibility(self):
         x=xml(XFCONF/"xsettings.xml")
         self.assertEqual(x.get("name"),"xsettings")
-        for prop,wanted in (("./property[@name='Net']/property[@name='ThemeName']","Arc"),
+        for prop,wanted in (("./property[@name='Net']/property[@name='ThemeName']","EnfoqueModern"),
                             ("./property[@name='Net']/property[@name='IconThemeName']","EnfoqueFluent"),
                             ("./property[@name='Gtk']/property[@name='FontName']","Noto Sans 10")):
             item=x.find(prop)
@@ -127,7 +127,7 @@ class PortalAndAdminLock(unittest.TestCase):
         self.assertIn("gh release create",workflow)
         checker=(ROOT/"scripts/check-project.sh").read_text()
         self.assertIn("test_release_046.py",checker)
-        self.assertIn('VERSION="0.2.51"',(TREE/"etc/enfoque-os-release").read_text())
+        self.assertIn('VERSION="0.2.52"',(TREE/"etc/enfoque-os-release").read_text())
         self.assertTrue((ROOT/"docs/RELEASE_046_PORTAL_PANEL_LOCK.md").is_file())
 
 if __name__=="__main__":

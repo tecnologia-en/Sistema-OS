@@ -1,0 +1,10 @@
+@import url("/usr/share/themes/Arc/gtk-3.0/gtk.css");
+@import url("panel.css");
+/* Solid surfaces avoid compositor-dependent blur and costly shadows. */
+window.background { background-color: #f5f7fb; }
+headerbar, .titlebar { background-image: none; background-color: #eef2f8; box-shadow: none; }
+button, entry, combobox button { border-radius: 6px; }
+button { transition: none; }
+entry:focus { border-color: #2979de; box-shadow: inset 0 -1px #2979de; }
+selection, *:selected { background-color: #246fd0; color: #ffffff; }
+tooltip { border-radius: 6px; }

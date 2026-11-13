@@ -38,7 +38,7 @@ grep -Fq 'menu default' "$ROOT/config/bootloaders/syslinux_common/live.cfg.in" |
 grep -Fq 'Exec=/usr/local/bin/enfoque-aplicar-visual' "$ROOT/config/includes.chroot/etc/xdg/autostart/enfoque-visual.desktop" || fail 'autostart sem execucao'
 grep -Eq '^arc-theme$' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'tema Arc nao instalado'
 grep -Eq '^systemd-timesyncd$' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'NTP nao instalado'
-grep -Fq 'value="Arc"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" || fail 'tema nao configurado'
+grep -Fq 'value="EnfoqueModern"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" || fail 'tema nao configurado'
 for p in \
   config/bootloaders/isolinux/splash.png \
   config/bootloaders/grub-pc/splash.png \
@@ -62,7 +62,7 @@ need config/includes.chroot/etc/skel/.config/xfce4/panel/docklike-18.rc
 need config/includes.chroot/etc/xdg/xfce4/panel/docklike.rc
 need config/includes.chroot/usr/local/sbin/enfoque-docklike-install
 grep -Fxq 'xfce4-docklike-plugin' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'docklike ausente da ISO'
-grep -Fq '#docklike-plugin .group.enfoque_attention' "$ROOT/config/includes.chroot/etc/skel/.config/gtk-3.0/gtk.css" || fail 'piscar laranja ausente'
+grep -Fq '#docklike-plugin .group.enfoque_attention' "$ROOT/config/includes.chroot/usr/share/themes/EnfoqueModern/gtk-3.0/panel.css" || fail 'indicador de atencao ausente'
 grep -Fq 'name="plugin-13" type="string" value="genmon"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" || fail 'bateria dinamica ausente do painel'
 grep -Fq 'Command=/usr/local/bin/enfoque-bateria-painel' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/panel/genmon-13.rc" || fail 'indicador de bateria adaptativo ausente'
 grep -Fxq xfce4-battery-plugin "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'plugin bateria ausente da ISO'

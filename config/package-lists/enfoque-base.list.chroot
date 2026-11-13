@@ -156,7 +156,7 @@ restic
 mate-polkit
 polkitd
 
-# 0.2.51: printer bank and distribution-maintained filters.
+# 0.2.52: printer bank and distribution-maintained filters.
 printer-driver-all
 foomatic-db-compressed-ppds
 openprinting-ppds
@@ -182,3 +182,9 @@ printer-driver-sag-gdi
 printer-driver-splix
 
 foomatic-db-engine
+
+# On-demand desktop utilities (no autostart services).
+xfce4-taskmanager
+xfce4-screenshooter
+galculator
+brightnessctl

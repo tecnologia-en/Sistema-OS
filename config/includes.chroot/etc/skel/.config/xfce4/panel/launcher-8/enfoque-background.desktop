@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Aplicativos em segundo plano e brilho
+Comment=Mostrar ícones da bandeja e ajustar o brilho em notebooks
+Exec=/usr/local/bin/enfoque-desktop-shell background
+Icon=enfoque-chevron-up
+Terminal=false
+Categories=System;

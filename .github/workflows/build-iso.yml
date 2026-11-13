@@ -10,6 +10,7 @@ on:
       - feature/canfoque-v2-iso-048
       - feature/printer-plugplay-050
       - feature/printer-library-051
+      - feature/modern-desktop-052
     paths:
       - 'config/**'
       - 'scripts/build-iso.sh'
@@ -67,9 +68,10 @@ jobs:
             --env DEBIAN_FRONTEND=noninteractive \
             debian:trixie bash -euc '
               apt-get update -qq
-              apt-get install -y -qq --no-install-recommends gcc python3 libcupsimage2-dev pkg-config xfconf libxfconf-0-3 libxfconf-0-dev dbus-x11 xfce4-settings
+              apt-get install -y -qq --no-install-recommends gcc python3 python3-gi gir1.2-gtk-3.0 xvfb xauth libxtst6 libcupsimage2-dev pkg-config xfconf libxfconf-0-3 libxfconf-0-dev dbus-x11 xfce4-settings
               bash scripts/build-thermal-raster.sh
               gcc -std=c11 -Wall -Wextra -Werror -O2 -o /tmp/enfoque-xfce-kiosk-probe test/xfce_kiosk_probe.c $(pkg-config --cflags --libs libxfconf-0)
+              NO_AT_BRIDGE=1 xvfb-run -a dbus-run-session -- python3 scripts/test-modern-desktop.py
               bash scripts/test-xfce-diversion.sh
               bash scripts/test-xfce-kiosk-policy.sh
             '

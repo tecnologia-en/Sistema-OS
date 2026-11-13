@@ -1,0 +1,4 @@
+# Preserve personal settings; stage official launchers before XFCE starts.
+if [ -x /usr/local/bin/enfoque-visual-migrate ]; then
+    /usr/local/bin/enfoque-visual-migrate || :
+fi

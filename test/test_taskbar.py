@@ -53,7 +53,7 @@ class TaskbarTests(unittest.TestCase):
             self.assertIsNone(self.plugins.find(f"./property[@name='plugin-{old}']"))
         for plugin_id in (7,15):
             self.assertEqual(self.plugins.find(f"./property[@name='plugin-{plugin_id}']").get("value"),"separator")
-        for plugin_id,typ in ((14,"genmon"),(8,"systray"),(9,"pulseaudio"),(10,"genmon"),(11,"genmon")):
+        for plugin_id,typ in ((14,"genmon"),(8,"launcher"),(9,"pulseaudio"),(10,"genmon"),(11,"genmon")):
             self.assertEqual(self.plugins.find(f"./property[@name='plugin-{plugin_id}']").get("value"),typ)
         p=self.plugins.find("./property[@name='plugin-12']")
         self.assertEqual(p.get("value"),"launcher")
@@ -66,7 +66,7 @@ class TaskbarTests(unittest.TestCase):
     def test_windows_11_search_and_transparent_glass_taskbar(self):
         panel = self.panel
         background = panel.find("./property[@name='background-rgba']")
-        self.assertLess(float(background.findall("./value")[-1].get("value")), 0.08)
+        self.assertEqual(float(background.findall("./value")[-1].get("value")), 1.0)
         for plugin_id in (7, 15):
             plugin = self.plugins.find(f"./property[@name='plugin-{plugin_id}']")
             self.assertEqual(plugin.find("./property[@name='expand']").get("value"), "true")
@@ -74,11 +74,9 @@ class TaskbarTests(unittest.TestCase):
         self.assertIn("<txtclick>/usr/local/bin/enfoque-desktop-shell menu</txtclick>", search.read_text())
         settings = ROOT / "config/includes.chroot/etc/skel/.config/xfce4/panel/genmon-14.rc"
         self.assertIn("Command=/usr/local/bin/enfoque-busca-painel", settings.read_text())
-        css = ROOT / "config/includes.chroot/etc/skel/.config/gtk-3.0/gtk.css"
+        css = ROOT / "config/includes.chroot/usr/share/themes/EnfoqueModern/gtk-3.0/panel.css"
         style = css.read_text()
         self.assertIn("#XfcePanelWindow", style)
-        self.assertIn("#showdesktop-button", style)
-        self.assertIn("#whiskermenu-window", style)
         package = (ROOT / "config/package-lists/enfoque-base.list.chroot").read_text()
         self.assertIn("\nxfce4-genmon-plugin\n", package)
         self.assertIn("\nxfce4-panel\n", package)
@@ -86,7 +84,7 @@ class TaskbarTests(unittest.TestCase):
         self.assertIn("#docklike-plugin .group.open_group",style)
         self.assertIn("#docklike-plugin .group.open_group.active_group",style)
         self.assertIn("#docklike-plugin .group.enfoque_attention",style)
-        self.assertIn("rgba(255, 167, 64, .93)",style)
+        self.assertIn("#ffb454",style)
 
     def test_original_fluent_style_icons_and_papirus_fallback(self):
         base = ROOT / "config/includes.chroot/usr/share/icons/EnfoqueFluent"

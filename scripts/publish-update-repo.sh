@@ -5,7 +5,9 @@ if [[ "$#" -lt 1 || "$EUID" -ne 0 ]]; then
   echo "Usage: publish-update-repo.sh core.deb [printer-drivers.deb]" >&2
   exit 2
 fi
-ROOT=/srv/enfoque-os-archive
+ROOT="${ENFOQUE_REPO_ROOT:-/srv/enfoque-os-archive}"
+SUITE="${ENFOQUE_REPO_SUITE:-stable}"
+[[ "$ROOT" == /srv/enfoque-os-archive && "$SUITE" == stable || "$ROOT" == /srv/enfoque-os-preview && "$SUITE" == preview ]] || exit 2
 KEY_HOME=/var/lib/enfoque-update/keyring
 PUBLIC=/var/lib/enfoque-update/archive-keyring.gpg
 [[ -d "$KEY_HOME" && -f "$PUBLIC" ]]
@@ -66,7 +68,7 @@ install -d -m 0755 "$STAGE/main/binary-amd64"
   apt-ftparchive packages pool/main/e/enfoque-printer-drivers
 ) > "$STAGE/main/binary-amd64/Packages"
 gzip -n -c "$STAGE/main/binary-amd64/Packages" > "$STAGE/main/binary-amd64/Packages.gz"
-( cd "$STAGE"; apt-ftparchive -o "APT::FTPArchive::Release::Origin=Enfoque Papelaria" -o "APT::FTPArchive::Release::Label=Enfoque OS" -o "APT::FTPArchive::Release::Suite=stable" -o "APT::FTPArchive::Release::Codename=stable" -o "APT::FTPArchive::Release::Architectures=amd64" -o "APT::FTPArchive::Release::Components=main" release . > Release )
+( cd "$STAGE"; apt-ftparchive -o "APT::FTPArchive::Release::Origin=Enfoque Papelaria" -o "APT::FTPArchive::Release::Label=Enfoque OS" -o "APT::FTPArchive::Release::Suite=$SUITE" -o "APT::FTPArchive::Release::Codename=$SUITE" -o "APT::FTPArchive::Release::Architectures=amd64" -o "APT::FTPArchive::Release::Components=main" release . > Release )
 gpg --homedir "$KEY_HOME" --batch --yes --pinentry-mode loopback --clearsign --digest-algo SHA256 --output "$STAGE/InRelease" "$STAGE/Release"
 gpg --homedir "$KEY_HOME" --batch --yes --pinentry-mode loopback --detach-sign --digest-algo SHA256 --output "$STAGE/Release.gpg" "$STAGE/Release"
 gpgv --keyring "$PUBLIC" "$STAGE/Release.gpg" "$STAGE/Release" >/dev/null
@@ -75,7 +77,7 @@ id="$(date -u +%Y%m%dT%H%M%SZ)-$(sha256sum "$core" | cut -c1-12)"
 RELEASE_DIR="$ROOT/releases/$id"
 mv -- "$STAGE" "$RELEASE_DIR"
 trap - EXIT
-ln -s "../releases/$id" "$ROOT/dists/.stable-next"
-mv -Tf -- "$ROOT/dists/.stable-next" "$ROOT/dists/stable"
+ln -s "../releases/$id" "$ROOT/dists/.$SUITE-next"
+mv -Tf -- "$ROOT/dists/.$SUITE-next" "$ROOT/dists/$SUITE"
 chmod -R a+rX "$RELEASE_DIR"
 echo "ENFOQUE_APT_PUBLISHED version=$CORE_VER index=$RELEASE_DIR"
