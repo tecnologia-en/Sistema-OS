@@ -72,3 +72,7 @@ O novo teste de integração usa CUPS Raster v2 de 576 pixels e 203 DPI no Debia
 ## Compatibilidade do tema com GTK3
 
 O ZIP original referencia um arquivo CSS que nao existe no arquivo e inclui propriedades que o GTK3 ignora. O script de empacotamento corrige apenas essas referencias e propriedades nas 18 variantes, mantendo os recursos visuais originais. O teste grafico isolado Xvfb carregou a janela e os icones sem erros de parse CSS.
+
+## Preservacao das opcoes nativas Bematech
+
+A aplicacao global do filtro nao modifica NENHUMA opcao nativa de cada Bematech (corte, gaveta, pulso, avanco, resolucao e papel). Isso evita sobrepor peculiaridades das lojas e mantem o ajuste focado apenas na escala de cupons estreitos.

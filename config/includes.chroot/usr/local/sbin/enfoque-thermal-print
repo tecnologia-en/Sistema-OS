@@ -239,11 +239,10 @@ def scan(dry_run=False):
                 r'^\*(?:NickName|ModelName|ShortNickName):\s*(.+)$',ppd,re.M)))
             is_bematech=bool(BEMATECH_HINT.search(model))
             if is_bematech:
-                # Every shop may have a different cash-drawer wiring or policy.
-                # Keep all drawer and cash-pulse options EXACTLY as configured.
-                for name in list(selected):
-                    if "drawer" in name.lower() or "cash" in name.lower():
-                        selected.pop(name,None)
+                # Preserve EVERY native manufacturer option on existing Bematech
+                # queues, including cutter, cash drawer, feed, and resolution.
+                # The company-wide fix only adjusts validated narrow receipts.
+                selected={}
             changes={key:value for key,value in selected.items() if defaults.get(key)!=value}
             patched,origin=patch_bematech_pdf_ppd(queue,ppd)
             chosen_filter=BEMATECH_PDF_FILTER if origin else CUPS_FILTER

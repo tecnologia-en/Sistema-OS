@@ -97,8 +97,8 @@ Drawer2/Drawer Configuration (pin #5): *Off Begin End
         self.assertEqual(len(report["changed"]),1)
         entry=report["changed"][0]
         self.assertEqual(entry["filter"],"bemafilters.sh")
-        self.assertFalse(any("drawer" in k.lower() or "cash" in k.lower()
-                             for k in entry["options"]))
+        self.assertEqual(entry["options"],{})
+        self.assertEqual(entry["filter"],"bemafilters.sh")
 
     def test_wrapper_exists_and_fallback_keeps_vendor_filter(self):
         wrapper=TREE/"usr/lib/cups/filter/enfoque-bematech-fit"
