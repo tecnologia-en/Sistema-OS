@@ -124,6 +124,34 @@ def install_enfoque_panel():
         if not css.is_file():
             raise RuntimeError("Missing AeroBird GTK CSS: " + str(css))
         text = css.read_text("utf-8")
+        # The upstream v6 HDPI archive refers to a stylesheet not shipped in
+        # any of its 18 variants; progressbars are already styled in gtk.css.
+        # Fix two invalid GTK3 declarations, preserving the actual values.
+        missing = '@import url("widgets/progress-bars.css");'
+        if missing not in text or 'border-color: #387db6;]' not in text:
+            raise RuntimeError("AeroBird upstream CSS layout unexpectedly changed")
+        text = text.replace(missing, '/* Progress bars are already defined in gtk.css. */')
+        text = text.replace('border-color: #387db6;]', 'border-color: #387db6;')
+        # GTK3 ignores these web-only CSS properties, and logs warnings.
+        # Removing only those inert declarations preserves their actual look.
+        text = text.replace("    max-height: 54px;", "    /* GTK3 ignores max-height. */")
+        text = text.replace("\tz-index: 1;", "\t/* GTK3 ignores z-index. */")
+        for widget_name, unsupported in (
+            ("show-desktop-button.css", ("    max-width: 1px;",)),
+            ("thunar.css", ("\tmax-height: 45px;", "\tmax-height: 41px;")),
+        ):
+            widget_path = css.parent / "widgets" / widget_name
+            widget_source = widget_path.read_text("utf-8")
+            for invalid in unsupported:
+                if invalid not in widget_source:
+                    raise RuntimeError("AeroBird incompatible widget declaration changed")
+                widget_source = widget_source.replace(invalid,"/* Unsupported GTK3 property omitted. */")
+            widget_path.write_text(widget_source, encoding="utf-8")
+        widget_css = css.parent / "widgets" / "tasklist&docklike-plugin.css"
+        widget_text = widget_css.read_text("utf-8")
+        if "margin: 9px !important;" not in widget_text:
+            raise RuntimeError("AeroBird upstream tasklist CSS layout unexpectedly changed")
+        widget_css.write_text(widget_text.replace("margin: 9px !important;", "margin: 9px;"), encoding="utf-8")
         marker = "/* Enfoque OS 0.2.54: compact corporate status items, preserving AeroBird glass. */"
         if marker not in text:
             css.write_text(text.rstrip() + "\n" + corporate, encoding="utf-8")

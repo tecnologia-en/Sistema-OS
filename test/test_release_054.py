@@ -49,8 +49,13 @@ class VisualAssets054(unittest.TestCase):
         self.assertTrue((TREE/"usr/share/icons/windows-modern/index.theme").is_file())
         self.assertTrue((TREE/"usr/share/themes/Aerobird-Sky-hdpi/gtk-3.0/gtk.css").is_file())
         self.assertTrue((TREE/"usr/share/themes/Aerobird-Sky-hdpi/xfwm4/themerc").is_file())
-        self.assertIn("GTK", (TREE/"usr/share/themes/Aerobird-Sky-hdpi/gtk-3.0/gtk.css").read_text()[:2000] +
-                      "GTK")
+        css = (TREE/"usr/share/themes/Aerobird-Sky-hdpi/gtk-3.0/gtk.css").read_text()
+        self.assertNotIn('''@import url("widgets/progress-bars.css");''',css)
+        self.assertNotIn("border-color: #387db6;]",css)
+        self.assertNotIn("z-index:",css)
+        self.assertNotIn("max-height:",css)
+        widget = (TREE/"usr/share/themes/Aerobird-Sky-hdpi/gtk-3.0/widgets/tasklist&docklike-plugin.css").read_text()
+        self.assertNotIn("margin: 9px !important;",widget)
 
     def test_corporate_launchers_unmodified(self):
         shell = (TREE/"usr/local/bin/enfoque-desktop-shell").read_text()

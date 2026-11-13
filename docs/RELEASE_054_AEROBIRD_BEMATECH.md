@@ -68,3 +68,7 @@ A auditoria do banco de drivers mostrou que algumas Bematech não usam o bemafil
 Esse modo mede a região impressa do raster 80 mm, aplica escala uniforme de até 1,40x para largura e altura quando o recibo realmente está estreito e mantém o número de pixels de largura, o DPI e a chamada ao driver original. Se o conteúdo já ocupa a bobina, está em outro formato ou não cabe com segurança, passa sem escala. O modo padrão para outras impressoras continua sem zoom, preservando leitura de QR/barcode e dimensões originais.
 
 O novo teste de integração usa CUPS Raster v2 de 576 pixels e 203 DPI no Debian 13. Verifica a escala Bematech 1,400x, largura final maior, altura correta e, em paralelo, todos os testes antigos de eliminação de margem branca/rodapé para outras impressoras. A validação física ainda deve ocorrer antes de campanha geral.
+
+## Compatibilidade do tema com GTK3
+
+O ZIP original referencia um arquivo CSS que nao existe no arquivo e inclui propriedades que o GTK3 ignora. O script de empacotamento corrige apenas essas referencias e propriedades nas 18 variantes, mantendo os recursos visuais originais. O teste grafico isolado Xvfb carregou a janela e os icones sem erros de parse CSS.
