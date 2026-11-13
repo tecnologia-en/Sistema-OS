@@ -8,7 +8,7 @@ jobs:
     permissions:
       contents: read
     env:
-      PYTHONPYCACHEPREFIX: ${{ runner.temp }}/enfoque-pycache
+      PYTHONPYCACHEPREFIX: /tmp/enfoque-ci-pycache-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
       - name: Stage pinned and verified Canfoque/RustDesk binaries
