@@ -12,4 +12,8 @@ for variant in footer qr none; do
     "$PROGRAM" < "$TMP/$variant.before" > "$TMP/$variant.after"
     "$TMP/fixture" check "$variant" "$TMP/$variant.after"
 done
-echo 'THERMAL_RASTER_SMOKE_PASSED: preserved DPI/width/top; removed browser footer and excess blank roll'
+# Only approved Bematech queues opt in to the proportional Chrome receipt fit.
+"$TMP/fixture" write bema "$TMP/bema.before"
+ENFOQUE_BEMATECH_FIT=1 "$PROGRAM" < "$TMP/bema.before" > "$TMP/bema.after"
+"$TMP/fixture" check bema "$TMP/bema.after"
+echo 'THERMAL_RASTER_SMOKE_PASSED: default DPI/width preserved, Bematech optional proportional fit tested'

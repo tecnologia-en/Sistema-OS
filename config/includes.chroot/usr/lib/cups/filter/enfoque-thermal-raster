@@ -18,6 +18,11 @@ if test "$#" -ge 6; then
 else
     exec 3<&0
 fi
-# The converter changes only the trailing white page length, never raster
-# width, scaling or QR. A failure stops the print instead of sending garbage.
+# Only Bematech manufacturers with an approved 80-mm raster PPD may opt in
+# to bounded proportional fit. All other printers keep original pixel scale.
+if [[ "$original" == "rastertobematech" || "$original" == "enfoque-lib-bematech-raster" ]] ||
+   grep -Eiq '^\*(NickName|ModelName|ShortNickName):[[:space:]]*"?(Bematech|MP[- ]?4200)' "$PPD"; then
+    export ENFOQUE_BEMATECH_FIT=1
+fi
+# Fail closed on conversion errors. The vendor filter consumes CUPS Raster v2.
 "/usr/local/libexec/enfoque-thermal-raster-trim" <&3 | "$filter" "$1" "$2" "$3" "$4" "$5"

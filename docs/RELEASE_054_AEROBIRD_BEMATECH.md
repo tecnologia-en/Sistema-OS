@@ -60,3 +60,11 @@ Nos clientes:
     sudo enfoque-printer-share client --queue PANTUM_CAIXA1_CENTRO_REDE --uri ipp://192.168.111.173:631/printers/CAIXA1_PANTUM_P2500_USB
 
 Este utilitário NÃO é acionado automaticamente pela atualização; é necessário executar a ação em um computador autorizado. Restringe o firewall ao IP/interface/sub-rede corporativa, não libera administração CUPS pela LAN, preserva backups locais de configs e não altera o padrão do Chrome ou CUPS de clientes existentes. Sub-redes amplas ou públicas são recusadas.
+
+## Cobertura adicional: Bematech com driver raster nativo
+
+A auditoria do banco de drivers mostrou que algumas Bematech não usam o bemafilters.sh PDF: há filas com enfoque-lib-bematech-raster ou rastertobematech. Na 0.2.54, o filtro raster já existente ganhou modo específico opcional ENFOQUE_BEMATECH_FIT=1, ativado apenas pelo wrapper do CUPS para fila Bematech homologada.
+
+Esse modo mede a região impressa do raster 80 mm, aplica escala uniforme de até 1,40x para largura e altura quando o recibo realmente está estreito e mantém o número de pixels de largura, o DPI e a chamada ao driver original. Se o conteúdo já ocupa a bobina, está em outro formato ou não cabe com segurança, passa sem escala. O modo padrão para outras impressoras continua sem zoom, preservando leitura de QR/barcode e dimensões originais.
+
+O novo teste de integração usa CUPS Raster v2 de 576 pixels e 203 DPI no Debian 13. Verifica a escala Bematech 1,400x, largura final maior, altura correta e, em paralelo, todos os testes antigos de eliminação de margem branca/rodapé para outras impressoras. A validação física ainda deve ocorrer antes de campanha geral.
