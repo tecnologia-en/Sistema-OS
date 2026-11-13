@@ -2,7 +2,7 @@
 # Personalizacao da sessao XFCE: visual estilo Windows sem componentes proprietarios.
 set -eu
 WALLPAPER=/usr/share/backgrounds/enfoque-os/wallpaper.jpg
-MARKER="${HOME}/.cache/enfoque-os-visual-v052"
+MARKER="${HOME}/.cache/enfoque-os-visual-v053"
 if [ ! -f "$WALLPAPER" ] || ! command -v xfconf-query >/dev/null 2>&1; then
   exit 0
 fi

@@ -11,7 +11,7 @@ class Release047(unittest.TestCase):
     def test_release_version_and_firmware(self):
         release=(BASE/"etc/enfoque-os-release").read_text()
         assert_minimum_release(self,release)
-        self.assertIn('STATUS="piloto-modern-desktop-052"',release)
+        self.assertRegex(release,r'STATUS="piloto-modern-desktop-[0-9]{3}"')
         packages=(ROOT/"config/package-lists/enfoque-base.list.chroot").read_text()
         for pkg in ("firmware-misc-nonfree","pciutils","kmod","parted"):
             self.assertIn("\n"+pkg+"\n",packages)

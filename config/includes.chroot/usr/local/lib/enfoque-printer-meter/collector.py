@@ -171,7 +171,7 @@ def send(db,machine,auth,transport=urllib.request.urlopen):
              "readings":[json.loads(row[1]) for row in rows]}
     req=urllib.request.Request(ENDPOINT,json.dumps(payload).encode(),
         {"Content-Type":"application/json","X-Enfoque-Device-Id":auth["id"],
-         "X-Enfoque-Device-Token":auth["token"],"User-Agent":"Enfoque-OS-printer-meter/0.2.52"},method="POST")
+         "X-Enfoque-Device-Token":auth["token"],"User-Agent":"Enfoque-OS-printer-meter/0.2.53"},method="POST")
     with transport(req,timeout=9) as response:
         if response.status!=200:raise RuntimeError("Meter upload rejected")
         ack=json.loads(response.read(1500))

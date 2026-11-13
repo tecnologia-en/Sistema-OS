@@ -33,6 +33,8 @@ on:
       - 'test/xfce_kiosk_probe.c'
       - 'scripts/test-xfce-kiosk-policy.sh'
       - 'scripts/test-xfce-diversion.sh'
+      - 'scripts/test-menu-glass.py'
+      - 'test/test_release_053.py'
       - 'src/**'
       - 'scripts/build-thermal-raster.sh'
       - 'scripts/test-thermal-raster.sh'
@@ -79,6 +81,7 @@ jobs:
               gcc -std=c11 -Wall -Wextra -Werror -O2 -o /tmp/enfoque-xfce-kiosk-probe test/xfce_kiosk_probe.c $(pkg-config --cflags --libs libxfconf-0)
               cp -a config/includes.chroot/usr/share/themes/EnfoqueModern /usr/share/themes/
               GTK_THEME=EnfoqueModern NO_AT_BRIDGE=1 xvfb-run -a dbus-run-session -- python3 scripts/test-modern-desktop.py
+              GTK_THEME=EnfoqueModern NO_AT_BRIDGE=1 xvfb-run -a dbus-run-session -- python3 scripts/test-menu-glass.py
               bash scripts/test-xfce-diversion.sh
               bash scripts/test-xfce-kiosk-policy.sh
             '

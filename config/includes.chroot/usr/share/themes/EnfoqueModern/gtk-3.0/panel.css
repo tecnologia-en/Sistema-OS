@@ -1,4 +1,4 @@
-/* Enfoque 0.2.52: compact, opaque, compositor-independent taskbar. */
+/* Enfoque 0.2.53: tighter tray and compact ID without affecting the app dock. */
 #XfcePanelWindow, .xfce4-panel {
  background-color: #172131; background-image: none;
  border: none; border-top: 1px solid #354459; box-shadow: none;
@@ -8,8 +8,8 @@
  color: #f1f5fa; background: transparent; background-image: none;
  border: 1px solid transparent; border-radius: 6px;
  box-shadow: none; transition: none;
- padding: 1px 3px; margin: 5px 1px;
- min-width: 20px; min-height: 26px;
+ padding: 1px 2px; margin: 2px 0px;
+ min-width: 19px; min-height: 26px;
 }
 #XfcePanelWindow button:hover { background: #2c3b50; border-color: #40536e; }
 #XfcePanelWindow button:checked, #XfcePanelWindow button:active {
@@ -17,11 +17,18 @@
 }
 #XfcePanelWindow .genmon {
  background: transparent; border: none; border-radius: 6px;
- padding: 2px 4px; margin: 4px 1px;
+ padding: 1px 1px; margin: 2px 0px;
 }
-#XfcePanelWindow #launcher-12 button { min-width: 16px; padding: 1px 2px; }
+#XfcePanelWindow #launcher-12 button {
+ min-width: 18px; min-height: 24px; padding: 0; margin: 2px 0;
+}
+#XfcePanelWindow #launcher-12 image { -gtk-icon-transform: scale(.80); }
+#XfcePanelWindow #genmon-13, #XfcePanelWindow #genmon-16,
+#XfcePanelWindow #genmon-17, #XfcePanelWindow #genmon-10 {
+ min-width: 0; padding: 0 1px; margin: 2px 0;
+}
 #XfcePanelWindow .systray button, #XfcePanelWindow #pulseaudio-button {
- min-width: 16px; padding: 1px 2px; margin: 5px 0;
+ min-width: 16px; padding: 1px; margin: 2px 0;
 }
 #XfcePanelWindow #genmon-11 {min-width: 4px; padding: 0; margin: 0; background: transparent; border: none;}
 #docklike-plugin .group {

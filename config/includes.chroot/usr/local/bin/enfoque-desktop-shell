@@ -44,6 +44,7 @@ import unicodedata
 
 
 APP_IDS = [
+    ("enfoque-meu-computador.desktop", "Meu Computador", "enfoque-my-computer"),
     ("google-chrome.desktop", "Google Chrome", "google-chrome"),
     ("thunar.desktop", "Arquivos", "system-file-manager"),
     ("xarchiver.desktop", "Compactador ZIP / 7z", "package-x-generic"),
@@ -65,20 +66,29 @@ APP_IDS = [
 ]
 CSS = b"""
 .enfoque-surface {
- background: #1c293c;
- border: 1px solid #465b78;
- border-radius: 12px;
+ background-color: #1b2c43;
+ background-image: linear-gradient(135deg, #344c6b 0%, #233650 37%, #17273d 80%, #20334e 100%);
+ border: none;
+ border-radius: 18px;
  color: #f1f7ff;
  box-shadow: none;
 }
+.enfoque-menu-glass {
+ background-image: linear-gradient(to bottom, rgba(205,235,255,.09), rgba(124,187,238,.025) 54%, rgba(8,21,42,.12));
+ border: none; border-radius: 18px;
+}
+.enfoque-menu-brand {
+ font-size: 15px; font-weight: 800; color: #ebf7ff;
+}
+.enfoque-menu-tagline {font-size: 10px; color: #a9cbe8;}
 .enfoque-surface label { color: #f1f7ff; }
 .enfoque-title {font-weight: 700; font-size: 15px; color: #f7fbff;}
 .enfoque-heading {font-size: 11px;font-weight: 700;color: #dcecff;}
 .enfoque-muted {font-size: 10px; color: #afc9e5;}
 .enfoque-search {
   min-height: 37px;
-  border: 1px solid #7caedb;
-  border-radius: 10px;
+  border: 1px solid rgba(189,225,255,.4);
+  border-radius: 12px;
   background: #e9f4ff;
   color: #24466f;
 }
@@ -102,7 +112,7 @@ CSS = b"""
  border-radius: 10px; padding: 7px 13px;color:#e7f3ff;
 }
 .enfoque-action:hover {background: rgba(145,206,255,.32);}
-.enfoque-footer {background: rgba(3,20,51,.29);border-radius: 0 0 18px 18px;}
+.enfoque-footer {background: rgba(4,18,39,.28);border-radius: 0 0 18px 18px;}
 progressbar trough {min-height:7px; background:#25446e;border-radius:6px;}
 progressbar progress {background:#6bc9ff;border-radius:6px;}
 """
@@ -263,7 +273,7 @@ class DesktopShell:
         win.set_skip_pager_hint(True)
         win.set_keep_above(True)
         win.set_resizable(False)
-        win.set_type_hint(Gdk.WindowTypeHint.UTILITY)
+        win.set_type_hint(Gdk.WindowTypeHint.POPUP_MENU if name=="menu" else Gdk.WindowTypeHint.UTILITY)
         win.set_border_width(0)
         styled(win,"enfoque-surface")
         x,y,w,h=self.geometry(name)
@@ -272,13 +282,26 @@ class DesktopShell:
         win.move(x,y)
         win.connect("focus-out-event", lambda *_:GLib.idle_add(win.hide))
         win.connect("key-press-event", lambda _,event: win.hide() if event.keyval==Gdk.KEY_Escape else None)
+        # Rounded corners use XShape on systems without a compositor; with an
+        # active compositor RGBA also prevents dark square window corners.
+        screen=win.get_screen()
+        if screen and screen.is_composited() and screen.get_rgba_visual():
+            win.set_visual(screen.get_rgba_visual())
+        # GDK's Cairo Region converter must be registered explicitly; without
+        # gi.require_foreign the rounded mask fails and exposes black corners.
+        # The installed Enfoque OS includes python3-gi-cairo.
+        try:
+            gi.require_foreign("cairo")
+            shape_available=True
+        except ImportError:
+            shape_available=False
         # XShape supplies rounded corners without enabling a compositor.
         def shape(widget,allocation):
-            if not widget.get_window():
+            if not shape_available or not widget.get_window():
                 return
             import cairo, math
             w,h=allocation.width,allocation.height
-            radius=min(12,w//2,h//2)
+            radius=min(18,w//2,h//2)
             region=cairo.Region(cairo.RectangleInt(0,radius,w,max(1,h-2*radius)))
             for y in range(radius):
                 inset=round(radius-math.sqrt(max(0,radius*radius-(radius-y-.5)**2)))
@@ -307,11 +330,16 @@ class DesktopShell:
         return sc
     def build_menu(self):
         win=self.window("menu","Menu Enfoque OS")
-        outer=Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        outer=styled(Gtk.Box(orientation=Gtk.Orientation.VERTICAL),"enfoque-menu-glass")
         win.add(outer)
+        brand=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=10)
+        brand.set_margin_start(22);brand.set_margin_end(22);brand.set_margin_top(15)
+        brand.pack_start(label("Enfoque OS","enfoque-menu-brand"),True,True,0)
+        brand.pack_end(label("Seus aplicativos, em um só lugar","enfoque-menu-tagline"),False,False,0)
+        outer.pack_start(brand,False,False,0)
         search=styled(Gtk.SearchEntry(),"enfoque-search")
         search.set_placeholder_text("Pesquisar aplicativos, arquivos e configurações")
-        search.set_margin_start(20);search.set_margin_end(20);search.set_margin_top(21);search.set_margin_bottom(15)
+        search.set_margin_start(20);search.set_margin_end(20);search.set_margin_top(11);search.set_margin_bottom(14)
         search.connect("search-changed",self.filter_apps)
         search.connect("activate",self.launch_first)
         outer.pack_start(search,False,False,0)

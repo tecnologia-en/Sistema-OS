@@ -1,0 +1,217 @@
+#!/usr/bin/env python3
+"""Enfoque OS Meu Computador: native, read-only system summary on demand."""
+from pathlib import Path
+import sys
+
+import gi
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gtk, Gdk, Pango
+
+sys.path.insert(0, "/usr/local/lib/enfoque-my-computer")
+from info import snapshot, format_size
+
+CSS = b"""
+window.enfoque-computer-window {
+  background: #142138; color: #ecf4ff;
+}
+headerbar.enfoque-computer-header {
+  background: #1c304e; color: #f0f7ff;
+  border-bottom: 1px solid #385474; box-shadow: none;
+}
+headerbar.enfoque-computer-header button {
+  border-radius: 9px; color: #eaf5ff;
+}
+.enfoque-computer-title {
+  font-size: 24px; font-weight: 800; color: #f5faff;
+}
+.enfoque-computer-caption {
+  font-size: 12px; color: #a7c3e5;
+}
+.enfoque-computer-section {
+  font-size: 14px; font-weight: 800; color: #eff8ff;
+}
+.enfoque-computer-card {
+  background: #233751; border: 1px solid #365572;
+  border-radius: 16px; padding: 16px;
+}
+.enfoque-computer-metric {
+  color: #8acbff; font-size: 11px; font-weight: 700;
+}
+.enfoque-computer-value {
+  color: #f6faff; font-size: 16px; font-weight: 700;
+}
+.enfoque-computer-small {
+  color: #a8c5e6; font-size: 12px;
+}
+.enfoque-computer-chip {
+  background: #294968; color: #e7f6ff;
+  border-radius: 10px; padding: 6px 10px;
+}
+.enfoque-computer-progress trough {
+  background: #152538; border-radius: 6px;
+  min-height: 9px;
+}
+.enfoque-computer-progress progress {
+  background: #65b9ff; border-radius: 6px;
+}
+"""
+
+
+def styled(widget, name):
+    widget.get_style_context().add_class(name)
+    return widget
+
+
+def label(text, style=None, wrap=True):
+    widget = Gtk.Label(label=str(text))
+    widget.set_xalign(0)
+    widget.set_line_wrap(wrap)
+    widget.set_selectable(True)
+    if style:
+        styled(widget, style)
+    return widget
+
+
+def append_text(box, text, style=None):
+    widget = label(text, style)
+    box.pack_start(widget, False, False, 0)
+    return widget
+
+
+def card():
+    container = styled(Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=7),
+                       "enfoque-computer-card")
+    return container
+
+
+def gauge(box, percent):
+    progress = styled(Gtk.ProgressBar(), "enfoque-computer-progress")
+    progress.set_fraction(max(0, min(100, percent)) / 100)
+    progress.set_tooltip_text(f"{percent}% utilizado")
+    box.pack_start(progress, False, False, 3)
+
+
+class MeuComputador(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="Meu Computador")
+        self.set_default_size(780, 620)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.set_icon_name("enfoque-my-computer")
+        self.connect("destroy", Gtk.main_quit)
+        styled(self, "enfoque-computer-window")
+        provider = Gtk.CssProvider()
+        provider.load_from_data(CSS)
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        header = styled(Gtk.HeaderBar(), "enfoque-computer-header")
+        header.set_title("Meu Computador")
+        header.set_subtitle("Hardware e armazenamento deste dispositivo")
+        header.set_show_close_button(True)
+        update = Gtk.Button(label="Atualizar")
+        update.set_tooltip_text("Atualizar as informações locais")
+        update.connect("clicked", lambda *_: self.refresh())
+        header.pack_end(update)
+        self.set_titlebar(header)
+
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroller.set_shadow_type(Gtk.ShadowType.NONE)
+        self.add(scroller)
+        self.content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=17)
+        self.content.set_margin_start(22)
+        self.content.set_margin_end(22)
+        self.content.set_margin_top(20)
+        self.content.set_margin_bottom(24)
+        scroller.add(self.content)
+        self.refresh()
+
+    def summary(self, title, value, sub=""):
+        container = card()
+        append_text(container, title.upper(), "enfoque-computer-metric")
+        append_text(container, value, "enfoque-computer-value")
+        if sub:
+            append_text(container, sub, "enfoque-computer-small")
+        return container
+
+    def refresh(self):
+        facts = snapshot()
+        for old in self.content.get_children():
+            old.destroy()
+
+        append_text(self.content, "Este computador", "enfoque-computer-title")
+        append_text(self.content, facts["hostname"] + "  •  Enfoque OS " + facts["version"],
+                    "enfoque-computer-caption")
+
+        grid = Gtk.Grid()
+        grid.set_column_homogeneous(True)
+        grid.set_column_spacing(12)
+        grid.set_row_spacing(12)
+        memory = facts["memory"]
+        cpu = self.summary("Processador", facts["cpu"],
+                           f"{facts['threads']} processadores lógicos" if facts["threads"] else "")
+        ram = self.summary("Memória RAM",
+                           format_size(memory["total"]),
+                           format_size(memory["used"]) + " usados • " +
+                           format_size(memory["free"]) + " disponíveis")
+        gpu = self.summary("Placa de vídeo",
+                           "\n".join(facts["gpu"]) if facts["gpu"] else "Não identificada")
+        uptime = self.summary("Tempo ativo", facts["uptime"],
+                              "Tempo desde a última inicialização")
+        for column, row, item in ((0, 0, cpu), (1, 0, ram),
+                                  (0, 1, gpu), (1, 1, uptime)):
+            grid.attach(item, column, row, 1, 1)
+        self.content.pack_start(grid, False, False, 0)
+
+        append_text(self.content, "Armazenamento", "enfoque-computer-section")
+        system = facts["system_space"]
+        volume = card()
+        append_text(volume, "Disco do sistema  •  /", "enfoque-computer-metric")
+        append_text(volume, format_size(system["total"]) + " de espaço",
+                    "enfoque-computer-value")
+        append_text(volume, format_size(system["used"]) + " usados  •  " +
+                    format_size(system["free"]) + " livres",
+                    "enfoque-computer-small")
+        gauge(volume, system["percent"])
+        self.content.pack_start(volume, False, False, 0)
+
+        if facts["disks"]:
+            for disk in facts["disks"]:
+                drive = card()
+                title = disk["kind"] + "  •  /dev/" + disk["name"]
+                append_text(drive, title, "enfoque-computer-metric")
+                append_text(drive, format_size(disk["size"]) +
+                            ("  •  " + disk["model"] if disk["model"] else ""),
+                            "enfoque-computer-value")
+                if not disk["mounts"]:
+                    append_text(drive, "Nenhuma partição montada: uso e espaço livre indisponíveis.",
+                                "enfoque-computer-small")
+                else:
+                    mounts = list(dict.fromkeys(disk["mounts"]))
+                    for mount in mounts[:4]:
+                        # / and /home may share a filesystem; show each actual mount
+                        # separately rather than inventing physical-drive used bytes.
+                        from info import disk_space
+                        space = disk_space(mount)
+                        if space["total"]:
+                            append_text(drive, f"{mount} — " +
+                                        format_size(space["used"]) + " usados, " +
+                                        format_size(space["free"]) + " livres",
+                                        "enfoque-computer-small")
+                    if len(mounts) > 4:
+                        append_text(drive, f"+{len(mounts)-4} outras montagens",
+                                    "enfoque-computer-small")
+                self.content.pack_start(drive, False, False, 0)
+        else:
+            append_text(self.content, "Não foi possível identificar os discos físicos.",
+                        "enfoque-computer-caption")
+        append_text(self.content,
+                    "Informações obtidas somente neste PC. Discos desmontados não têm "
+                    "dados de espaço usado/livre até serem montados.",
+                    "enfoque-computer-caption")
+        self.content.show_all()
+
+
+if __name__ == "__main__":
+    window = MeuComputador()
+    window.show_all()
+    Gtk.main()

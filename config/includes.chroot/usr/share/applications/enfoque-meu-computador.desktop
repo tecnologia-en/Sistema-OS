@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Meu Computador
+Name[pt_BR]=Meu Computador
+Comment=Processador, GPU, RAM, SSD/HD, espaço e tempo ativo deste computador
+Exec=/usr/local/bin/enfoque-meu-computador
+Icon=enfoque-my-computer
+Terminal=false
+Categories=System;Utility;
+Keywords=computador;hardware;gpu;placa de video;processador;ram;ssd;hd;armazenamento;tempo ativo;memoria;
+StartupNotify=true

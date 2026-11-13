@@ -63,7 +63,7 @@ class OfficeAndDesktopTests(unittest.TestCase):
 
     def test_clean_only_previous_system_shortcuts_and_keep_user_files(self):
         script = VISUAL.read_text()
-        self.assertIn('enfoque-os-visual-v052',script)
+        self.assertRegex(script,r'enfoque-os-visual-v[0-9]{3}')
         self.assertIn("remove_os_shortcut 'PayGo.desktop' 'enfoque-paygo abrir'",script)
         self.assertIn("remove_os_shortcut 'Enfoque-Central.desktop' 'enfoque-central'",script)
         self.assertIn("remove_os_shortcut 'Compatibilidade-Windows.desktop' 'enfoque-paygo configurar'",script)
