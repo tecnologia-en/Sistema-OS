@@ -1,0 +1,76 @@
+name: Publish verified Enfoque OS 0.2.52 ISO
+
+on:
+  push:
+    branches:
+      - feature/modern-desktop-052
+    paths:
+      - '.github/workflows/publish-iso-052.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: publish-enfoque-os-052
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      RUN_ID: '43461911603'
+      SOURCE_SHA: 'a2fcad30c91470896c9447cfdf7f9a7f741062bf'
+      VERSION: '0.2.52'
+      TAG: 'enfoque-os-v0.2.52-run108'
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Confirm the exact ISO build was successful
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" \
+            --jq '[.name, .conclusion, .head_sha] | @tsv' > /tmp/source-run.txt
+          test "$(cut -f1 /tmp/source-run.txt)" = 'Build Enfoque OS ISO'
+          test "$(cut -f2 /tmp/source-run.txt)" = 'success'
+          test "$(cut -f3 /tmp/source-run.txt)" = "${SOURCE_SHA}"
+
+      - name: Retrieve GitHub Actions ISO chunks from successful build 108
+        uses: actions/download-artifact@v4
+        with:
+          name: enfoque-os-iso-parts-108
+          run-id: 43461911603
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          path: parts
+
+      - name: Verify all chunks and full ISO checksum before publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd parts
+          test -s LEIA-ME.txt
+          test -s SHA256_PARTS
+          test -s SHA256SUMS
+          sha256sum -c SHA256_PARTS
+          test "$(find . -maxdepth 1 -type f -name 'chunk-*' | wc -l)" -ge 2
+          cat chunk-* > "enfoque-os-${VERSION}-piloto-amd64.iso"
+          sha256sum -c SHA256SUMS
+          rm -f "enfoque-os-${VERSION}-piloto-amd64.iso"
+
+      - name: Publish permanent prerelease on GitHub (no machine updates)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release tag already exists; refusing to overwrite."
+            exit 1
+          fi
+          gh release create "${TAG}" \
+            parts/chunk-* parts/SHA256SUMS parts/SHA256_PARTS parts/LEIA-ME.txt \
+            --repo "${GITHUB_REPOSITORY}" --target "${SOURCE_SHA}" \
+            --title "Enfoque OS ${VERSION} — ISO piloto (build #108)" \
+            --notes "ISO gerada no GitHub Actions #108 a partir de ${SOURCE_SHA}. Compilação concluída com sucesso e SHA256 verificado antes desta publicação. Arquivos divididos em partes para respeitar o limite por asset do GitHub. Leia LEIA-ME.txt para reconstruir e verificar a ISO. Prévia para homologação: nenhuma campanha de atualização de computadores foi iniciada." \
+            --prerelease
