@@ -1,4 +1,5 @@
 """0.2.44: desktop archive support and opt-in Bluetooth hardware usability."""
+from release_contract import assert_minimum_release
 import configparser
 import importlib.util
 from pathlib import Path
@@ -24,7 +25,7 @@ MIME_TYPES = {
 class Release044(unittest.TestCase):
     def test_number_and_packages(self):
         release = (TREE / "etc/enfoque-os-release").read_text()
-        self.assertIn('VERSION="0.2.52"', release)
+        assert_minimum_release(self, release)
         self.assertIn('PACKAGE_REVISION="1"', release)
         packages = {s.strip() for s in PKGS.read_text().splitlines()
                     if s.strip() and not s.lstrip().startswith("#")}

@@ -21,7 +21,9 @@ bash "$ROOT/scripts/test-thermal-raster.sh"
 bash "$ROOT/scripts/stage-canfoque-iso.sh"
 # Build the pinned printer bank from the approved server collection (or pinned official sources).
 python3 "$ROOT/scripts/stage-printer-library.py" --validate --output "$ROOT/config/packages.chroot"
-python3 "$ROOT/scripts/test-printer-library.py" --package "$ROOT/config/packages.chroot/enfoque-printer-drivers_0.2.52-1_amd64.deb"
+REVISION="$(grep -E '^PACKAGE_REVISION="[1-9][0-9]*"$' "$ROOT/config/includes.chroot/etc/enfoque-os-release" | cut -d '"' -f2)"
+[[ "$REVISION" =~ ^[1-9][0-9]*$ ]] || { echo "Revisao do pacote invalida" >&2; exit 1; }
+python3 "$ROOT/scripts/test-printer-library.py" --package "$ROOT/config/packages.chroot/enfoque-printer-drivers_${VERSION}-${REVISION}_amd64.deb"
 # Register Enfoque-owned components with dpkg, enabling future signed APT upgrades.
 python3 "$ROOT/scripts/build-update-package.py" --output "$ROOT/config/packages.chroot"
 if [[ -e "$TARGET" ]]; then echo "ISO ja existe: $TARGET (nao sobrescrita)" >&2; exit 1; fi

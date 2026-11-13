@@ -1,4 +1,5 @@
 """Regression checks: Debian Live must have UID 1000 free and LightDM auto-login."""
+from release_contract import assert_minimum_release
 import importlib.util
 import re
 import subprocess
@@ -83,7 +84,7 @@ class LiveLoginRegression(unittest.TestCase):
 
     def test_release_version_bump(self):
         release=(TREE/"etc/enfoque-os-release").read_text()
-        self.assertIn('VERSION="0.2.52"',release)
+        assert_minimum_release(self,release)
 
 if __name__=="__main__":
     unittest.main()

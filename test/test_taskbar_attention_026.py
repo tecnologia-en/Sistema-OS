@@ -1,4 +1,5 @@
 """Enfoque OS 0.2.26: pinned/open/focused/urgent taskbar regressions."""
+from release_contract import assert_minimum_release
 import hashlib
 from pathlib import Path
 import re
@@ -63,7 +64,7 @@ class DocklikeAttentionTests(unittest.TestCase):
 
     def test_release_number(self):
         release=(BASE/"etc/enfoque-os-release").read_text()
-        self.assertIn('VERSION="0.2.52"',release)
+        assert_minimum_release(self,release)
 
 if __name__=="__main__":
     unittest.main()

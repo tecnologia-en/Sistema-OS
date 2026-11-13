@@ -1,4 +1,5 @@
 """0.2.41 on-demand X11 screen/mouse input, without root privileges."""
+from release_contract import assert_minimum_release
 import importlib.util
 import pathlib
 import unittest
@@ -65,7 +66,7 @@ class VisualInput041(unittest.TestCase):
         self.assertIn('"gui", "screenshot"', bridge)
         self.assertIn('from visual import capture, gui, VisualError', session)
         self.assertIn("xdotool", (BASE/"config/package-lists/enfoque-base.list.chroot").read_text())
-        self.assertIn('VERSION="0.2.52"', (BASE/"config/includes.chroot/etc/enfoque-os-release").read_text())
+        assert_minimum_release(self, (BASE/"config/includes.chroot/etc/enfoque-os-release").read_text())
 
 
 if __name__=="__main__":

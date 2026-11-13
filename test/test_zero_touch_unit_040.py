@@ -1,4 +1,5 @@
 """Regression for Admin / TI unit label in signed Zero Touch enrollment."""
+from release_contract import assert_minimum_release
 import runpy
 from pathlib import Path
 import unittest
@@ -21,7 +22,7 @@ class ZeroTouchUnit040Tests(unittest.TestCase):
         self.assertIn("administracao", mod["STORES"])
 
     def test_version_and_regression_documentation(self):
-        self.assertIn('VERSION="0.2.52"', (ROOT/"config/includes.chroot/etc/enfoque-os-release").read_text())
+        assert_minimum_release(self, (ROOT/"config/includes.chroot/etc/enfoque-os-release").read_text())
         server = (ROOT/"server/zero-touch-registry.mjs").read_text()
         self.assertIn('unitId === "administracao" && name === "Administracao / TI"', server)
         self.assertIn("validUnitName(data.unitId, data.unitName)", server)

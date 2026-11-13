@@ -11,6 +11,7 @@ on:
       - feature/printer-plugplay-050
       - feature/printer-library-051
       - feature/modern-desktop-052
+      - release/enfoque-os
     paths:
       - 'config/**'
       - 'scripts/build-iso.sh'
@@ -40,6 +41,11 @@ on:
       - 'docs/RELEASE_047_ARMAZENAMENTO_INSTALADOR.md'
       - 'test/zero-touch-monitora.test.mjs'
       - '.github/workflows/build-iso.yml'
+      - 'scripts/create-release-manifest.py'
+      - 'scripts/sync-github-release.py'
+      - 'scripts/install-release-sync.sh'
+      - 'scripts/systemd/**'
+      - 'test/test_release_delivery.py'
 
 permissions:
   contents: write
@@ -240,4 +246,33 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "Enfoque OS ${version} — ISO Piloto (build ${GITHUB_RUN_NUMBER})" \
             --notes "ISO de teste compilada no GitHub Actions e distribuida em partes verificaveis. Leia LEIA-ME.txt antes de reconstruir. Nao distribuir para PCs de caixa sem homologacao." \
+            --prerelease
+
+      - name: Publish verified ISO and packages for automatic intranet catalog sync
+        if: github.event_name == 'push' && github.ref == 'refs/heads/release/enfoque-os'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum -c SHA256SUMS)
+          (cd parts && sha256sum -c SHA256_PARTS)
+          python3 scripts/create-release-manifest.py
+          version="$(awk -F '"' '/^VERSION=/{print $2}' config/includes.chroot/etc/enfoque-os-release)"
+          revision="$(awk -F '"' '/^PACKAGE_REVISION=/{print $2}' config/includes.chroot/etc/enfoque-os-release)"
+          pkg_version="$version-$revision"
+          core="config/packages.chroot/enfoque-os-core_${pkg_version}_all.deb"
+          drivers="config/packages.chroot/enfoque-printer-drivers_${pkg_version}_amd64.deb"
+          tag="enfoque-os-v${version}-run${GITHUB_RUN_NUMBER}"
+          test -s "$core" && test -s "$drivers"
+          test "$tag" = "$(python3 -c 'import json;print(json.load(open("parts/UPDATE_MANIFEST.json"))["tag"])')"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Release already exists; refusing to overwrite signed package candidate' >&2
+            exit 1
+          fi
+          gh release create "$tag" \
+            parts/chunk-* parts/SHA256SUMS parts/SHA256_PARTS parts/LEIA-ME.txt \
+            parts/UPDATE_MANIFEST.json "$core" "$drivers" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Enfoque OS $version — ISO e atualizacao (build #$GITHUB_RUN_NUMBER)" \
+            --notes "ISO e pacotes corporativos aprovados pelo build. A VPS verifica a procedencia e publica no catalogo APT assinado sem atualizar nenhum computador; instalacao depende de campanha manual na intranet." \
             --prerelease

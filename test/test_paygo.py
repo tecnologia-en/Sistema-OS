@@ -1,3 +1,4 @@
+from release_contract import assert_minimum_release
 import importlib.machinery
 import importlib.util
 from pathlib import Path
@@ -39,7 +40,7 @@ class PayGoImageTests(unittest.TestCase):
         desktop = CFG / "includes.chroot/etc/skel/Desktop"
         self.assertFalse((desktop / "PayGo.desktop").exists())
         self.assertFalse((desktop / "Compatibilidade-Windows.desktop").exists())
-        self.assertIn('VERSION="0.2.52"', (CFG / "includes.chroot/etc/enfoque-os-release").read_text())
+        assert_minimum_release(self, (CFG / "includes.chroot/etc/enfoque-os-release").read_text())
 
     def test_launcher_valid_python(self):
         self.assertTrue(LAUNCHER.stat().st_mode & stat.S_IXUSR)

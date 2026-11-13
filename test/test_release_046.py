@@ -3,6 +3,7 @@
 The two changes must be present both on a fresh ISO and in a signed APT
 package for already-enrolled Enfoque OS computers. No upgrade is dispatched.
 """
+from release_contract import assert_minimum_release
 import configparser
 import importlib.util
 from pathlib import Path
@@ -28,7 +29,7 @@ def values(node):
 class PortalAndAdminLock(unittest.TestCase):
     def test_version(self):
         release=(TREE/"etc/enfoque-os-release").read_text()
-        self.assertIn('VERSION="0.2.52"',release)
+        assert_minimum_release(self,release)
         self.assertIn('PACKAGE_REVISION="1"',release)
 
     def test_file_chooser_portal_installed_in_iso(self):
@@ -127,7 +128,7 @@ class PortalAndAdminLock(unittest.TestCase):
         self.assertIn("gh release create",workflow)
         checker=(ROOT/"scripts/check-project.sh").read_text()
         self.assertIn("test_release_046.py",checker)
-        self.assertIn('VERSION="0.2.52"',(TREE/"etc/enfoque-os-release").read_text())
+        assert_minimum_release(self,(TREE/"etc/enfoque-os-release").read_text())
         self.assertTrue((ROOT/"docs/RELEASE_046_PORTAL_PANEL_LOCK.md").is_file())
 
 if __name__=="__main__":

@@ -3,6 +3,7 @@
 All disk tests run only in isolated temporary folders. Real filesystem
 snapshots, APT installs, reboot, and firewall changes are never performed.
 """
+from release_contract import assert_minimum_release
 import importlib.machinery
 import importlib.util
 import json
@@ -86,7 +87,7 @@ class Recovery038Tests(unittest.TestCase):
                          "etc/systemd/system/enfoque-update-nextboot.timer"):
             self.assertIn(required, source)
         self.assertIn("enfoque-update-nextboot.timer enfoque-zero-touch.timer", source)
-        self.assertIn('VERSION="0.2.52"', (BASE/"etc/enfoque-os-release").read_text())
+        assert_minimum_release(self, (BASE/"etc/enfoque-os-release").read_text())
 
 
 class Nextboot038Tests(unittest.TestCase):

@@ -1,0 +1,12 @@
+[Unit]
+Description=Enfoque OS - check for verified GitHub ISO releases every 5 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitInactiveSec=5min
+RandomizedDelaySec=20s
+Persistent=false
+Unit=enfoque-os-release-sync.service
+
+[Install]
+WantedBy=timers.target

@@ -2,6 +2,7 @@
 
 Tests only read source files; they never change the host keyboard.
 """
+from release_contract import assert_minimum_release
 from pathlib import Path
 import unittest
 
@@ -33,7 +34,7 @@ class KeyboardPtBrTests(unittest.TestCase):
         self.assertIn('write_text(keyboard_pt_br, encoding="utf-8")', script)
         self.assertIn("'XKBMODEL=\"abnt2\"\\n'", script)
         self.assertIn("'XKBLAYOUT=\"br\"\\n'", script)
-        self.assertIn('VERSION="0.2.52"', (BASE / 'etc/enfoque-os-release').read_text())
+        assert_minimum_release(self, (BASE / 'etc/enfoque-os-release').read_text())
 
 
 if __name__ == '__main__':

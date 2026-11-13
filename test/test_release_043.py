@@ -1,4 +1,5 @@
 """0.2.43 package and security regression, no workstation side effects."""
+from release_contract import assert_minimum_release
 import importlib.machinery
 import importlib.util
 import json
@@ -17,7 +18,7 @@ class Release043Tests(unittest.TestCase):
         p=(TREE/"usr/local/bin/enfoque-proteger-tela").read_text()
         w=(TREE/"usr/local/bin/enfoque-screensaver-watchdog").read_text()
         visual=(TREE/"usr/local/bin/enfoque-tela-de-bloqueio").read_text()
-        self.assertIn('VERSION="0.2.52"',(TREE/"etc/enfoque-os-release").read_text())
+        assert_minimum_release(self,(TREE/"etc/enfoque-os-release").read_text())
         for expected in ("/saver/idle-activation/delay int 3",
                          "/lock/saver-activation/delay int 12",
                          "/lock/enabled bool true","/saver/mode int 2",

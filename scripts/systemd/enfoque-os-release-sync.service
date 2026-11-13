@@ -1,0 +1,15 @@
+[Unit]
+Description=Enfoque OS - publish verified GitHub releases to signed APT catalog (server only)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/local/sbin/enfoque-os-release-sync --apply
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+TimeoutStartSec=5min

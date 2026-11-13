@@ -6,7 +6,13 @@ import argparse, gzip, hashlib, io, json, pathlib, re, shutil, struct
 import subprocess, tarfile, tempfile, urllib.request, zipfile
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
-VERSION="0.2.52"
+_RELEASE_TEXT=(ROOT/"config/includes.chroot/etc/enfoque-os-release").read_text()
+_VERSION_MATCH=re.search(r'^VERSION="([0-9]+[.][0-9]+[.][0-9]+)"$',_RELEASE_TEXT,re.M)
+_REVISION_MATCH=re.search(r'^PACKAGE_REVISION="([1-9][0-9]*)"$',_RELEASE_TEXT,re.M)
+if not _VERSION_MATCH or not _REVISION_MATCH:
+    raise ValueError("Invalid Enfoque OS release version for printer drivers")
+VERSION=_VERSION_MATCH.group(1)
+REVISION=_REVISION_MATCH.group(1)
 PACKAGE="enfoque-printer-drivers"
 DATA=pathlib.Path("usr/share/enfoque-printer-library")
 FILTERS=pathlib.Path("usr/lib/cups/filter")
@@ -149,14 +155,14 @@ def build(source, output, cache, validate=False):
                 ppd(data,"Pantum","pantum",pmap)
         put(DATA/"catalog.json",(json.dumps(catalog,ensure_ascii=False,separators=(",",":"))+"\n").encode())
         put(pathlib.Path("usr/share/doc")/PACKAGE/"SOURCE.json",json.dumps(lock,indent=2).encode())
-        control=(f"Package: {PACKAGE}\nVersion: {VERSION}-1\nArchitecture: amd64\n"
+        control=(f"Package: {PACKAGE}\nVersion: {VERSION}-{REVISION}\nArchitecture: amd64\n"
                  "Maintainer: Enfoque TI\nSection: text\nPriority: optional\n"
                  "Conflicts: pantum\n"
                  "Depends: cups, cups-filters, libcups2t64, libcupsimage2t64, libusb-1.0-0, libstdc++6, libgssapi-krb5-2, libkrb5-3, libk5crypto3, libcom-err2, zlib1g, libcrypt1\n"
                  "Description: Enfoque verified printer-library snapshot for Debian 13 amd64\n"
                  " Model inventory and isolated print-only filters; no vendor installation scripts.\n")
         put(pathlib.Path("DEBIAN/control"),control.encode())
-        target=output/f"{PACKAGE}_{VERSION}-1_amd64.deb"
+        target=output/f"{PACKAGE}_{VERSION}-{REVISION}_amd64.deb"
         subprocess.run(["dpkg-deb","--root-owner-group","--build",str(tree),str(target)],check=True)
         report={"package":str(target),"sha256":sha(target.read_bytes()),"models":len(catalog["models"]),"native_profiles":len(catalog["profiles"]),"rejected_profiles":len(catalog["rejected_profiles"]),"build_validated":validate}
         (output/"printer-library-build.json").write_text(json.dumps(report,indent=2)+"\n")

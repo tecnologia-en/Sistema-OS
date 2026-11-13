@@ -1,4 +1,5 @@
 """Regressoes da versao 0.2.43: tema dim e bloqueio seguro."""
+from release_contract import assert_minimum_release
 import importlib.machinery
 import importlib.util
 from pathlib import Path
@@ -72,7 +73,7 @@ class Version042Tests(unittest.TestCase):
 
     def test_versao_e_manifesto(self):
         release = (TREE / "etc/enfoque-os-release").read_text("utf8")
-        self.assertIn('VERSION="0.2.52"', release)
+        assert_minimum_release(self, release)
         p = (ROOT / "scripts/build-update-package.py").read_text("utf8")
         self.assertIn('"usr/share/applications/screensavers/enfoque-"', p)
         self.assertIn('"usr/share/applications/screensavers/enfoque-wallpaper-dim.desktop"', p)

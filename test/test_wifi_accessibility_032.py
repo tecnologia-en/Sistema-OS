@@ -1,4 +1,5 @@
 """Regression tests for Enfoque OS 0.2.32 Wi-Fi and on-screen keyboard."""
+from release_contract import assert_minimum_release
 import importlib.util
 from pathlib import Path
 import unittest
@@ -20,7 +21,7 @@ spec.loader.exec_module(wifi)
 
 class WifiAccessibility032Tests(unittest.TestCase):
     def test_version(self):
-        self.assertIn('VERSION="0.2.52"', (SRC/"etc/enfoque-os-release").read_text())
+        assert_minimum_release(self, (SRC/"etc/enfoque-os-release").read_text())
 
     def test_apt_core_update_allows_new_required_packages_without_removal(self):
         self.assertIn('"--no-remove", "--no-install-recommends", "install"', UPDATER)
