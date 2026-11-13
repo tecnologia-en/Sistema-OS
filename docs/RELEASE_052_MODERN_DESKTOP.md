@@ -17,3 +17,13 @@ Migração por hash apenas dos arquivos oficiais anteriores. CSS personalizado �
 ## Publicação sem atualizar computadores
 
 Os pacotes e a ISO devem ser disponibilizados na área separada `/srv/enfoque-os-preview/`, suite `preview`, e no GitHub. Não publicar esta versão em `/srv/enfoque-os-archive/dists/stable` enquanto estiver vigente a instrução de não atualizar computadores: a intranet e o agendamento consultam o stable. O publicador aceita explicitamente `ENFOQUE_REPO_ROOT=/srv/enfoque-os-preview ENFOQUE_REPO_SUITE=preview`; o pool é separado para impedir contaminação do índice estável em publicações futuras. Nenhuma campanha 0.2.52 é criada.
+
+## Contadores físicos persistentes de impressoras de escritório
+
+O serviço existente `enfoque-print-pages` passa a carregar o coletor persistente; não há novo daemon residente. Consulta somente endpoints privados das filas e do catálogo da loja, sem varrer a rede. A Canon GX7100 usa os OIDs e rótulos comprovados no Ilha Plaza, verificando impressão + cópia = total. A HP lê a identidade de fabricante e o Printer-MIB com unidade 7 (impressões); o total conjunto nunca é apresentado como xerox ou impressão separadamente. Outros equipamentos que exponham esse Printer-MIB são elegíveis, sem presumir que ter um driver garanta ter contadores SNMP.
+
+Dados pendentes ficam no SQLite existente, sobrevivem a reinícios e são enviados com a credencial Zero Touch do próprio computador. A coleta ocorre no máximo a cada minuto; leituras sem alteração viram heartbeat a cada 15 minutos. Não envia nomes de documentos ou usuários. O servidor agrupa pelo equipamento/loja, deduplica computadores compartilhando a impressora e usa a primeira amostra como referência. Queda de contador exige revisão, não cria produção fictícia. Histórico datado tem retenção limitada e intervalos incompletos são sinalizados.
+
+O fallback CUPS da nova versão aceita somente filas reconhecidas de escritório; Bematech, Elgin, Epson TM e outras térmicas são excluídas. USB ou equipamento sem contador acessível permanece no CUPS, com cópias desconhecidas. A API integra os mesmos identificadores e bancos já usados pelos monitores da Canon do Ilha Plaza e HP de Itaipu; preserva o fechamento de 22h da Canon. O relatório mantém prioridade física sobre CUPS e nunca soma as duas fontes para a mesma contagem.
+
+Deploy da integração: `scripts/integrate-office-meter-server.py --intranet /opt/intranet-src` e `scripts/integrate-office-meter-report.py --intranet /opt/intranet-src`. Os adaptadores aplicam alterações pontuais para preservar outros trabalhos em andamento na intranet. Não executar coletor em computadores atuais nesta entrega: ele será ativado quando uma futura atualização for autorizada.

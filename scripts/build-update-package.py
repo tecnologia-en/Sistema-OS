@@ -117,6 +117,8 @@ def manifest():
         "usr/local/bin/enfoque-canfoque",
         "usr/local/sbin/enfoque-canfoque-firstboot",
         "usr/local/sbin/enfoque-print-pages",
+        "usr/local/lib/enfoque-printer-meter/collector.py",
+        "usr/local/lib/enfoque-printer-meter/snmp.py",
         "usr/local/sbin/enfoque-print-cups-setup",
         "usr/share/applications/enfoque-canfoque.desktop",
         "etc/systemd/system/enfoque-canfoque-firstboot.timer",

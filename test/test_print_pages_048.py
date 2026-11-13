@@ -98,6 +98,14 @@ class PrintCounter048(unittest.TestCase):
         self.assertEqual(event["pages"],2)
         self.assertEqual(len(event["id"]),64)
 
+    def test_runtime_office_filter_excludes_receipts_and_keeps_page_log_cursor(self):
+        self.log.write_text("")
+        M.scan_pages(self.db,UUID,self.log,office=lambda name:name=="Office_HP")
+        self.log.write_text(row(1,9)+row(2,3).replace("Elgin_i9","Office_HP"))
+        self.assertEqual(M.scan_pages(self.db,UUID,self.log,office=lambda name:name=="Office_HP"),1)
+        self.assertEqual([e["pages"] for e in M.pending(self.db)],[3])
+        self.assertEqual(M.scan_pages(self.db,UUID,self.log,office=lambda name:name=="Office_HP"),0)
+
     def test_cups_setup_idempotent_and_defers_while_printing(self):
         conf=self.path/"cupsd.conf"
         backup=self.path/"backup"/"cupsd.old"

@@ -69,6 +69,7 @@ python3 -m unittest discover -s "$ROOT/test" -p "test_release_048.py" -q
 python3 -m unittest discover -s "$ROOT/test" -p "test_printer_autosetup_050.py" -q
 python3 -m unittest discover -s "$ROOT/test" -p "test_printer_library_051.py" -q
 python3 -m unittest discover -s "$ROOT/test" -p "test_modern_desktop_052.py" -q
+python3 -m unittest discover -s "$ROOT/test" -p "test_printer_meter_052.py" -q
 python3 -m unittest discover -s "$ROOT/test" -p "test_printer_drawer_defaults.py" -q
 python3 -m unittest discover -s "$ROOT/test" -p "test_print_pages_048.py" -q
 bash -n "$ROOT/scripts/stage-canfoque-iso.sh"
