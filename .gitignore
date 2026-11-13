@@ -19,3 +19,5 @@ config/includes.chroot/usr/local/libexec/enfoque-thermal-raster-trim
 # Binary downloads are checked against hardcoded SHA-256 during ISO build.
 config/includes.chroot/opt/enfoque/*.AppImage
 config/packages.chroot/*.deb
+
+config/packages.chroot/printer-library-build.json

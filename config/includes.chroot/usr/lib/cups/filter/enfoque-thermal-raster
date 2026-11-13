@@ -7,7 +7,7 @@ test "$#" -ge 5 || exit 2
 test -n "${PPD:-}" && test -f "$PPD" && test ! -L "$PPD" || exit 2
 original=$(sed -n 's/^\*enfoqueOriginalRasterFilter: "\([A-Za-z0-9_-]*\)"/\1/p' "$PPD" | head -n 1)
 case "$original" in
-    rastertohprt|rastertoescpos|rastertobematech|rastertoepson|rastertostar|rastertobixolon)
+    rastertohprt|rastertoescpos|rastertobematech|rastertoepson|rastertostar|rastertobixolon|enfoque-lib-elgin125-raster|enfoque-lib-bematech-raster)
         ;;
     *) echo 'ERROR: unrecognized thermal raster driver' >&2; exit 2 ;;
 esac

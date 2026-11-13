@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Enfoque OS 0.2.50 - conservative, store-aware CUPS printer provisioning.
+"""Enfoque OS 0.2.51 - store-aware CUPS provisioning using the packaged printer bank.
 
 Supports verified store IPP endpoints, local IPP-over-USB, and USB/serial
 thermal printers only when an already-installed matching driver is available.
@@ -7,6 +7,7 @@ Never runs vendor commands, installs unsigned drivers, prints test pages, sets
 a default printer, changes an existing queue, or duplicates an existing URI.
 """
 import argparse
+import importlib.util
 import hashlib
 import ipaddress
 import json
@@ -18,6 +19,11 @@ import subprocess
 import sys
 import unicodedata
 from urllib.parse import unquote, urlsplit
+
+_library_path=Path(__file__).resolve().parents[1]/"lib/enfoque-printer-library/lookup.py"
+_library_spec=importlib.util.spec_from_file_location("enfoque_printer_library",_library_path)
+printer_library=importlib.util.module_from_spec(_library_spec)
+_library_spec.loader.exec_module(printer_library)
 
 PROFILE = Path("/var/lib/enfoque-os/firstboot.json")
 CATALOG = Path("/etc/enfoque-os/drivers/printer-catalog.json")
@@ -189,7 +195,21 @@ def provision_network(unit, catalog, queues, dry_run=False, reachable=local_netw
         if not reachable(urlsplit(uri).hostname):
             results.append((name, "offline-or-not-local"))
             continue
-        results.append((name, create_queue(name, uri, "everywhere", queues, dry_run)))
+        status=create_queue(name, uri, "everywhere", queues, dry_run)
+        # Legacy printers may answer IPP but require their native print language.
+        # Consult the same bank using the exact IT inventory model only after
+        # driverless fails, and never overwrite a partially-created queue.
+        if status=="failed" and printer.get("make") and printer.get("model"):
+            current=list_queues()
+            if current is not None and name not in current and not existing_uri(current,uri):
+                label=printer["make"]+" "+printer["model"]
+                found=printer_library.select(label,installed_drivers())
+                if found:
+                    driver,is_ppd=found
+                    status=create_queue(name,uri,driver,queues,dry_run,ppd=is_ppd)
+                elif printer_library.lookup(label):
+                    status="driver-required"
+        results.append((name,status))
     return results
 
 
@@ -200,9 +220,9 @@ def normalize(text):
 
 def model_key(label):
     text = normalize(label)
-    if "elgin" in text and re.search(r"\bi9\b", text):
+    if "elgin" in text and re.search(r"\bi9\b", text) and "full" not in text:
         return ("elgin", "i9")
-    if "bematech" in text and "mp 4200" in text:
+    if "bematech" in text and "mp 4200" in text and not re.search(r"\b(hs|adv)\b",text):
         return ("bematech", "mp 4200")
     return None
 
@@ -286,7 +306,8 @@ def provision_usb(queues, uris, dry_run=False, drivers=None, ppd_finder=choose_l
         if existing_uri(queues, uri):
             results.append((uri, "already-configured"))
             continue
-        found = choose_model_driver(kind, available_drivers) or ppd_finder(kind)
+        label = unquote(urlsplit(uri).netloc + " " + urlsplit(uri).path) if uri.startswith("usb://") else "Bematech MP-4200 TH"
+        found = printer_library.select(label, available_drivers) or choose_model_driver(kind, available_drivers) or ppd_finder(kind)
         if not found:
             results.append((uri, "driver-required"))
             audit("needs-driver", device=uri, reason="modelo termico exige driver validado")
@@ -296,6 +317,25 @@ def provision_usb(queues, uris, dry_run=False, drivers=None, ppd_finder=choose_l
         name = "Enfoque_" + ("Elgin_i9" if kind[0] == "elgin" else "Bematech_MP4200") + "_" + digest
         status = create_queue(name, uri, driver, queues, dry_run, ppd=is_ppd)
         results.append((uri, status))
+    # Other USB makes/models are considered only when present in the packaged bank.
+    handled={uri for uri,kind in discovered}
+    for uri in uris:
+        if not uri.startswith("usb://") or uri in handled:
+            continue
+        if existing_uri(queues,uri):
+            results.append((uri,"already-configured"))
+            continue
+        label=unquote(urlsplit(uri).netloc+" "+urlsplit(uri).path)
+        if not printer_library.lookup(label):
+            continue
+        found=printer_library.select(label,available_drivers)
+        if not found:
+            results.append((uri,"driver-required"))
+            audit("needs-driver",device=uri,reason="modelo no banco; filtro instalado/validado indisponivel")
+            continue
+        driver,is_ppd=found
+        name="Enfoque_Impressora_"+hashlib.sha256(uri.encode()).hexdigest()[:8]
+        results.append((uri,create_queue(name,uri,driver,queues,dry_run,ppd=is_ppd)))
     # Driverless IPP-over-USB remains valid when the source is unambiguous.
     # Several printers/localhost endpoints on one PC must not be guessed.
     ipp = [u for u in uris if IPP_USB.fullmatch(u)]

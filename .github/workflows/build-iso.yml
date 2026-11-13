@@ -9,6 +9,7 @@ on:
       - feat/lowram-kiosk-028
       - feature/canfoque-v2-iso-048
       - feature/printer-plugplay-050
+      - feature/printer-library-051
     paths:
       - 'config/**'
       - 'scripts/build-iso.sh'
@@ -23,6 +24,10 @@ on:
       - 'test/test_release_048.py'
       - 'test/test_print_pages_048.py'
       - 'scripts/stage-canfoque-iso.sh'
+      - 'scripts/stage-printer-library.py'
+      - 'scripts/test-printer-library.py'
+      - 'test/test_printer_library_051.py'
+      - 'test/test_printer_drawer_defaults.py'
       - 'test/xfce_kiosk_probe.c'
       - 'scripts/test-xfce-kiosk-policy.sh'
       - 'scripts/test-xfce-diversion.sh'
@@ -102,7 +107,7 @@ jobs:
                 syslinux-common isolinux grub-pc-bin grub-efi-amd64-bin \
                 mtools dosfstools ca-certificates git python3 \
                 build-essential pkg-config patch libxi-dev libx11-dev \
-                libcupsimage2-dev \
+                libcupsimage2-dev cups-client libusb-1.0-0 libstdc++6 libgssapi-krb5-2 libcrypt1 \
                 libice-dev libwnck-3-dev xfce4-dev-tools libxfce4ui-2-dev \
                 libxfce4panel-2.0-dev libxfce4windowing-0-dev intltool
               bash scripts/check-project.sh
@@ -165,7 +170,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: enfoque-os-core-${{ github.run_number }}
-          path: config/packages.chroot/enfoque-os-core_*.deb
+          path: |
+            config/packages.chroot/enfoque-os-core_*.deb
+            config/packages.chroot/enfoque-printer-drivers_*.deb
+            config/packages.chroot/printer-library-build.json
           retention-days: 14
           if-no-files-found: error
 

@@ -151,6 +151,7 @@ def manifest():
         "usr/local/sbin/enfoque-thermal-chrome",
         "usr/local/sbin/enfoque-plugplay",
         "usr/local/sbin/enfoque-printer-autosetup",
+        "usr/local/lib/enfoque-printer-library/lookup.py",
         "etc/enfoque-os/drivers/printer-catalog.json",
         "etc/systemd/system/enfoque-printer-autosetup.timer",
         "usr/local/libexec/enfoque-thermal-raster-trim",
@@ -227,7 +228,7 @@ def create(output):
             f"Package: {PACKAGE}\nVersion: {release}-{revision}\n"
             "Section: admin\nPriority: optional\nArchitecture: all\n"
             "Maintainer: Enfoque TI <tecnologia@enfoquepapelaria.com.br>\n"
-            "Depends: python3, python3-gi, python3-gi-cairo, python3-cairo, gir1.2-gtk-3.0, apt, systemd, ca-certificates, gpgv, openssh-client, openssh-server, xfce4-genmon-plugin, xfce4-appfinder, xfce4-docklike-plugin, papirus-icon-theme, timeshift, rsync, restic, smartmontools, mate-polkit, pkexec, xfce4-screensaver, xdotool, nftables, network-manager, network-manager-gnome, wpasupplicant, rfkill, xdg-desktop-portal, xdg-desktop-portal-gtk, onboard, firmware-iwlwifi, firmware-realtek, firmware-atheros, firmware-brcm80211, firmware-mediatek, xarchiver, thunar-archive-plugin, 7zip, zip, unzip, bluez, bluez-obexd, blueman, pulseaudio-module-bluetooth, python3-cups, cups, cups-filters, libcupsimage2t64, firmware-amd-graphics, firmware-intel-graphics, kmod, v4l-utils\n"
+            "Depends: enfoque-printer-drivers (>= 0.2.51-1), printer-driver-all, printer-driver-brlaser, printer-driver-c2050, printer-driver-c2esp, printer-driver-cjet, printer-driver-dymo, printer-driver-escpr, printer-driver-foo2zjs, printer-driver-fujixerox, printer-driver-gutenprint, printer-driver-hpcups, printer-driver-indexbraille, printer-driver-m2300w, printer-driver-min12xxw, printer-driver-oki, printer-driver-pnm2ppa, printer-driver-postscript-hp, printer-driver-ptouch, printer-driver-pxljr, printer-driver-sag-gdi, printer-driver-splix, foomatic-db-compressed-ppds, foomatic-db-engine, openprinting-ppds, python3, python3-gi, python3-gi-cairo, python3-cairo, gir1.2-gtk-3.0, apt, systemd, ca-certificates, gpgv, openssh-client, openssh-server, xfce4-genmon-plugin, xfce4-appfinder, xfce4-docklike-plugin, papirus-icon-theme, timeshift, rsync, restic, smartmontools, mate-polkit, pkexec, xfce4-screensaver, xdotool, nftables, network-manager, network-manager-gnome, wpasupplicant, rfkill, xdg-desktop-portal, xdg-desktop-portal-gtk, onboard, firmware-iwlwifi, firmware-realtek, firmware-atheros, firmware-brcm80211, firmware-mediatek, xarchiver, thunar-archive-plugin, 7zip, zip, unzip, bluez, bluez-obexd, blueman, pulseaudio-module-bluetooth, python3-cups, cups, cups-filters, libcupsimage2t64, firmware-amd-graphics, firmware-intel-graphics, kmod, v4l-utils\n"
             "Description: Enfoque OS corporate system components and updater\n"
             " Replaces custom Enfoque OS files on managed workstations using\n"
             " individually signed APT repository updates.\n",

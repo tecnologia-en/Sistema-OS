@@ -9,8 +9,8 @@ BASE=ROOT/"config/includes.chroot"
 class Release047(unittest.TestCase):
     def test_release_version_and_firmware(self):
         release=(BASE/"etc/enfoque-os-release").read_text()
-        self.assertIn('VERSION="0.2.50"',release)
-        self.assertIn('STATUS="piloto-printer-autosetup-050"',release)
+        self.assertIn('VERSION="0.2.51"',release)
+        self.assertIn('STATUS="piloto-printer-library-051"',release)
         packages=(ROOT/"config/package-lists/enfoque-base.list.chroot").read_text()
         for pkg in ("firmware-misc-nonfree","pciutils","kmod","parted"):
             self.assertIn("\n"+pkg+"\n",packages)
