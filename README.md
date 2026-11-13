@@ -1,4 +1,4 @@
-# Enfoque OS
+# Enfoque OS 0.2.52
 
 Versão 0.2.51: o plug and play consulta o banco versionado de drivers originado em `/srv/biblioteca-drivers-impressoras`. Consulte [a integração e os limites do piloto](docs/RELEASE_051_PRINTER_LIBRARY.md).
 

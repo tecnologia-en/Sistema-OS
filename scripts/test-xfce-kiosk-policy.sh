@@ -26,7 +26,7 @@ echo USER_PANEL_SIZE
 xfconf-query -c xfce4-panel -p /panels/panel-1/size
 echo USER_LAUNCHER_NAME
 xfconf-query -c xfce4-panel -p /plugins/plugin-1/items
-test "$(xfconf-query -c xfce4-panel -p /panels/panel-1/size)" = 54
+test "$(xfconf-query -c xfce4-panel -p /panels/panel-1/size)" = 46
 xfconf-query -c xfce4-panel -p /plugins/plugin-1/items | grep -q 'enfoque-menu.desktop'
 if xfconf-query -c xfce4-panel -p /panels/panel-1/size -s 67 2>/tmp/enfoque-panel-denied; then
   echo 'USER_WRITE_RETURNED_SUCCESS_BUT_CHECK_VALUE'
@@ -34,7 +34,7 @@ fi
 echo AFTER_USER_WRITE
 xfconf-query -c xfce4-panel -p /panels/panel-1/size
 grep -Ei 'locked|not allowed|denied|not writable|permitted|unavailable|pode|permission' /tmp/enfoque-panel-denied || cat /tmp/enfoque-panel-denied
-test "$(xfconf-query -c xfce4-panel -p /panels/panel-1/size)" = 54
+test "$(xfconf-query -c xfce4-panel -p /panels/panel-1/size)" = 46
 if xfconf-query -c xsettings -p /Net/IconThemeName -s EvilTheme 2>/tmp/enfoque-theme-denied; then
   echo 'USER_THEME_WRITE_ACCEPTED_BUT_CHECK_VALUE'
 fi

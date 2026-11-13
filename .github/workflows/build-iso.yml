@@ -10,6 +10,7 @@ on:
       - feature/canfoque-v2-iso-048
       - feature/printer-plugplay-050
       - feature/printer-library-051
+      - feature/modern-desktop-052
     paths:
       - 'config/**'
       - 'scripts/build-iso.sh'
@@ -67,9 +68,11 @@ jobs:
             --env DEBIAN_FRONTEND=noninteractive \
             debian:trixie bash -euc '
               apt-get update -qq
-              apt-get install -y -qq --no-install-recommends gcc python3 libcupsimage2-dev pkg-config xfconf libxfconf-0-3 libxfconf-0-dev dbus-x11 xfce4-settings
+              apt-get install -y -qq --no-install-recommends gcc python3 python3-gi python3-cairo python3-gi-cairo arc-theme gir1.2-gtk-3.0 xvfb xauth libxtst6 libcupsimage2-dev pkg-config xfconf libxfconf-0-3 libxfconf-0-dev dbus-x11 xfce4-settings
               bash scripts/build-thermal-raster.sh
               gcc -std=c11 -Wall -Wextra -Werror -O2 -o /tmp/enfoque-xfce-kiosk-probe test/xfce_kiosk_probe.c $(pkg-config --cflags --libs libxfconf-0)
+              cp -a config/includes.chroot/usr/share/themes/EnfoqueModern /usr/share/themes/
+              GTK_THEME=EnfoqueModern NO_AT_BRIDGE=1 xvfb-run -a dbus-run-session -- python3 scripts/test-modern-desktop.py
               bash scripts/test-xfce-diversion.sh
               bash scripts/test-xfce-kiosk-policy.sh
             '
@@ -83,7 +86,7 @@ jobs:
       - name: Validate Zero Touch enrollment and tunnel security
         run: |
           set -euo pipefail
-          node --test test/zero-touch-registry.test.mjs test/zero-touch-monitora.test.mjs
+          node --test test/zero-touch-registry.test.mjs test/zero-touch-monitora.test.mjs test/office-printer-meter.test.mjs
           node --check server/zero-touch-routes.mjs
           node --check server/zero-touch-provisioner.mjs
           python3 -m py_compile config/includes.chroot/usr/local/sbin/enfoque-zero-touch

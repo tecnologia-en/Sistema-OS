@@ -1,0 +1,43 @@
+/* Enfoque 0.2.52: compact, opaque, compositor-independent taskbar. */
+#XfcePanelWindow, .xfce4-panel {
+ background-color: #172131; background-image: none;
+ border: none; border-top: 1px solid #354459; box-shadow: none;
+ color: #f1f5fa;
+}
+#XfcePanelWindow button {
+ color: #f1f5fa; background: transparent; background-image: none;
+ border: 1px solid transparent; border-radius: 6px;
+ box-shadow: none; transition: none;
+ padding: 1px 3px; margin: 5px 1px;
+ min-width: 20px; min-height: 26px;
+}
+#XfcePanelWindow button:hover { background: #2c3b50; border-color: #40536e; }
+#XfcePanelWindow button:checked, #XfcePanelWindow button:active {
+ background: #344963; border-bottom-color: #6cd3ff;
+}
+#XfcePanelWindow .genmon {
+ background: transparent; border: none; border-radius: 6px;
+ padding: 2px 4px; margin: 4px 1px;
+}
+#XfcePanelWindow #launcher-12 button { min-width: 16px; padding: 1px 2px; }
+#XfcePanelWindow .systray button, #XfcePanelWindow #pulseaudio-button {
+ min-width: 16px; padding: 1px 2px; margin: 5px 0;
+}
+#XfcePanelWindow #genmon-11 {min-width: 4px; padding: 0; margin: 0; background: transparent; border: none;}
+#docklike-plugin .group {
+ min-width: 36px; min-height: 32px; margin: 4px 2px;
+ border-radius: 7px; background: transparent; border: 1px solid transparent;
+ transition: none;
+}
+#docklike-plugin .group.open_group {
+ background-color: #25364d; border-color: #354c69;
+ box-shadow: inset 0 -2px #6cd3ff;
+}
+#docklike-plugin .group.open_group.active_group {
+ background-color: #344b68; border-color: #536d8e;
+ box-shadow: inset 0 -3px #86d8ff;
+}
+#docklike-plugin .group.enfoque_attention {
+ background-color: #664621; border-color: #e9a34a;
+ box-shadow: inset 0 -3px #ffb454; transition: none;
+}

@@ -2,7 +2,7 @@
 # Personalizacao da sessao XFCE: visual estilo Windows sem componentes proprietarios.
 set -eu
 WALLPAPER=/usr/share/backgrounds/enfoque-os/wallpaper.jpg
-MARKER="${HOME}/.cache/enfoque-os-visual-v0224"
+MARKER="${HOME}/.cache/enfoque-os-visual-v052"
 if [ ! -f "$WALLPAPER" ] || ! command -v xfconf-query >/dev/null 2>&1; then
   exit 0
 fi
@@ -16,7 +16,11 @@ set_xfconf() {
   fi
 }
 sleep 2
-set_xfconf xsettings /Net/ThemeName string Arc
+/usr/local/bin/enfoque-visual-migrate
+set_xfconf xsettings /Gtk/EnableAnimations bool false
+set_xfconf xfwm4 /general/use_compositing bool false
+set_xfconf xfwm4 /general/button_layout string "O|HMC"
+set_xfconf xsettings /Net/ThemeName string EnfoqueModern
 set_xfconf xsettings /Net/IconThemeName string EnfoqueFluent
 set_xfconf xfwm4 /general/theme string Arc
 set_xfconf xfwm4 /general/title_alignment string left

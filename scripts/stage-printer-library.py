@@ -6,7 +6,7 @@ import argparse, gzip, hashlib, io, json, pathlib, re, shutil, struct
 import subprocess, tarfile, tempfile, urllib.request, zipfile
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
-VERSION="0.2.51"
+VERSION="0.2.52"
 PACKAGE="enfoque-printer-drivers"
 DATA=pathlib.Path("usr/share/enfoque-printer-library")
 FILTERS=pathlib.Path("usr/lib/cups/filter")

@@ -89,11 +89,12 @@ def iso_cups_time(text):
       int(second),tzinfo=tz)
     return value.astimezone(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00","Z")
 
-def event_from_line(raw,machine,dev,inode,generation,offset):
+def event_from_line(raw,machine,dev,inode,generation,offset,office=None):
     if len(raw)>2048:return None
     match=LOG.fullmatch(raw.strip())
     if not match:return None
     _printer,_job,datetime_field,_page,copies=match.groups()
+    if office is not None and not office(_printer):return None
     pages=int(copies)
     if not 1<=pages<=500:return None
     occurred=iso_cups_time(datetime_field)
@@ -112,7 +113,7 @@ def open_db(db_file=DB_FILE):
         return db
     finally:os.umask(prev)
 
-def scan_pages(db,machine,file=PAGE_LOG,initial_tail=True,max_bytes=2_000_000):
+def scan_pages(db,machine,file=PAGE_LOG,initial_tail=True,max_bytes=2_000_000,office=None):
     try:
         info=file.lstat()
     except FileNotFoundError:
@@ -146,7 +147,7 @@ def scan_pages(db,machine,file=PAGE_LOG,initial_tail=True,max_bytes=2_000_000):
                 if (rotated_stat.st_dev==old_dev and rotated_stat.st_ino==old_ino and
                      rotated_stat.st_size>offset):
                     rotated_inserted=_process_file(db,rotated,machine,old_dev,old_ino,
-                                  generation,offset,rotated_stat.st_size-offset,False)
+                                  generation,offset,rotated_stat.st_size-offset,False,office)
             except (FileNotFoundError,OSError):pass
             generation+=1
             offset=0
@@ -154,9 +155,9 @@ def scan_pages(db,machine,file=PAGE_LOG,initial_tail=True,max_bytes=2_000_000):
             generation+=1
             offset=0  # copytruncate
     return rotated_inserted+_process_file(db,file,machine,st_dev,st_ino,
-                                  generation,offset,max_bytes,True)
+                                  generation,offset,max_bytes,True,office)
 
-def _process_file(db,file,machine,dev,inode,generation,offset,max_bytes,update_cursor):
+def _process_file(db,file,machine,dev,inode,generation,offset,max_bytes,update_cursor,office=None):
     inserted=0
     with open(file,"rb") as stream:
         stream.seek(offset)
@@ -173,7 +174,7 @@ def _process_file(db,file,machine,dev,inode,generation,offset,max_bytes,update_c
                 stream.seek(pos)
                 break
             read_size+=len(line)
-            try:entry=event_from_line(line.decode("utf8"),machine,dev,inode,generation,pos)
+            try:entry=event_from_line(line.decode("utf8"),machine,dev,inode,generation,pos,office)
             except (UnicodeDecodeError,ValueError):entry=None
             if entry:
                 inserted+=db.execute("INSERT OR IGNORE INTO events(event_id,pages,occurred_at) VALUES(?,?,?)",
@@ -217,8 +218,22 @@ def send_events(db,machine,auth,transport=None):
     db.commit()
     return len(events)
 
+_meter=None
+def meter_module():
+    global _meter
+    if _meter is None:
+        import importlib.util
+        path=Path(__file__).resolve().parents[1]/"lib/enfoque-printer-meter/collector.py"
+        spec=importlib.util.spec_from_file_location("enfoque_printer_meter",path)
+        _meter=importlib.util.module_from_spec(spec);spec.loader.exec_module(_meter)
+    return _meter
+
 def once(db,machine,auth_loader=credentials):
-    count=scan_pages(db,machine)
+    meter=meter_module()
+    count=scan_pages(db,machine,office=meter.is_office)
+    try:meter.tick(db,machine,auth_loader)
+    except (OSError,ValueError,RuntimeError):
+        print("Contador físico indisponível; fallback CUPS somente de escritório.",flush=True)
     try:sent=send_events(db,machine,auth_loader(machine))
     except (HTTPError,URLError,OSError,ValueError,RuntimeError) as error:
         # Do not print document names, token, or raw payload.

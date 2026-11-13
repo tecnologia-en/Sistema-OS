@@ -19,8 +19,27 @@ try:
     count+=min(8,len(d.get("warnings",[])))
 except (OSError,ValueError):
     pass
-print('<img>/usr/share/icons/EnfoqueFluent/scalable/apps/enfoque-bell.svg</img>')
-if count:
-    print('<txt><span font_desc="Noto Sans Bold 9" foreground="#BDE9FF">'+str(count)+'</span></txt>')
-print('<txtclick>/usr/local/bin/enfoque-desktop-shell notifications</txtclick>')
+runtime=pathlib.Path(os.environ.get("XDG_RUNTIME_DIR") or (pathlib.Path.home()/".cache"))
+cache=runtime/"enfoque-panel"
+cache.mkdir(mode=0o700,parents=True,exist_ok=True)
+icon=cache/"notification.svg"
+badge=(f'<circle cx="24" cy="7" r="7" fill="#347bdd"/>'
+       f'<text x="24" y="10" text-anchor="middle" font-family="sans-serif" font-weight="bold" font-size="8" fill="white">{min(count,99)}</text>') if count else ""
+svg=('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="28" viewBox="0 0 32 28">'
+     '<path d="M5 21h16l-2-4v-6a6 6 0 0 0-12 0v6l-2 4Zm6 3h4" '
+     'fill="none" stroke="#f1f5fa" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>'
+     +badge+'</svg>')
+try:
+    if icon.is_symlink():
+        raise OSError("Unsafe cache link")
+    if not icon.exists() or icon.read_text()!=svg:
+        temporary=cache/"notification.tmp"
+        if temporary.is_symlink():
+            raise OSError("Unsafe cache link")
+        temporary.write_text(svg)
+        temporary.replace(icon)
+except OSError:
+    icon=pathlib.Path("/usr/share/icons/EnfoqueFluent/scalable/apps/enfoque-bell.svg")
+print('<img>'+html.escape(str(icon))+'</img>')
+print('<click>/usr/local/bin/enfoque-desktop-shell notifications</click>')
 print('<tool>Notificações da Enfoque · '+str(count)+' eventos em andamento</tool>')
