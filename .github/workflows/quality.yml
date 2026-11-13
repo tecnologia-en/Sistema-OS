@@ -7,6 +7,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      PYTHONPYCACHEPREFIX: ${{ runner.temp }}/enfoque-pycache
     steps:
       - uses: actions/checkout@v4
       - name: Stage pinned and verified Canfoque/RustDesk binaries
@@ -18,6 +20,7 @@ jobs:
             --mount type=bind,source="$GITHUB_WORKSPACE",target=/workspace \
             --workdir /workspace \
             --env DEBIAN_FRONTEND=noninteractive \
+            --env PYTHONPYCACHEPREFIX=/tmp/enfoque-pycache \
             debian:trixie bash -euc '
               apt-get update -qq
               apt-get install -y -qq --no-install-recommends gcc python3 libcupsimage2-dev pkg-config xfconf libxfconf-0-3 libxfconf-0-dev dbus-x11 xfce4-settings

@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# The ISO source may have been mounted read/write into a root-run CI container.
+# Python source compilation must not touch root-owned __pycache__ in that tree.
+# Use a safe private temporary cache when no explicit CI cache is provided.
+if [[ -z "${PYTHONPYCACHEPREFIX:-}" ]]; then
+  ENFOQUE_CHECK_PYCACHE_DIR="$(mktemp -d -t enfoque-check-pycache.XXXXXXXX)"
+  export PYTHONPYCACHEPREFIX="$ENFOQUE_CHECK_PYCACHE_DIR"
+  trap 'rm -rf -- "$ENFOQUE_CHECK_PYCACHE_DIR"' EXIT
+fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 for script in "$ROOT"/scripts/*.sh; do bash -n "$script"; echo "OK bash: $(basename "$script")"; done
 sh -n "$ROOT/config/includes.chroot/usr/local/bin/enfoque-diagnostico"
