@@ -92,7 +92,7 @@ class TaskbarTests(unittest.TestCase):
         self.assertIn("Inherits=Papirus,Adwaita,hicolor", theme)
         settings = ET.parse(ROOT / "config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml").getroot()
         p = settings.find("./property[@name='Net']/property[@name='IconThemeName']")
-        self.assertEqual(p.get("value"), "EnfoqueFluent")
+        self.assertEqual(p.get("value"), "windows-modern")
         for rel in ("scalable/places/folder.svg", "scalable/places/user-trash.svg",
                     "scalable/apps/utilities-terminal.svg",
                     "scalable/status/network-wireless-signal-excellent-symbolic.svg",

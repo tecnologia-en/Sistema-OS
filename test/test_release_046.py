@@ -73,8 +73,8 @@ class PortalAndAdminLock(unittest.TestCase):
     def test_appearance_themes_are_restricted_not_keyboard_or_accessibility(self):
         x=xml(XFCONF/"xsettings.xml")
         self.assertEqual(x.get("name"),"xsettings")
-        for prop,wanted in (("./property[@name='Net']/property[@name='ThemeName']","EnfoqueModern"),
-                            ("./property[@name='Net']/property[@name='IconThemeName']","EnfoqueFluent"),
+        for prop,wanted in (("./property[@name='Net']/property[@name='ThemeName']","Aerobird-Sky-hdpi"),
+                            ("./property[@name='Net']/property[@name='IconThemeName']","windows-modern"),
                             ("./property[@name='Gtk']/property[@name='FontName']","Noto Sans 10")):
             item=x.find(prop)
             self.assertIsNotNone(item)
@@ -84,7 +84,7 @@ class PortalAndAdminLock(unittest.TestCase):
         self.assertIsNone(x.find("./property[@name='Gtk']/property[@name='CursorThemeSize']"))
         window=xml(XFCONF/"xfwm4.xml")
         title=window.find("./property[@name='general']/property[@name='theme']")
-        self.assertEqual(title.get("value"),"Arc")
+        self.assertEqual(title.get("value"),"Aerobird-Sky-hdpi")
         self.assertEqual(title.get("unlocked"),"root")
         desktop=xml(XFCONF/"xfce4-desktop.xml")
         self.assertEqual(desktop.get("unlocked"),"root")

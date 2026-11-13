@@ -97,7 +97,7 @@ class MyComputer053(unittest.TestCase):
         self.assertIn("Gdk.WindowTypeHint.POPUP_MENU",shell)
         self.assertIn("self.set_titlebar", (TREE/"usr/local/bin/enfoque-meu-computador").read_text())
         xfwm=(TREE/"etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml").read_text()
-        self.assertIn('use_compositing" type="bool" value="false"',xfwm)
+        self.assertIn('use_compositing" type="bool" value="true"',xfwm)
 
     def test_packager_includes_new_view_and_does_not_add_daemons(self):
         builder=(ROOT/"scripts/build-update-package.py").read_text()

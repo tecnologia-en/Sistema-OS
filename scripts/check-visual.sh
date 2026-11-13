@@ -38,7 +38,13 @@ grep -Fq 'menu default' "$ROOT/config/bootloaders/syslinux_common/live.cfg.in" |
 grep -Fq 'Exec=/usr/local/bin/enfoque-aplicar-visual' "$ROOT/config/includes.chroot/etc/xdg/autostart/enfoque-visual.desktop" || fail 'autostart sem execucao'
 grep -Eq '^arc-theme$' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'tema Arc nao instalado'
 grep -Eq '^systemd-timesyncd$' "$ROOT/config/package-lists/enfoque-base.list.chroot" || fail 'NTP nao instalado'
-grep -Fq 'value="EnfoqueModern"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" || fail 'tema nao configurado'
+grep -Fq 'value="Aerobird-Sky-hdpi"' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" || fail 'tema nao configurado'
+need config/includes.chroot/usr/share/icons/windows-modern/index.theme
+need config/includes.chroot/usr/share/themes/Aerobird-Sky-hdpi/gtk-3.0/gtk.css
+need config/includes.chroot/usr/share/themes/Aerobird-Sky-hdpi/xfwm4/themerc
+grep -Fq 'windows-modern' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" || fail 'icone WindowsModern ausente'
+grep -Fq 'Aerobird-Sky-hdpi' "$ROOT/config/includes.chroot/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml" || fail 'janela Aerobird ausente'
+grep -Fq 'Aerobird-Sky-hdpi' "$ROOT/config/includes.chroot/etc/lightdm/lightdm-gtk-greeter.conf.d/50-enfoque-theme.conf" || fail 'login AeroBird ausente'
 for p in \
   config/bootloaders/isolinux/splash.png \
   config/bootloaders/grub-pc/splash.png \

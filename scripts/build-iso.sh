@@ -12,6 +12,8 @@ TARGET="$OUT/enfoque-os-${VERSION}-piloto-amd64.iso"
 if (( EUID != 0 )); then echo 'Execute: sudo ./scripts/build-iso.sh' >&2; exit 1; fi
 command -v lb >/dev/null || { echo 'Instale o pacote live-build' >&2; exit 1; }
 test -s "$ROOT/config/package-lists/enfoque-base.list.chroot" || { echo 'Lista de pacotes ausente' >&2; exit 1; }
+# Stage the exact AeroBird and WindowsModern visual resources (hash-pinned).
+python3 "$ROOT/scripts/stage-visual-assets.py"
 # Compile the audited Docklike attention plugin before packaging the Enfoque core.
 bash "$ROOT/scripts/build-docklike.sh"
 # Compile no-zoom thermal white-space trimmer within the trusted Debian 13 builder.

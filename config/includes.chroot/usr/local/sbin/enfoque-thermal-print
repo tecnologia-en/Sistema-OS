@@ -3,7 +3,7 @@
 
 No print jobs are sent, no printer default/USB URI is changed. A tiny timer and
 USB hotplug cover new registrations. Manufacturer PPD filters may opt in to the
-original-scale CUPS-raster trailing-white trimmer (not A4/label printers).
+original-scale CUPS-raster trailing-white trimmer. Compatible Bematech 80-mm\nPDF receipt PPDs also get the bounded PDF fit filter; A4/labels are excluded.
 """
 import argparse
 import fcntl
@@ -27,6 +27,13 @@ ORIGINAL_FILTERS=frozenset((
     "enfoque-lib-elgin125-raster","enfoque-lib-bematech-raster",
     "rastertoepson","rastertostar","rastertobixolon"))
 CUPS_FILTER="enfoque-thermal-raster"
+BEMATECH_PDF_FILTER="enfoque-bematech-fit"
+BEMATECH_HINT=re.compile(r"(?i)(bematech|mp.?4200|mp.?4000)")
+PDF_LINE=re.compile(
+    r'^\*cupsFilter:\s*"application/vnd\.cups-pdf\s+(\d+)\s+(bemafilters\.sh)"\s*$',
+    re.M,
+)
+
 THERMAL_HINT=re.compile(
     r"\b(elgin|bematech|daruma|epson\s*tm|star\s*tsp|bixolon|sweda|"
     r"thermal|receipt|ticket|cupom|pos.?58|pos.?80|rp.?80|tm.?t20|i9)\b",
@@ -136,19 +143,52 @@ def patch_ppd(ppd):
             ppd[match.end():]+
             '\n*enfoqueOriginalRasterFilter: "'+original+'"\n',original)
 
+def patch_bematech_pdf_ppd(queue, ppd):
+    """Hook the tested 80-mm PDF receipt pipeline for every compatible Bematech.
+
+    Only the manufacturer PDF filter is wrapped; other Bematech/raster/label
+    families keep their existing drivers. No URI, cut, drawer or default edits.
+    """
+    if "*enfoqueOriginalPdfFilter:" in ppd or BEMATECH_PDF_FILTER in ppd:
+        return ppd, "already" if BEMATECH_PDF_FILTER in ppd else None
+    model = " ".join((queue, *re.findall(
+        r'^\*(?:NickName|ModelName|ShortNickName):\s*(.+)$', ppd, re.M)))
+    if not BEMATECH_HINT.search(model) or not thermal(queue, ppd):
+        return ppd, None
+    match = PDF_LINE.search(ppd)
+    if not match:
+        return ppd, None
+    vendor = match.group(2)
+    patched = (
+        ppd[:match.start()]
+        + '*cupsFilter: "application/vnd.cups-pdf ' + match.group(1)
+        + ' ' + BEMATECH_PDF_FILTER + '"'
+        + ppd[match.end():]
+        + '\n*enfoqueOriginalPdfFilter: "' + vendor + '"\n'
+    )
+    return patched, vendor
+
+
 def queue_idle(queue):
     rc,out,_=run(["/usr/bin/lpstat","-W","not-completed","-o",queue],10)
     return rc==0 and not out.strip()
 
-def register_ppd(queue,previous,patched,uri):
+def register_ppd(queue,previous,patched,uri,filter_name=CUPS_FILTER):
     """Transactional driver wrapper: keep queue URI/default, restore PPD on failure."""
     if patched==previous:return False
     if not queue_idle(queue):return False
-    # Need compiled binary and executable wrapper before touching any queue.
-    if not (Path("/usr/local/libexec/enfoque-thermal-raster-trim").is_file() and
-            os.access("/usr/local/libexec/enfoque-thermal-raster-trim",os.X_OK) and
-            os.access("/usr/lib/cups/filter/"+CUPS_FILTER,os.X_OK)):
-        return False
+    # Check the exact downstream filters; never install a PPD with a missing executable.
+    if filter_name == BEMATECH_PDF_FILTER:
+        if not (os.access("/usr/lib/cups/filter/"+BEMATECH_PDF_FILTER,os.X_OK) and
+                os.access("/usr/lib/cups/filter/bemafilters.sh",os.X_OK)):
+            return False
+    elif filter_name == CUPS_FILTER:
+        if not (Path("/usr/local/libexec/enfoque-thermal-raster-trim").is_file() and
+                os.access("/usr/local/libexec/enfoque-thermal-raster-trim",os.X_OK) and
+                os.access("/usr/lib/cups/filter/"+CUPS_FILTER,os.X_OK)):
+            return False
+    else:
+        raise ValueError("Unapproved printer filter")
     BACKUPS.mkdir(parents=True,exist_ok=True,mode=0o700)
     backup=BACKUPS/(queue+".ppd")
     if backup.exists():
@@ -173,7 +213,7 @@ def register_ppd(queue,previous,patched,uri):
             return False
     # Verify both the original printer address and CUPS PPD remained correct.
     check=ppd_for(queue)
-    if CUPS_FILTER not in check or queues().get(queue)!=uri:
+    if filter_name not in check or queues().get(queue)!=uri:
         run(["/usr/sbin/lpadmin","-p",queue,"-P",str(backup)],25)
         raise RuntimeError("CUPS changed printer URI or discarded managed filter")
     return True
@@ -195,13 +235,26 @@ def scan(dry_run=False):
                 continue
             selected=desired_options(option_choices(opts))
             defaults=current_defaults(opts)
+            model=" ".join((queue, *re.findall(
+                r'^\*(?:NickName|ModelName|ShortNickName):\s*(.+)$',ppd,re.M)))
+            is_bematech=bool(BEMATECH_HINT.search(model))
+            if is_bematech:
+                # Every shop may have a different cash-drawer wiring or policy.
+                # Keep all drawer and cash-pulse options EXACTLY as configured.
+                for name in list(selected):
+                    if "drawer" in name.lower() or "cash" in name.lower():
+                        selected.pop(name,None)
             changes={key:value for key,value in selected.items() if defaults.get(key)!=value}
-            patched,origin=patch_ppd(ppd)
+            patched,origin=patch_bematech_pdf_ppd(queue,ppd)
+            chosen_filter=BEMATECH_PDF_FILTER if origin else CUPS_FILTER
+            if origin is None:
+                patched,origin=patch_ppd(ppd)
             # Do not change printer name, default destination, port or scaling.
             if dry_run:
                 result["changed"].append({"queue":queue,"options":selected,"filter":origin})
                 continue
-            installed_filter=register_ppd(queue,ppd,patched,uri) if origin not in (None,"already") else False
+            installed_filter=(register_ppd(queue,ppd,patched,uri,chosen_filter)
+                              if origin not in (None,"already") else False)
             if changes:
                 args=["/usr/sbin/lpadmin","-p",queue]
                 for option,value in changes.items():args.extend(("-o",option+"="+value))

@@ -21,3 +21,7 @@ config/includes.chroot/opt/enfoque/*.AppImage
 config/packages.chroot/*.deb
 
 config/packages.chroot/printer-library-build.json
+
+# Reproducible visual assets unpacked from pinned vendor archives (not stored twice).
+config/includes.chroot/usr/share/icons/windows-modern/
+config/includes.chroot/usr/share/themes/Aerobird-*-hdpi/

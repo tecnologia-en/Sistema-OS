@@ -38,7 +38,7 @@ test "$(xfconf-query -c xfce4-panel -p /panels/panel-1/size)" = 46
 if xfconf-query -c xsettings -p /Net/IconThemeName -s EvilTheme 2>/tmp/enfoque-theme-denied; then
   echo 'USER_THEME_WRITE_ACCEPTED_BUT_CHECK_VALUE'
 fi
-test "$(xfconf-query -c xsettings -p /Net/IconThemeName)" = EnfoqueFluent
+test "$(xfconf-query -c xsettings -p /Net/IconThemeName)" = windows-modern
 /tmp/enfoque-xfce-kiosk-probe
 echo XFCE_LOCKDOWN_USER_TEST_OK
 SESSION

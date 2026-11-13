@@ -11,6 +11,9 @@ jobs:
       PYTHONPYCACHEPREFIX: /tmp/enfoque-ci-pycache-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
+      - name: Stage exact WindowsModern 1.1.1 and Aerobird v6 HDPI visual assets
+        run: python3 scripts/stage-visual-assets.py
+
       - name: Stage pinned and verified Canfoque/RustDesk binaries
         run: bash scripts/stage-canfoque-iso.sh
 

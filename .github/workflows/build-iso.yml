@@ -35,6 +35,10 @@ on:
       - 'scripts/test-xfce-diversion.sh'
       - 'scripts/test-menu-glass.py'
       - 'test/test_release_053.py'
+      - 'test/test_release_054.py'
+      - 'test/test_printer_share_054.py'
+      - 'scripts/stage-visual-assets.py'
+      - 'third_party/visual/**'
       - 'src/**'
       - 'scripts/build-thermal-raster.sh'
       - 'scripts/test-thermal-raster.sh'
@@ -67,6 +71,9 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+
+      - name: Stage exact WindowsModern 1.1.1 and Aerobird v6 HDPI visual assets
+        run: python3 scripts/stage-visual-assets.py
 
       - name: Stage pinned and verified Canfoque/RustDesk binaries
         run: bash scripts/stage-canfoque-iso.sh

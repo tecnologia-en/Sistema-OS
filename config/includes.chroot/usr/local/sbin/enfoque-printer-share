@@ -1,0 +1,230 @@
+#!/usr/bin/env python3
+"""Enfoque OS: opt-in, LAN-only CUPS sharing for one non-thermal local printer.
+
+Not an automatic daemon. Only authorized IT administrators run explicit
+'share' or 'client' commands. No CUPS job is submitted, no PC is updated.
+"""
+import argparse
+import ipaddress
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from datetime import datetime, timezone
+
+QUEUE_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
+IFACE_RE = re.compile(r"^[A-Za-z0-9_.-]{1,32}$")
+LOCAL = Path("/etc/cups")
+FW = Path("/etc/enfoque-os/firewall.nft")
+BACKUPS = Path("/var/lib/enfoque-os/printer-share-backups")
+THERMAL = re.compile(r"(?i)(bematech|thermal|termica|t[eé]rmica|receipt|elgin|epson.tm|cupom|drawer)")
+QUEUE_PATH = re.compile(r"^/printers/[A-Za-z0-9_.-]{1,100}$")
+
+
+def call(*argv, timeout=15, check=True):
+    return subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          text=True, timeout=timeout, check=check)
+
+
+def private_lan(ip, subnet):
+    address = ipaddress.IPv4Address(ip)
+    net = ipaddress.IPv4Network(subnet, strict=False)
+    corporate = (ipaddress.IPv4Network("10.0.0.0/8"),
+                 ipaddress.IPv4Network("172.16.0.0/12"),
+                 ipaddress.IPv4Network("192.168.0.0/16"))
+    if not (any(address in c and net.subnet_of(c) for c in corporate)
+            and address in net and 24 <= net.prefixlen <= 28):
+        raise ValueError("IP/subnet must be a narrow private corporate LAN")
+    return address, net
+
+
+def validate_printer(queue):
+    if not QUEUE_RE.fullmatch(queue):
+        raise ValueError("Invalid CUPS queue")
+    result = call("/usr/bin/lpstat", "-v", queue)
+    out = result.stdout
+    if "dispositivo de " not in out and "device for " not in out:
+        raise RuntimeError("CUPS queue does not exist")
+    ppd = LOCAL / "ppd" / (queue + ".ppd")
+    if ppd.is_symlink() or not ppd.is_file():
+        raise RuntimeError("Queue has no verified local PPD")
+    if THERMAL.search(queue + "\n" + ppd.read_text("latin1")[:12000]):
+        raise RuntimeError("Thermal/receipt printers must never be exposed with this command")
+    return out
+
+
+def configured_share(cups, firewall, ip, subnet, iface):
+    """Add narrow access, not wildcard Port/Listen. Fail on unusual CUPS config."""
+    if "Port 631" in cups:
+        raise ValueError("Wildcard Port 631 exists; cannot safely open LAN share")
+    listen = f"Listen {ip}:631"
+    if listen not in cups:
+        if cups.count("Listen localhost:631") != 1:
+            raise ValueError("Unexpected CUPS Listen layout; manual audit required")
+        cups = cups.replace("Listen localhost:631", "Listen localhost:631\n" + listen, 1)
+    loc = "<Location />\n  Order allow,deny\n</Location>"
+    updated = (f"<Location />\n  Order allow,deny\n"
+               f"  Allow from localhost\n  Allow from {subnet}\n</Location>")
+    if updated not in cups:
+        if cups.count(loc) != 1:
+            raise ValueError("Unexpected CUPS root policy; manual audit required")
+        cups = cups.replace(loc, updated, 1)
+    # CUPS admin endpoints remain localhost-only, even when / permits LAN reads.
+    for section in ("/admin", "/admin/conf", "/admin/log"):
+        regex = re.compile(r"(<Location " + re.escape(section) + r">)(.*?)(</Location>)", re.S)
+        m = regex.search(cups)
+        if m is None:
+            raise ValueError("Missing CUPS admin ACL: " + section)
+        if "Allow from localhost" not in m.group(2):
+            if "Order allow,deny" not in m.group(2):
+                raise ValueError("Unexpected CUPS admin policy: " + section)
+            cups = cups[:m.start()] + m.group(1) + m.group(2).replace(
+                "Order allow,deny", "Order allow,deny\n  Allow from localhost", 1
+            ) + m.group(3) + cups[m.end():]
+    rule = (f'add rule inet enfoque_guard input iifname "{iface}" '
+            f"ip saddr {subnet} ip daddr {ip} tcp dport 631 accept")
+    if rule not in firewall:
+        firewall += ("\n# Enfoque OS: printer-share opt-in LAN-only service\n" + rule + "\n")
+    return cups, firewall
+
+
+def snapshot(files):
+    BACKUPS.mkdir(parents=True, exist_ok=True, mode=0o700)
+    slot = BACKUPS / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    slot.mkdir(mode=0o700)
+    for filename in files:
+        shutil.copy2(filename, slot / filename.name)
+    return slot
+
+
+def atomic_write(target, content):
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=target.parent,
+                                     prefix=".enfoque-share-", delete=False) as f:
+        tmp = Path(f.name)
+        f.write(content)
+        f.flush()
+        os.fsync(f.fileno())
+    try:
+        tmp.chmod(target.stat().st_mode & 0o777)
+        os.replace(tmp, target)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def share(queue, addr, subnet, iface, dry):
+    validate_printer(queue)
+    ip, net = private_lan(addr, subnet)
+    if not IFACE_RE.fullmatch(iface):
+        raise ValueError("Invalid interface")
+    device = call("/usr/sbin/ip", "-j", "-4", "addr", "show", "dev", iface)
+    present = json.loads(device.stdout)
+    if not present or not any(v.get("local") == str(ip)
+                              for v in present[0].get("addr_info", [])):
+        raise RuntimeError("Bind IP is not assigned to the selected NIC")
+    cups_path = LOCAL / "cupsd.conf"
+    if cups_path.is_symlink() or FW.is_symlink():
+        raise RuntimeError("Refusing symlink configuration")
+    cups, firewall = configured_share(cups_path.read_text(), FW.read_text(), str(ip), str(net), iface)
+    plan = {"queue":queue, "binding":str(ip), "network":str(net),
+            "interface":iface, "cups_config_change":cups != cups_path.read_text(),
+            "firewall_change":firewall != FW.read_text()}
+    if dry:
+        print(json.dumps(plan, ensure_ascii=False))
+        return
+    printer_config=(LOCAL / "printers.conf").read_text(encoding="utf-8")
+    block=re.search(r"(?ms)^<Printer " + re.escape(queue) + r">(.*?)^</Printer>",printer_config)
+    if not block:
+        raise RuntimeError("CUPS printers.conf is missing the selected queue")
+    shared_before=bool(re.search(r"(?m)^Shared Yes$",block.group(1)))
+    slot = snapshot([cups_path, FW, LOCAL / "printers.conf"])
+    before = call("/usr/bin/lpstat", "-p", queue).stdout
+    try:
+        atomic_write(cups_path, cups)
+        atomic_write(FW, firewall)
+        call("/usr/sbin/cupsd", "-t")
+        call("/usr/sbin/nft", "--check", "-f", str(FW))
+        call("/usr/sbin/lpadmin", "-p", queue, "-o", "printer-is-shared=true")
+        call("/usr/bin/systemctl", "reload", "enfoque-firewall.service")
+        call("/usr/bin/systemctl", "restart", "cups.service", timeout=25)
+        call("/usr/bin/lpstat", "-h", str(ip), "-p", queue)
+    except Exception:
+        shutil.copy2(slot / cups_path.name, cups_path)
+        shutil.copy2(slot / FW.name, FW)
+        try:
+            call("/usr/sbin/lpadmin", "-p", queue, "-o",
+                 "printer-is-shared=" + ("true" if shared_before else "false"), check=False)
+            call("/usr/bin/systemctl", "reload", "enfoque-firewall.service", check=False)
+            call("/usr/bin/systemctl", "restart", "cups.service", check=False)
+        except Exception:
+            pass
+        raise
+    print(json.dumps({"ok":True, "queue":queue, "ipp_url":f"ipp://{ip}:631/printers/{queue}",
+                      "backup":str(slot), "previous_status":before.strip()},ensure_ascii=False))
+
+
+def client(queue, uri, dry):
+    if not QUEUE_RE.fullmatch(queue):
+        raise ValueError("Invalid client CUPS queue name")
+    from urllib.parse import urlsplit
+    parsed = urlsplit(uri)
+    if parsed.scheme != "ipp" or parsed.username or parsed.password or not QUEUE_PATH.fullmatch(parsed.path):
+        raise ValueError("Expected explicit ipp://PRIVATE_IP:631/printers/QUEUE")
+    if parsed.port != 631 or parsed.query or parsed.fragment or not parsed.hostname:
+        raise ValueError("Unexpected IPP endpoint format")
+    address = ipaddress.IPv4Address(parsed.hostname)
+    if not address.is_private or address.is_loopback or address.is_link_local:
+        raise ValueError("IPP target must be a private corporate LAN IP")
+    current = call("/usr/bin/lpstat", "-d", check=False).stdout
+    if dry:
+        print(json.dumps({"queue":queue,"uri":uri,"system_default_before":current.strip()}))
+        return
+    with tempfile.TemporaryDirectory(prefix="enfoque-client-") as _:
+        # Existing name with a different URI is not overwritten silently.
+        other = call("/usr/bin/lpstat", "-v", queue, check=False)
+        if other.returncode == 0:
+            if uri not in other.stdout:
+                raise RuntimeError("Queue already exists with a different URI")
+        else:
+            call("/usr/sbin/lpadmin", "-p", queue, "-E", "-v", uri, "-m", "everywhere",
+                 "-D", "Impressora compartilhada da Enfoque")
+        if "destino padrão do sistema: " in current or "system default destination: " in current:
+            previous = current.strip().rsplit(" ", 1)[-1]
+            current_after = call("/usr/bin/lpstat", "-d").stdout
+            if previous not in current_after:
+                call("/usr/sbin/lpadmin", "-d", previous)
+    print(json.dumps({"ok":True, "queue":queue, "ipp_url":uri},ensure_ascii=False))
+
+
+def main():
+    cli = argparse.ArgumentParser(description=__doc__)
+    sub = cli.add_subparsers(dest="action", required=True)
+    s = sub.add_parser("share")
+    s.add_argument("--queue", required=True)
+    s.add_argument("--bind-ip", required=True)
+    s.add_argument("--subnet", required=True)
+    s.add_argument("--interface", required=True)
+    s.add_argument("--dry-run", action="store_true")
+    c = sub.add_parser("client")
+    c.add_argument("--queue", required=True)
+    c.add_argument("--uri", required=True)
+    c.add_argument("--dry-run", action="store_true")
+    args = cli.parse_args()
+    if os.geteuid() != 0 and not args.dry_run:
+        cli.error("Root/authorized IT required")
+    if args.action == "share":
+        share(args.queue, args.bind_ip, args.subnet, args.interface, args.dry_run)
+    else:
+        client(args.queue, args.uri, args.dry_run)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError,
+            subprocess.TimeoutExpired) as error:
+        print("Printer sharing refused:",str(error)[:350],file=sys.stderr)
+        sys.exit(1)

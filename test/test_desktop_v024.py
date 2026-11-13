@@ -69,7 +69,7 @@ class DesktopV024Tests(unittest.TestCase):
             self.assertEqual(icon.get("viewBox"), "0 0 64 64")
             self.assertGreater(len(list(icon)), 3)
         settings = (CONFIG / "etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml").read_text()
-        self.assertIn('value="EnfoqueModern"', settings)
+        self.assertIn('value="Aerobird-Sky-hdpi"', settings)
         css = CONFIG / "etc/skel/.config/gtk-3.0/gtk.css"
         self.assertTrue(css.is_file())
 
