@@ -33,7 +33,7 @@ class KeyboardPtBrTests(unittest.TestCase):
         self.assertIn('write_text(keyboard_pt_br, encoding="utf-8")', script)
         self.assertIn("'XKBMODEL=\"abnt2\"\\n'", script)
         self.assertIn("'XKBLAYOUT=\"br\"\\n'", script)
-        self.assertIn('VERSION="0.2.50"', (BASE / 'etc/enfoque-os-release').read_text())
+        self.assertIn('VERSION="0.2.51"', (BASE / 'etc/enfoque-os-release').read_text())
 
 
 if __name__ == '__main__':

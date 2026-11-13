@@ -1,5 +1,7 @@
 # Enfoque OS
 
+Versão 0.2.51: o plug and play consulta o banco versionado de drivers originado em `/srv/biblioteca-drivers-impressoras`. Consulte [a integração e os limites do piloto](docs/RELEASE_051_PRINTER_LIBRARY.md).
+
 **Manual operacional completo:** [Acesso ao notebook, GitHub, build, transferência da ISO e testes no VirtualBox](docs/MANUAL_OPERACIONAL.md).
 
 Distribuicao Linux corporativa **experimental**, baseada em Debian 13 (Trixie) e XFCE.

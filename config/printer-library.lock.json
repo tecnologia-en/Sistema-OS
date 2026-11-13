@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "architecture": "amd64",
+  "source": "/srv/biblioteca-drivers-impressoras",
+  "artifacts": {
+    "bematech": {
+      "arquivo": "Bematech/Linux/ba7179a110_linux_bematech-driver_2.0.0.5-0_amd64.deb",
+      "sha256": "7c8cde6a2565fc8be507b199d12aa46085574e407a1a223c132e0aeb3ab8ed4e",
+      "url": "https://raw.githubusercontent.com/ElginDeveloperCommunity/Impressoras/c83f795f02950af1eca8b0874eaa1b6616cda984/Impressoras%20N%C3%A3o%20Fiscais/Utilit%C3%A1rios%20Bematech/MP-4200%20TH/Drivers/linux_bematech-driver_2.0.0.5-0_amd64.deb",
+      "fonte": "https://github.com/ElginDeveloperCommunity/Impressoras/tree/c83f795f02950af1eca8b0874eaa1b6616cda984"
+    },
+    "elgin": {
+      "arquivo": "Elgin/Linux/b41b26d25f_Elgin_Linux_Driver_v1.2.5.zip",
+      "sha256": "7b32fcb9c6fa2d96d1d5984d05e57cc5316b8424ececc85fee37f9155278bac5",
+      "url": "https://raw.githubusercontent.com/ElginDeveloperCommunity/Impressoras/c83f795f02950af1eca8b0874eaa1b6616cda984/Impressoras%20N%C3%A3o%20Fiscais/Utilit%C3%A1rios%20Elgin/i9/Drivers/Elgin_Linux_Driver_v1.2.5.zip",
+      "fonte": "https://github.com/ElginDeveloperCommunity/Impressoras/tree/c83f795f02950af1eca8b0874eaa1b6616cda984"
+    },
+    "pantum": {
+      "arquivo": "Pantum/Linux/0c5f076196_Pantum_Linux_Driver_V1_1_186.zip",
+      "sha256": "ce28c1f42e3c6a642cd49af3d6827b63ad4f0484b2151f0594470a1746828a45",
+      "url": "https://drivers.pantum.com/userfiles/files/download/drive/5103/Pantum%20Linux%20Driver%20V1_1_186.zip",
+      "fonte": "https://global.pantum.com/support/download/driver/"
+    }
+  }
+}

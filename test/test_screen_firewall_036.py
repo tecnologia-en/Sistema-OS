@@ -22,7 +22,7 @@ PACKAGE_BUILDER = ROOT / "scripts/build-update-package.py"
 
 class ScreenFirewall036Tests(unittest.TestCase):
     def test_release_and_core_packages(self):
-        self.assertIn('VERSION="0.2.50"', (SYS / "etc/enfoque-os-release").read_text())
+        self.assertIn('VERSION="0.2.51"', (SYS / "etc/enfoque-os-release").read_text())
         packages = (ROOT / "config/package-lists/enfoque-base.list.chroot").read_text()
         self.assertIn("\nxfce4-screensaver\n", packages)
         self.assertIn("\nnftables\n", packages)

@@ -1,33 +1,45 @@
 {
   "schema": 1,
-  "version": "0.2.50",
+  "version": "0.2.51",
   "networks": {
     "ilha-plaza": [
       {
         "name": "Enfoque_Canon_GX7100_Rede",
-        "uri": "ipp://192.168.0.31/ipp/print"
+        "uri": "ipp://192.168.0.31/ipp/print",
+        "make": "Canon",
+        "model": "MAXIFY GX7100"
       }
     ],
     "centro": [
       {
         "name": "Enfoque_Pantum_M6550_Rede92",
-        "uri": "ipp://192.168.111.92/ipp/print"
+        "uri": "ipp://192.168.111.92/ipp/print",
+        "make": "Pantum",
+        "model": "M6550"
       },
       {
         "name": "Enfoque_Pantum_M6550_Listas",
-        "uri": "ipp://192.168.111.240/ipp/print"
+        "uri": "ipp://192.168.111.240/ipp/print",
+        "make": "Pantum",
+        "model": "M6550"
       },
       {
         "name": "Enfoque_Pantum_BM5100_Rede150",
-        "uri": "ipp://192.168.111.150/ipp/print"
+        "uri": "ipp://192.168.111.150/ipp/print",
+        "make": "Pantum",
+        "model": "BM5100"
       },
       {
         "name": "Enfoque_Pantum_BM5100_Rede121",
-        "uri": "ipp://192.168.111.121/ipp/print"
+        "uri": "ipp://192.168.111.121/ipp/print",
+        "make": "Pantum",
+        "model": "BM5100"
       },
       {
         "name": "Enfoque_Canon_iR1643_Rede",
-        "uri": "ipp://192.168.111.191/ipp/print"
+        "uri": "ipp://192.168.111.191/ipp/print",
+        "make": "Canon",
+        "model": "iR1643"
       }
     ]
   },
@@ -47,5 +59,6 @@
       }
     ]
   },
-  "notes": "Somente modelos fisicos validados no inventario de 12/11/2026; endpoints historicos e termicos em servidores externos nao sao autoaplicados."
+  "notes": "Somente modelos fisicos validados no inventario de 12/11/2026; endpoints historicos e termicos em servidores externos nao sao autoaplicados.",
+  "driverLibrary": "/usr/share/enfoque-printer-library/catalog.json"
 }

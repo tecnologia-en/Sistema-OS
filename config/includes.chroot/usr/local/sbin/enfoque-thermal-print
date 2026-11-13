@@ -24,6 +24,7 @@ LOCK=Path("/run/enfoque-thermal-print.lock")
 QUEUE_RE=re.compile(r"^[A-Za-z0-9_.-]{1,110}$")
 ORIGINAL_FILTERS=frozenset((
     "rastertohprt","rastertoescpos","rastertobematech",
+    "enfoque-lib-elgin125-raster","enfoque-lib-bematech-raster",
     "rastertoepson","rastertostar","rastertobixolon"))
 CUPS_FILTER="enfoque-thermal-raster"
 THERMAL_HINT=re.compile(
@@ -90,6 +91,22 @@ def current_defaults(text):
         if name.isidentifier() and star is not None:out[name]=star
     return out
 
+def drawer_options(opts):
+    """Native receipt-driver defaults: primary after printing, secondary disabled."""
+    families=(
+        {"Drawer":"End","Drawer2":"Off"},
+        {"Drawer1":"2","Drawer2":"0"},
+        {"CashDrawer1Setting":"2CashDrawer1AfterPrinting",
+         "CashDrawer2Setting":"0NotCashDrawer2"},
+    )
+    for selected in families:
+        if all(value in opts.get(key,[]) for key,value in selected.items()):
+            return selected
+    # Older single-drawer Bematech drivers have no secondary-pin setting.
+    if "Drawer2" not in opts and "End" in opts.get("Drawer",[]):
+        return {"Drawer":"End"}
+    return {}
+
 def desired_options(opts):
     values={
         "PostPrintAction":"2",
@@ -103,6 +120,7 @@ def desired_options(opts):
         "CutType":"Partial",
         "FeedLength":"0",
     }
+    values.update(drawer_options(opts))
     # Set only native choices advertised by this specific printer PPD.
     return {k:v for k,v in values.items() if v in opts.get(k,[])}
 

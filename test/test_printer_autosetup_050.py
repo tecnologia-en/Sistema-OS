@@ -1,4 +1,4 @@
-"""Release 0.2.50 - safe CUPS autosetup tests."""
+"""Release 0.2.51 - safe CUPS autosetup tests."""
 import importlib.machinery, importlib.util, json, tempfile, unittest
 from pathlib import Path
 from unittest import mock
@@ -19,7 +19,7 @@ def source_catalog():
 
 class PrinterAuto050(unittest.TestCase):
  def test_package_and_timer(self):
-  self.assertIn('VERSION="0.2.50"',(INC/"etc/enfoque-os-release").read_text())
+  self.assertIn('VERSION="0.2.51"',(INC/"etc/enfoque-os-release").read_text())
   self.assertIn('PACKAGE_REVISION="1"',(INC/"etc/enfoque-os-release").read_text())
   self.assertTrue((INC/"etc/systemd/system/enfoque-printer-autosetup.service").is_file())
   self.assertIn("OnBootSec=2min",(INC/"etc/systemd/system/enfoque-printer-autosetup.timer").read_text())

@@ -19,6 +19,9 @@ bash "$ROOT/scripts/build-thermal-raster.sh"
 bash "$ROOT/scripts/test-thermal-raster.sh"
 # Embed verified Canfoque Pilot AppImage and RustDesk package without a host identity.
 bash "$ROOT/scripts/stage-canfoque-iso.sh"
+# Build the pinned printer bank from the approved server collection (or pinned official sources).
+python3 "$ROOT/scripts/stage-printer-library.py" --validate --output "$ROOT/config/packages.chroot"
+python3 "$ROOT/scripts/test-printer-library.py" --package "$ROOT/config/packages.chroot/enfoque-printer-drivers_0.2.51-1_amd64.deb"
 # Register Enfoque-owned components with dpkg, enabling future signed APT upgrades.
 python3 "$ROOT/scripts/build-update-package.py" --output "$ROOT/config/packages.chroot"
 if [[ -e "$TARGET" ]]; then echo "ISO ja existe: $TARGET (nao sobrescrita)" >&2; exit 1; fi
