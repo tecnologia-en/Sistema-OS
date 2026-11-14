@@ -616,7 +616,44 @@ class DesktopShell:
         self.calendar_date=label(datetime.datetime.now().strftime("%d/%m/%Y"))
         self.calendar_date.set_margin_bottom(14)
         outer.pack_end(self.calendar_date,False,False,0)
+    def _pilot_animations_enabled(self):
+        """Animations are enabled by default on Enfoque OS 1.0.0.
+        Each user may opt out locally without changing system packages.
+        """
+        prefs=Path.home()/".config/enfoque-os"
+        return not (prefs/"animations-disabled").exists()
+
+    def _stop_menu_animation(self):
+        source_id=getattr(self,"_menu_animation_id",None)
+        if source_id is not None:
+            GLib.source_remove(source_id)
+        self._menu_animation_id=None
+        menu=self.windows.get("menu")
+        if menu is not None:
+            menu.set_opacity(1.0)
+
+    def _animate_menu_open(self,win,final_x,final_y):
+        # Very light Win11-style ease-out: 13px rise and 180ms fade.
+        # No compositor/package changes here; Picom provides window fades.
+        started=time.monotonic()
+        duration=.180
+        def frame():
+            if not win.get_visible():
+                self._menu_animation_id=None
+                win.set_opacity(1.0)
+                return False
+            portion=min(1.0,(time.monotonic()-started)/duration)
+            eased=1.0-(1.0-portion)**3
+            win.set_opacity(.16+.84*eased)
+            win.move(final_x,final_y+round(13*(1.0-eased)))
+            if portion>=1.0:
+                self._menu_animation_id=None
+                return False
+            return True
+        self._menu_animation_id=GLib.timeout_add(16,frame)
+
     def hide_all(self):
+        self._stop_menu_animation()
         for w in self.windows.values():
             w.hide()
         self.open_panel=None
@@ -642,10 +679,18 @@ class DesktopShell:
         elif name=="calendar":
             self.calendar_date.set_text(datetime.datetime.now().strftime("%d/%m/%Y"))
         x,y,w,h=self.geometry(name)
-        win.move(x,y)
+        animate=(name=="menu" and self._pilot_animations_enabled())
+        if animate:
+            win.set_opacity(.16)
+            win.move(x,y+13)
+        else:
+            win.set_opacity(1.0)
+            win.move(x,y)
         win.show_all()
         win.present()
         if name=="menu":
+            if animate:
+                self._animate_menu_open(win,x,y)
             self.search_text.grab_focus()
         self.open_panel=name
     def refresh(self):

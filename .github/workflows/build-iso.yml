@@ -37,6 +37,7 @@ on:
       - 'test/test_release_053.py'
       - 'test/test_release_054.py'
       - 'test/test_ui_055.py'
+      - 'test/test_release_100.py'
       - 'test/test_printer_share_054.py'
       - 'scripts/stage-visual-assets.py'
       - 'third_party/visual/**'

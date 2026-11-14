@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Enfoque OS - Animacoes de janelas
+Comment=Transicoes suaves padrao 1.0.0, com fallback para XFWM e desativacao individual
+Exec=/usr/local/bin/enfoque-animacoes-piloto
+OnlyShowIn=XFCE;
+NoDisplay=true
+Terminal=false
+X-GNOME-Autostart-enabled=true

@@ -45,6 +45,8 @@ xfce4-docklike-plugin
 xfce4-appfinder
 xfce4-panel
 xfce4-pulseaudio-plugin
+# Short animations on all XFCE desktops; user can opt out; safe XFWM fallback.
+picom
 pulseaudio
 pavucontrol
 alsa-utils

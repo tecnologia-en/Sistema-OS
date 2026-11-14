@@ -2,7 +2,7 @@
 # Personalizacao da sessao XFCE: visual estilo Windows sem componentes proprietarios.
 set -eu
 WALLPAPER=/usr/share/backgrounds/enfoque-os/wallpaper.jpg
-MARKER="${HOME}/.cache/enfoque-os-visual-v055"
+MARKER="${HOME}/.cache/enfoque-os-visual-v100"
 if [ ! -f "$WALLPAPER" ] || ! command -v xfconf-query >/dev/null 2>&1; then
   exit 0
 fi
@@ -35,7 +35,13 @@ if "forceIconSize=true" in s and s.count("iconSize=28")==1:
     p.write_text(s.replace("iconSize=28","iconSize=24",1),encoding="utf-8")
 PYDOCK
 fi
-set_xfconf xsettings /Gtk/EnableAnimations bool false
+# Effects are enabled for all stations at the next XFCE login after 1.0.0.
+# The autostart script switches from XFWM compositor to Picom safely.
+if [ ! -f "$HOME/.config/enfoque-os/animations-disabled" ]; then
+  set_xfconf xsettings /Gtk/EnableAnimations bool true
+else
+  set_xfconf xsettings /Gtk/EnableAnimations bool false
+fi
 set_xfconf xfwm4 /general/use_compositing bool true
 set_xfconf xfwm4 /general/button_layout string "O|HMC"
 set_xfconf xsettings /Net/ThemeName string Aerobird-Sky-hdpi

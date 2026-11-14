@@ -1,0 +1,20 @@
+#!/bin/sh
+# Enfoque OS 1.0.0: launch short window fades for all XFCE desktops.
+# Any station can opt out with ~/.config/enfoque-os/animations-disabled.
+set -u
+home="$HOME"
+pilot="$home/.config/enfoque-os"
+if [ -f "$pilot/animations-disabled" ]; then exit 0; fi
+if [ ! -x /usr/bin/picom ] || [ ! -x /usr/bin/xfconf-query ]; then exit 0; fi
+conf="$home/.config/picom/enfoque-salao-preview.conf"
+if [ ! -r "$conf" ]; then conf="/usr/local/lib/enfoque-animations/picom-pilot.conf"; fi
+[ -r "$conf" ] || exit 0
+log="$home/.cache/enfoque-os/picom-animations-pilot.log"
+mkdir -p "$home/.cache/enfoque-os"
+sleep 7
+if pgrep -u "$(id -u)" -x picom >/dev/null 2>&1; then exit 0; fi
+xfconf-query -c xfwm4 -p /general/use_compositing -s false >/dev/null 2>&1 || :
+/usr/bin/picom --config "$conf" --backend xrender --log-level warn --log-file "$log"
+status=$?
+xfconf-query -c xfwm4 -p /general/use_compositing -s true >/dev/null 2>&1 || :
+exit "$status"

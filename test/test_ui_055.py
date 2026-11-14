@@ -80,7 +80,7 @@ class Windows11Menu055(unittest.TestCase):
         self.assertIn("enfoque-docklike-install",
                       (ROOT/"scripts/build-update-package.py").read_text())
         boot=(TREE/"etc/enfoque-os-release").read_text()
-        self.assertIn('VERSION="0.2.55"',boot)
+        self.assertIn('VERSION="1.0.0"',boot)
 
 if __name__=="__main__":
     unittest.main()

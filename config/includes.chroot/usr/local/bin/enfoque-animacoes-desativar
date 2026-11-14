@@ -1,0 +1,20 @@
+#!/bin/sh
+# Disable visual effects on this machine without touching Chrome or SIGE.
+set -eu
+home="$HOME"
+mkdir -p "$home/.config/enfoque-os" "$home/.config/autostart"
+: > "$home/.config/enfoque-os/animations-disabled"
+rm -f "$home/.config/enfoque-os/animations-enabled"
+cat > "$home/.config/autostart/enfoque-animacoes-piloto.desktop" <<'DESKTOP'
+[Desktop Entry]
+Type=Application
+Name=Enfoque OS - Animacoes desligadas
+Hidden=true
+DESKTOP
+pkill -u "$(id -u)" -x picom 2>/dev/null || :
+sleep 1
+xfconf-query -c xfwm4 -p /general/use_compositing -s true
+/usr/local/bin/enfoque-desktop-shell hide >/dev/null 2>&1 || :
+pkill -u "$(id -u)" -f '^python3 /usr/local/bin/enfoque-desktop-shell daemon$' || :
+nohup /usr/local/bin/enfoque-desktop-shell daemon > "$home/.cache/enfoque-os/menu-no-animation.log" 2>&1 </dev/null &
+echo "Animacoes desativadas neste PC; compositor XFWM restaurado."
