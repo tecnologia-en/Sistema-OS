@@ -100,21 +100,46 @@ def install_enfoque_panel():
     # This is intentionally a *small* override, so original AeroBird rendering
     # for windows, menus and popups remains intact. Keep only device/tray sizing.
     corporate = """
-/* Enfoque OS 0.2.54: compact corporate status items, preserving AeroBird glass. */
-#XfcePanelWindow #launcher-12 button {
-  min-width: 18px; min-height: 24px; padding: 0; margin: 2px 0;
+/* Enfoque OS 0.2.55: compact Win11-style dock, keep original app SVGs. */
+#XfcePanelWindow #launcher-12 button,
+#XfcePanelWindow #launcher-8 button {
+  min-width: 23px; min-height: 25px; padding: 0 2px; margin: 1px 0;
+  border: none; background-image: none; box-shadow: none;
 }
 #XfcePanelWindow #launcher-12 image { -gtk-icon-transform: scale(.80); }
 #XfcePanelWindow #genmon-13, #XfcePanelWindow #genmon-16,
 #XfcePanelWindow #genmon-17, #XfcePanelWindow #genmon-10 {
-  min-width: 0; padding: 0 1px; margin: 2px 0;
+  min-width: 0; padding: 0 1px; margin: 1px 0;
 }
-#XfcePanelWindow #genmon-11 { min-width: 4px; padding: 0; margin: 0; }
-#XfcePanelWindow .systray button, #XfcePanelWindow #pulseaudio-button {
-  min-width: 16px; padding: 1px; margin: 2px 0;
+#XfcePanelWindow #genmon-11 { min-width: 3px; padding: 0; margin: 0; }
+#XfcePanelWindow .systray button,
+#XfcePanelWindow #pulseaudio-button {
+  min-width: 18px; padding: 0 1px; margin: 1px 0;
+}
+#docklike-plugin button {
+  min-width: 38px; min-height: 34px;
+  padding: 1px 2px; margin: 0 1px;
+  border: none; border-radius: 8px;
+  background-color: transparent; background-image: none; box-shadow: none;
+}
+#docklike-plugin button + button { margin-left: 1px; }
+#docklike-plugin .group.open_group {
+  border: none; background-image: none;
+  background-color: rgba(188,220,252,.07);
+  box-shadow: inset 0 -2px #76c8f9;
+}
+#docklike-plugin .group.open_group.active_group,
+#docklike-plugin .group.active_group {
+  border: none; background-image: none;
+  background-color: rgba(166,211,246,.13);
+  box-shadow: inset 0 -3px #58c2ff;
+}
+#docklike-plugin .group.hover_group {
+  border: none; background-image: none;
+  background-color: rgba(210,232,252,.16);
 }
 #docklike-plugin .group.enfoque_attention {
-  border: 1px solid #f9ac43;
+  border: none; background-image: none;
   box-shadow: inset 0 -3px #ffb454;
 }
 """
@@ -152,7 +177,7 @@ def install_enfoque_panel():
         if "margin: 9px !important;" not in widget_text:
             raise RuntimeError("AeroBird upstream tasklist CSS layout unexpectedly changed")
         widget_css.write_text(widget_text.replace("margin: 9px !important;", "margin: 9px;"), encoding="utf-8")
-        marker = "/* Enfoque OS 0.2.54: compact corporate status items, preserving AeroBird glass. */"
+        marker = "/* Enfoque OS 0.2.55: compact Win11-style dock, keep original app SVGs. */"
         if marker not in text:
             css.write_text(text.rstrip() + "\n" + corporate, encoding="utf-8")
         (css.parent / "enfoque-panel.css").write_text(corporate, encoding="utf-8")
@@ -175,6 +200,16 @@ def main():
     if args.verify_only:
         return
     icons = safe_extract(files["WindowsModern-icons-1.1.1.zip"], "icons", "windows-modern")
+    # KDE icon pack doesn't know Enfoque-only names (My Computer, printer,
+    # ID/chevron etc). Without our inherited theme GTK draws the "forbidden"
+    # missing-image glyph. Preserve WindowsModern for every icon it provides.
+    index = TARGET / "icons" / "windows-modern" / "index.theme"
+    theme_data = index.read_text("utf-8")
+    inherit = "Inherits=breeze,breeze-dark,hicolor"
+    if theme_data.count(inherit) != 1:
+        raise RuntimeError("WindowsModern icon theme inheritance changed upstream")
+    index.write_text(theme_data.replace(
+        inherit, "Inherits=EnfoqueFluent,Papirus,Adwaita,breeze,breeze-dark,hicolor"),encoding="utf-8")
     themes = safe_extract(files["xfce-aerobird-theme-v6-hdpi.zip"], "themes", "Aerobird-v6-hdpi")
     variations = install_enfoque_panel()
     idx = TARGET / "icons" / "windows-modern" / "index.theme"

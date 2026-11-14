@@ -1,6 +1,6 @@
 NAME="Enfoque OS"
-VERSION="0.2.54"
+VERSION="0.2.55"
 PACKAGE_REVISION="1"
 CHANNEL="piloto"
 BASE="Debian 13 (trixie)"
-STATUS="piloto-aerobird-windowsmodern-bematech-054"
+STATUS="piloto-aerobird-windowsmodern-bematech-055"

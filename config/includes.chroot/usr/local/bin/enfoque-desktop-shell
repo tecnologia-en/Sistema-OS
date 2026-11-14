@@ -65,54 +65,61 @@ APP_IDS = [
     ("enfoque-central.desktop", "Central Enfoque", "enfoque-os"),
 ]
 CSS = b"""
+/* Fluent-like Windows 11 shell: native GTK controls, no permanent tile boxes. */
 .enfoque-surface {
- background-color: #1b2c43;
- background-image: linear-gradient(135deg, #344c6b 0%, #233650 37%, #17273d 80%, #20334e 100%);
+ background-color: rgba(28,39,58,.985);
+ background-image: linear-gradient(135deg, #32425a, #202e45 47%, #19283e);
  border: none;
  border-radius: 18px;
- color: #f1f7ff;
+ color: #f5f9ff;
  box-shadow: none;
 }
 .enfoque-menu-glass {
- background-image: linear-gradient(to bottom, rgba(205,235,255,.09), rgba(124,187,238,.025) 54%, rgba(8,21,42,.12));
+ background-color: transparent; background-image: none;
  border: none; border-radius: 18px;
 }
-.enfoque-menu-brand {
- font-size: 15px; font-weight: 800; color: #ebf7ff;
-}
-.enfoque-menu-tagline {font-size: 10px; color: #a9cbe8;}
-.enfoque-surface label { color: #f1f7ff; }
+.enfoque-menu-brand {font-size: 14px; font-weight: 700; color: #f1f6fc;}
+.enfoque-menu-tagline {font-size: 10px; color: #b1c3d8;}
+.enfoque-surface label {color: #f3f7fb;}
 .enfoque-title {font-weight: 700; font-size: 15px; color: #f7fbff;}
-.enfoque-heading {font-size: 11px;font-weight: 700;color: #dcecff;}
-.enfoque-muted {font-size: 10px; color: #afc9e5;}
-.enfoque-search {
-  min-height: 37px;
-  border: 1px solid rgba(189,225,255,.4);
-  border-radius: 12px;
-  background: #e9f4ff;
-  color: #24466f;
+.enfoque-heading {font-size: 11px; font-weight: 700; color: #eff5fd;}
+.enfoque-muted {font-size: 10px; color: #b7c8db;}
+entry.enfoque-search {
+ min-height: 34px; padding: 2px 10px;
+ border: 1px solid rgba(160,199,233,.65); border-radius: 10px;
+ background-image: none; background-color: #edf5fc; color: #1b3858;
+ box-shadow: none;
 }
-.enfoque-search text {color: #1e3c64;}
-.enfoque-tile {
- background: transparent;
- border: 1px solid transparent;
- border-radius: 12px;
- min-width: 92px;
- min-height: 78px;
- padding: 9px 4px 8px 4px;
+entry.enfoque-search text {color:#1b3858; background-color:#edf5fc;}
+entry.enfoque-search:focus {border-color:#76b2ed; box-shadow:inset 0 -2px #4b9fe9;}
+button.enfoque-tile {
+ background-image: none; background-color: transparent;
+ border: none; border-width: 0; border-radius: 9px;
+ box-shadow: none; min-width: 72px; min-height: 58px;
+ padding: 6px 2px; margin: 0;
 }
-.enfoque-tile:hover {background: rgba(125,177,244,.28);border-color: rgba(199,230,255,.2);}
-.enfoque-tile label {font-size: 10px;color: #f0f6ff;}
-.enfoque-row {border: 1px solid rgba(199,222,255,.13);border-radius: 11px;
-  background: rgba(207,232,255,.065);padding: 10px;}
-.enfoque-row:hover {background: rgba(182,211,250,.14);}
-.enfoque-action {
- background: rgba(127,179,240,.18);
- border: 1px solid rgba(163,214,255,.38);
- border-radius: 10px; padding: 7px 13px;color:#e7f3ff;
+button.enfoque-tile:hover {
+ background-image: none; background-color: rgba(206,227,248,.13);
+ border: none; box-shadow: none;
 }
-.enfoque-action:hover {background: rgba(145,206,255,.32);}
-.enfoque-footer {background: rgba(4,18,39,.28);border-radius: 0 0 18px 18px;}
+button.enfoque-tile:active {background-color:rgba(207,232,255,.20);}
+button.enfoque-tile label {font-size: 10px; color: #f4f8fe;}
+button.enfoque-row {
+ background-image:none; background-color:rgba(225,237,250,.07);
+ border:1px solid rgba(200,220,245,.07); border-radius:8px;
+ box-shadow:none; padding: 6px 9px; min-height:25px;
+}
+button.enfoque-row:hover {background-image:none; background-color:rgba(206,227,248,.15);}
+button.enfoque-action {
+ background-image:none; background-color:rgba(191,216,239,.10);
+ border:1px solid rgba(193,218,240,.15); border-radius:8px;
+ box-shadow:none; color:#e9f4ff; padding:5px 10px;
+}
+button.enfoque-action:hover {background-image:none; background-color:rgba(191,216,239,.20);}
+.enfoque-footer {
+ background-color:rgba(9,17,30,.23); background-image:none;
+ border-radius:0 0 18px 18px;
+}
 progressbar trough {min-height:7px; background:#25446e;border-radius:6px;}
 progressbar progress {background:#6bc9ff;border-radius:6px;}
 """
@@ -128,7 +135,12 @@ def label(text, kind=None, xalign=0):
     return w
 
 def icon(name, size=32):
-    return Gtk.Image.new_from_icon_name(name or "application-x-executable", Gtk.IconSize.DIALOG if size>=32 else Gtk.IconSize.BUTTON)
+    """Use the exact requested pixel size, not GTK DIALOG's 48px default."""
+    theme=Gtk.IconTheme.get_default()
+    chosen=name if name and theme.has_icon(name) else "application-x-executable"
+    image=Gtk.Image.new_from_icon_name(chosen,Gtk.IconSize.BUTTON)
+    image.set_pixel_size(size)
+    return image
 
 def command_exists(program):
     return shutil.which(program) is not None
@@ -250,7 +262,7 @@ class DesktopShell:
         scr=Gdk.Screen.get_default()
         sw,sh=scr.get_width(),scr.get_height()
         if name=="menu":
-            w,h=min(612,sw-20),min(585,sh-76)
+            w,h=min(600,sw-18),min(570,sh-76)
             x=max(7,(sw-w)//2)
         elif name=="background":
             w,h=min(344,sw-22),min(240,sh-76)
@@ -333,55 +345,55 @@ class DesktopShell:
         outer=styled(Gtk.Box(orientation=Gtk.Orientation.VERTICAL),"enfoque-menu-glass")
         win.add(outer)
         brand=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=10)
-        brand.set_margin_start(22);brand.set_margin_end(22);brand.set_margin_top(15)
+        brand.set_margin_start(24);brand.set_margin_end(24);brand.set_margin_top(14)
         brand.pack_start(label("Enfoque OS","enfoque-menu-brand"),True,True,0)
         brand.pack_end(label("Seus aplicativos, em um só lugar","enfoque-menu-tagline"),False,False,0)
         outer.pack_start(brand,False,False,0)
         search=styled(Gtk.SearchEntry(),"enfoque-search")
         search.set_placeholder_text("Pesquisar aplicativos, arquivos e configurações")
-        search.set_margin_start(20);search.set_margin_end(20);search.set_margin_top(11);search.set_margin_bottom(14)
+        search.set_margin_start(23);search.set_margin_end(23);search.set_margin_top(10);search.set_margin_bottom(12)
         search.connect("search-changed",self.filter_apps)
         search.connect("activate",self.launch_first)
         outer.pack_start(search,False,False,0)
         self.search_text=search
         heading=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        heading.set_margin_start(23);heading.set_margin_end(22);heading.set_margin_bottom(10)
+        heading.set_margin_start(24);heading.set_margin_end(23);heading.set_margin_bottom(7)
         heading.pack_start(label("Fixados","enfoque-heading"),True,True,0)
         btn=styled(Gtk.Button(label="Todos os aplicativos ›"),"enfoque-action")
-        btn.connect("clicked",lambda *_:self.filter_apps(None,show_all=True))
+        btn.connect("clicked",self.toggle_all_apps)
+        self.all_apps_button=btn
         heading.pack_end(btn,False,False,0)
         outer.pack_start(heading,False,False,0)
         fl=Gtk.FlowBox()
         fl.set_selection_mode(Gtk.SelectionMode.NONE)
         fl.set_homogeneous(True)
-        fl.set_max_children_per_line(5)
-        fl.set_min_children_per_line(5)
-        fl.set_row_spacing(5)
+        fl.set_max_children_per_line(6)
+        fl.set_min_children_per_line(6)
+        fl.set_row_spacing(3)
         fl.set_column_spacing(4)
         fl.set_margin_start(20);fl.set_margin_end(20)
         self.fl=fl
         apps_scroll=self.scroll(fl)
-        apps_scroll.set_min_content_height(170)
-        apps_scroll.set_max_content_height(300)
+        apps_scroll.set_min_content_height(215)
+        apps_scroll.set_max_content_height(285)
         outer.pack_start(apps_scroll,True,True,0)
         self.populate_apps()
-        spacer=Gtk.Box()
-        outer.pack_start(spacer,True,True,0)
-        recommended=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=7)
-        recommended.set_margin_start(22);recommended.set_margin_end(22);recommended.set_margin_bottom(12)
+        recommended=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=5)
+        recommended.set_margin_start(23);recommended.set_margin_end(23)
+        recommended.set_margin_top(4);recommended.set_margin_bottom(10)
         recommended.pack_start(label("Recomendados","enfoque-heading"),False,False,0)
         for desktop_id,title,ico in [("enfoque-intranet.desktop","Portal Intranet","enfoque-intranet"),("thunar.desktop","Arquivos e pastas","system-file-manager")]:
             b=styled(Gtk.Button(),"enfoque-row")
-            h=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=12)
-            h.pack_start(icon(ico,24),False,False,1)
+            h=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=10)
+            h.pack_start(icon(ico,20),False,False,1)
             h.pack_start(label(title),True,True,0)
             b.add(h)
             b.connect("clicked",lambda _,d=desktop_id:self.launch(d))
             recommended.pack_start(b,False,False,0)
         outer.pack_start(recommended,False,False,0)
         footer=styled(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=12),"enfoque-footer")
-        footer.set_margin_top(4);footer.set_border_width(14)
-        footer.pack_start(icon("avatar-default-symbolic",24),False,False,2)
+        footer.set_margin_top(2);footer.set_border_width(10)
+        footer.pack_start(icon("avatar-default-symbolic",19),False,False,3)
         footer.pack_start(label("Enfoque OS  •  XFCE"),True,True,0)
         power=styled(Gtk.Button(label="⏻"),"enfoque-action")
         power.set_tooltip_text("Opções de sessão")
@@ -416,7 +428,10 @@ class DesktopShell:
         query=normalize_search(search)
         full=show_all or bool(query)
         self._menu_showing_full=full
-        apps=self.available_app_catalog() if full else APP_IDS
+        if getattr(self,"all_apps_button",None):
+            self.all_apps_button.set_label("‹ Voltar" if full else "Todos os aplicativos ›")
+        # 18 pinned apps: three balanced rows of six on a 1280x800 desktop.
+        apps=self.available_app_catalog() if full else APP_IDS[:18]
         selected=[]
         for ident,name,ico in apps:
             if query and query not in normalize_search(name):
@@ -425,13 +440,13 @@ class DesktopShell:
                 if not app_info(ident):
                     continue
                 b=styled(Gtk.Button(),"enfoque-tile")
-                box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=5)
+                box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=4)
                 box.set_halign(Gtk.Align.CENTER)
-                box.pack_start(icon(ico,42),False,False,0)
+                box.pack_start(icon(ico,28),False,False,0)
                 txt=label(name)
                 txt.set_justify(Gtk.Justification.CENTER)
                 txt.set_xalign(.5)
-                txt.set_max_width_chars(13)
+                txt.set_max_width_chars(14)
                 txt.set_ellipsize(Pango.EllipsizeMode.END)
                 box.pack_start(txt,False,False,0)
                 b.add(box)
@@ -452,6 +467,12 @@ class DesktopShell:
             else:
                 child.hide()
         self.menu_buttons=selected
+    def toggle_all_apps(self,_widget):
+        # "Todos" and "Voltar" mirror Windows 11's two Start pages.
+        show_all=not self._menu_showing_full
+        if self.search_text:
+            self.search_text.set_text("")
+        self.populate_apps(show_all=show_all)
     def filter_apps(self,widget,show_all=False):
         text=self.search_text.get_text() if self.search_text else ""
         self.populate_apps(text, show_all=show_all or bool(text))

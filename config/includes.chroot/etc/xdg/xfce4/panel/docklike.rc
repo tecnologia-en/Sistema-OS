@@ -12,6 +12,6 @@ indicatorColorFromTheme=false
 indicatorColor=rgb(108,211,255)
 inactiveColor=rgb(75,168,233)
 forceIconSize=true
-iconSize=28
+iconSize=24
 keyComboActive=false
 keyAloneActive=false
