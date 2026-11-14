@@ -67,7 +67,7 @@ class Windows11Menu055(unittest.TestCase):
 
     def test_existing_user_profile_migration_is_conservative(self):
         s=(TREE/"usr/local/bin/enfoque-aplicar-visual").read_text()
-        self.assertIn("enfoque-os-visual-v055",s)
+        self.assertIn("enfoque-os-visual-v100",s)
         self.assertIn("s.count(\"iconSize=28\")==1",s)
         self.assertIn("if not backup.exists()",s)
         self.assertIn("shutil.copy2(p,backup)",s)
