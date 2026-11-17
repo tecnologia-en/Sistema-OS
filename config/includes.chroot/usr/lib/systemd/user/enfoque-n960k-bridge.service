@@ -1,0 +1,16 @@
+[Unit]
+Description=Enfoque N960K - ponte AOA2 HID local
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/lib/enfoque-n960k/N960K-Local-Bridge.py
+WorkingDirectory=/usr/local/lib/enfoque-n960k
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

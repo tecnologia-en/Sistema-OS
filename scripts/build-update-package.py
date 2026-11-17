@@ -15,6 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 TREE = ROOT / "config/includes.chroot"
 RELEASE = TREE / "etc/enfoque-os-release"
 PACKAGE = "enfoque-os-core"
+# The existing signed printer bank remains compatible with core-only releases.
+PRINTER_BANK_BASELINE = "1.0.0-1"
 
 
 def package_revision():
@@ -51,6 +53,7 @@ def managed(name):
         "etc/opt/chrome/policies/managed/40-enfoque-monitora.json",
         "etc/opt/chrome/policies/managed/82-enfoque-thermal-print.json",
         "etc/enfoque-os/drivers/",
+        "etc/udev/rules.d/72-enfoque-",
         "etc/udev/rules.d/88-enfoque-",
         "etc/udev/rules.d/89-enfoque-",
         "etc/xdg/mimeapps.list",
@@ -160,6 +163,18 @@ def manifest():
         "usr/local/sbin/enfoque-tela-ativa",
         "usr/local/sbin/enfoque-monitora-provision",
         "usr/share/enfoque-monitora/monitora-1.1.0.crx",
+        # N960K TEF files are embedded but deliberately NOT enabled in Chrome.
+        "usr/share/enfoque-monitora/n960k-tef-inativa/manifest.json",
+        "usr/share/enfoque-monitora/n960k-tef-inativa/n960k-discovery-worker.js",
+        "usr/share/enfoque-monitora/n960k-tef-inativa/n960k-pdv.js",
+        "usr/local/lib/enfoque-n960k/N960K-Local-Bridge.py",
+        "usr/local/lib/enfoque-n960k/N960K-HID-Headless.py",
+        "usr/local/lib/enfoque-n960k/Enfoque-N960K-Discovery.py",
+        "usr/lib/systemd/user/enfoque-n960k-discovery.service",
+        "usr/lib/systemd/user/enfoque-n960k-bridge.service",
+        "usr/local/bin/enfoque-n960k-session-start",
+        "etc/xdg/autostart/enfoque-n960k-servicos.desktop",
+        "etc/udev/rules.d/72-enfoque-n960k.rules",
         "etc/opt/chrome/policies/managed/40-enfoque-monitora.json",
         "etc/xdg/mimeapps.list",
         "etc/opt/chrome/policies/managed/82-enfoque-thermal-print.json",
@@ -251,7 +266,7 @@ def create(output):
             f"Package: {PACKAGE}\nVersion: {release}-{revision}\n"
             "Section: admin\nPriority: optional\nArchitecture: all\n"
             "Maintainer: Enfoque TI <tecnologia@enfoquepapelaria.com.br>\n"
-            f"Depends: enfoque-printer-drivers (>= {release}-{revision}), pciutils, printer-driver-all, printer-driver-brlaser, printer-driver-c2050, printer-driver-c2esp, printer-driver-cjet, printer-driver-dymo, printer-driver-escpr, printer-driver-foo2zjs, printer-driver-fujixerox, printer-driver-gutenprint, printer-driver-hpcups, printer-driver-indexbraille, printer-driver-m2300w, printer-driver-min12xxw, printer-driver-oki, printer-driver-pnm2ppa, printer-driver-postscript-hp, printer-driver-ptouch, printer-driver-pxljr, printer-driver-sag-gdi, printer-driver-splix, foomatic-db-compressed-ppds, foomatic-db-engine, openprinting-ppds, python3, python3-gi, python3-gi-cairo, python3-cairo, gir1.2-gtk-3.0, apt, systemd, ca-certificates, gpgv, openssh-client, openssh-server, picom, xfce4-genmon-plugin, xfce4-appfinder, xfce4-docklike-plugin, papirus-icon-theme, arc-theme, xfce4-taskmanager, xfce4-screenshooter, galculator, brightnessctl, timeshift, rsync, restic, smartmontools, mate-polkit, pkexec, xfce4-screensaver, xdotool, nftables, network-manager, network-manager-gnome, wpasupplicant, rfkill, xdg-desktop-portal, xdg-desktop-portal-gtk, onboard, firmware-iwlwifi, firmware-realtek, firmware-atheros, firmware-brcm80211, firmware-mediatek, xarchiver, thunar-archive-plugin, 7zip, zip, unzip, bluez, bluez-obexd, blueman, pulseaudio-module-bluetooth, python3-cups, cups, cups-filters, ghostscript, poppler-utils, libcupsimage2t64, firmware-amd-graphics, firmware-intel-graphics, kmod, v4l-utils\n"
+            f"Depends: enfoque-printer-drivers (>= {PRINTER_BANK_BASELINE}), pciutils, printer-driver-all, printer-driver-brlaser, printer-driver-c2050, printer-driver-c2esp, printer-driver-cjet, printer-driver-dymo, printer-driver-escpr, printer-driver-foo2zjs, printer-driver-fujixerox, printer-driver-gutenprint, printer-driver-hpcups, printer-driver-indexbraille, printer-driver-m2300w, printer-driver-min12xxw, printer-driver-oki, printer-driver-pnm2ppa, printer-driver-postscript-hp, printer-driver-ptouch, printer-driver-pxljr, printer-driver-sag-gdi, printer-driver-splix, foomatic-db-compressed-ppds, foomatic-db-engine, openprinting-ppds, python3, python3-gi, python3-gi-cairo, python3-cairo, gir1.2-gtk-3.0, apt, systemd, ca-certificates, gpgv, openssh-client, openssh-server, picom, xfce4-genmon-plugin, xfce4-appfinder, xfce4-docklike-plugin, papirus-icon-theme, arc-theme, xfce4-taskmanager, xfce4-screenshooter, galculator, brightnessctl, timeshift, rsync, restic, smartmontools, mate-polkit, pkexec, xfce4-screensaver, xdotool, nftables, network-manager, network-manager-gnome, wpasupplicant, rfkill, xdg-desktop-portal, xdg-desktop-portal-gtk, onboard, firmware-iwlwifi, firmware-realtek, firmware-atheros, firmware-brcm80211, firmware-mediatek, xarchiver, thunar-archive-plugin, 7zip, zip, unzip, bluez, bluez-obexd, blueman, pulseaudio-module-bluetooth, python3-cups, cups, cups-filters, ghostscript, poppler-utils, libcupsimage2t64, firmware-amd-graphics, firmware-intel-graphics, kmod, v4l-utils, libusb-1.0-0, udev\n"
             "Description: Enfoque OS corporate system components and updater\n"
             " Replaces custom Enfoque OS files on managed workstations using\n"
             " individually signed APT repository updates.\n",
@@ -311,6 +326,8 @@ def create(output):
             "  systemctl enable bluetooth.service >/dev/null 2>&1 || true\n"
             "  systemctl enable enfoque-plugplay-scan.timer enfoque-thermal-print.timer enfoque-thermal-chrome.timer enfoque-printer-autosetup.timer >/dev/null 2>&1 || true\n"
             "  systemctl enable enfoque-canfoque-firstboot.timer enfoque-print-pages.timer enfoque-print-cups-setup.timer >/dev/null 2>&1 || true\n"
+            # The user units run outside Chrome and never enable the TEF extension.
+            "  systemctl --global enable enfoque-n960k-discovery.service enfoque-n960k-bridge.service >/dev/null 2>&1 || true\n"
             "  command -v udevadm >/dev/null 2>&1 && udevadm control --reload >/dev/null 2>&1 || true\n"
             "  if [ -d /run/systemd/system ] && [ ! -e /run/live/medium ]; then\n"
             "    systemctl start enfoque-monitora-provision.timer enfoque-canfoque-firstboot.timer enfoque-print-pages.timer enfoque-print-cups-setup.timer enfoque-printer-autosetup.timer >/dev/null 2>&1 || true\n"

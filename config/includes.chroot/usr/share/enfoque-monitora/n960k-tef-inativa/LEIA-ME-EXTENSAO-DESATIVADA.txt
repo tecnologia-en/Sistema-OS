@@ -1,0 +1,22 @@
+Extensao Enfoque N960K 1.7.8.26 - COPIADA, MAS NAO INSTALADA NO CHROME.
+
+Este diretorio fica ao lado da extensao Monitora como solicitado.
+Os sete arquivos sao a versao ja aprovada no desktop (hash verificado).
+NAO ha ExtensionSettings, ExtensionInstallForcelist, politica de
+instalacao, perfil do navegador, Chrome command-line --load-extension
+ou autostart que carregue esta extensao.
+
+Ela fica inativa e nao aparecera em chrome://extensions ate uma
+ativacao futura, realizada separadamente pela TI.
+A Monitora original continua com sua politica corporativa intacta.
+
+Scripts de deteccao USB e ponte AOA2 estao em
+/usr/local/lib/enfoque-n960k; eles nao iniciam um pagamento sozinhos.
+Para conferir instalacao do sistema: systemctl --user status
+enfoque-n960k-discovery.service enfoque-n960k-bridge.service
+
+Quando for autorizada a ativacao no Chrome:
+1. Homologar uma transacao em Linux com N960K fisica e driver libusb/udev.
+2. Validar token individual e comportamento de cancelamento/parcelamento.
+3. Definir implantacao separada da extensao; NAO usar force_installed
+   sem aprovacao expressa e testes.

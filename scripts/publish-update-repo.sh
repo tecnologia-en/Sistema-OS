@@ -36,10 +36,30 @@ for input in "$@"; do
   DEBS+=("$deb")
 done
 [[ -n "$CORE_VER" ]] || { echo "A core package is required" >&2; exit 1; }
+# A signed printer bank is reused across core-only releases (for example
+# 1.0.1 and 1.0.2). Require a bank that satisfies the actual Debian dependency
+# rather than forcing republishing an identical bank under every core version.
 if dpkg-deb -f "$core" Depends | grep -Fq enfoque-printer-drivers; then
-  [[ "$PRINTER_VER" == "$CORE_VER" ]] || {
-    echo "Publish the matching printer bank together with this core" >&2; exit 1;
-  }
+  required_printer="$(dpkg-deb -f "$core" Depends | sed -n 's/.*enfoque-printer-drivers (>= \([^)]*\)).*/\1/p')"
+  [[ -n "$required_printer" ]] || { echo "Missing minimum printer bank version" >&2; exit 1; }
+  if [[ -n "$PRINTER_VER" ]]; then
+    dpkg --compare-versions "$PRINTER_VER" ge "$required_printer" || {
+      echo "Supplied printer bank too old ($PRINTER_VER < $required_printer)" >&2; exit 1;
+    }
+  else
+    found_bank=false
+    for installed_bank in "$ROOT"/pool/main/e/enfoque-printer-drivers/*.deb; do
+      [[ -f "$installed_bank" ]] || continue
+      installed_ver="$(dpkg-deb -f "$installed_bank" Version)"
+      if dpkg --compare-versions "$installed_ver" ge "$required_printer"; then
+        found_bank=true
+        break
+      fi
+    done
+    [[ "$found_bank" == true ]] || {
+      echo "Signed printer bank >= $required_printer not found; publish it with the core" >&2; exit 1;
+    }
+  fi
 fi
 install -d -m 0755 "$ROOT/pool/main/e/enfoque-os-core" "$ROOT/pool/main/e/enfoque-printer-drivers" "$ROOT/releases" "$ROOT/dists"
 exec 9> /run/lock/enfoque-repo-publish.lock

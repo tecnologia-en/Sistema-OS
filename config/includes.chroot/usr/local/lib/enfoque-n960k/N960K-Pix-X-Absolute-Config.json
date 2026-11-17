@@ -1,0 +1,33 @@
+{
+  "target": "Pix QR X cancel close (experimental)",
+  "device": "Newland Rede N960K",
+  "sourceMap": "N960K-Pix-X-Coordenadas.json",
+  "sourceRelativeMouse": {
+    "x": 543,
+    "y": 98,
+    "visuallyVerified": true
+  },
+  "protocol": "AOA2 HID absolute touchscreen",
+  "touch": {
+    "x": 543,
+    "y": 98,
+    "logicalMaxX": 602,
+    "logicalMaxY": 1254,
+    "durationMs": 85,
+    "repeats": 3,
+    "gapBetweenTapsMs": 210
+  },
+  "normalizationReference": {
+    "oldValidatedX": 325,
+    "oldValidatedY": 50,
+    "oldLogicalMaxX": 360,
+    "oldLogicalMaxY": 640,
+    "meaning": "another top-right X; inferred scale, not Pix touch confirmed"
+  },
+  "postUsbAcceptanceWaitSeconds": 7,
+  "financialCancellationVerifiedBySoftware": false,
+  "pixTouchTargetVerified": false,
+  "doNotMoveMouse": true,
+  "noAutomaticRetry": true,
+  "pixKeepsHidConnectedAfterCancel": true
+}

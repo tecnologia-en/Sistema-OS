@@ -1,0 +1,6 @@
+#!/bin/sh
+# Start local USB support only; NEVER load or enable the Chrome extension.
+# Both units use systemd --user and remain independent of the Enfoque OS runtime.
+set -eu
+command -v systemctl >/dev/null 2>&1 || exit 0
+systemctl --user start enfoque-n960k-discovery.service enfoque-n960k-bridge.service >/dev/null 2>&1 || true

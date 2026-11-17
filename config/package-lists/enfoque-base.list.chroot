@@ -190,3 +190,7 @@ xfce4-taskmanager
 xfce4-screenshooter
 galculator
 brightnessctl
+
+# N960K USB bridge: libusb 1.0 + udev device-specific ACL.
+libusb-1.0-0
+udev

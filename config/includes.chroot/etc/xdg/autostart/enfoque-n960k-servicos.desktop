@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Enfoque N960K - Ponte local USB
+Comment=Inicia detector e ponte locais, sem ativar extensao Chrome
+Exec=/usr/local/bin/enfoque-n960k-session-start
+TryExec=/usr/local/bin/enfoque-n960k-session-start
+OnlyShowIn=XFCE;
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

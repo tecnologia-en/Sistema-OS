@@ -1,0 +1,16 @@
+[Unit]
+Description=Enfoque N960K - identificacao USB somente leitura
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/lib/enfoque-n960k/Enfoque-N960K-Discovery.py
+WorkingDirectory=/usr/local/lib/enfoque-n960k
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

@@ -20,3 +20,8 @@ config/includes.chroot/etc/enfoque-os-release text eol=lf
 
 # Patch files contain indentation of original C++ source in diff contexts.
 patches/*.patch -whitespace
+
+# N960K payload is copied byte-for-byte from the signed 1.0.1 APT package.
+# No CRLF normalization or automatic whitespace fixes of validated TEF code.
+config/includes.chroot/usr/share/enfoque-monitora/n960k-tef-inativa/** -text whitespace=-blank-at-eol,-blank-at-eof
+config/includes.chroot/usr/local/lib/enfoque-n960k/** -text whitespace=-blank-at-eol,-blank-at-eof
