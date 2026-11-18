@@ -1,22 +1,19 @@
-Extensao Enfoque N960K 1.7.8.26 - COPIADA, MAS NAO INSTALADA NO CHROME.
+Extensao Enfoque N960K 1.7.8.27 - COPIADA NO SISTEMA, MAS INATIVA NO CHROME.
 
-Este diretorio fica ao lado da extensao Monitora como solicitado.
-Os sete arquivos sao a versao ja aprovada no desktop (hash verificado).
-NAO ha ExtensionSettings, ExtensionInstallForcelist, politica de
-instalacao, perfil do navegador, Chrome command-line --load-extension
-ou autostart que carregue esta extensao.
+Oito arquivos da extensao do ZIP ENFOQUE-N960K-1.7.8.27-AUTOCONEXAO.zip
+foram copiados aqui. A correcao acrescenta n960k-boot-ready.js e altera
+o worker para verificar somente a saude da ponte local no inicio do
+navegador e na pagina do PDV. Nenhum pagamento e disparado pelo startup.
 
-Ela fica inativa e nao aparecera em chrome://extensions ate uma
-ativacao futura, realizada separadamente pela TI.
-A Monitora original continua com sua politica corporativa intacta.
+NAO existe politica de instalacao automatica para esta extensao,
+nem --load-extension ou autostart que a carregue no Chrome. O instalador
+apenas inclui os arquivos, ao lado da extensao Monitora, e os deixa
+inativos ate autorizacao e homologacao futura pela TI.
 
-Scripts de deteccao USB e ponte AOA2 estao em
-/usr/local/lib/enfoque-n960k; eles nao iniciam um pagamento sozinhos.
-Para conferir instalacao do sistema: systemctl --user status
-enfoque-n960k-discovery.service enfoque-n960k-bridge.service
+A Monitora permanece gerenciada e sem alteracoes.
+Os scripts e servicos Linux de detector USB/ponte AOA2 existentes em
+/usr/local/lib/enfoque-n960k continuam inalterados por esta atualizacao.
+A homologacao de pagamento fisico no Linux ainda e necessaria.
 
-Quando for autorizada a ativacao no Chrome:
-1. Homologar uma transacao em Linux com N960K fisica e driver libusb/udev.
-2. Validar token individual e comportamento de cancelamento/parcelamento.
-3. Definir implantacao separada da extensao; NAO usar force_installed
-   sem aprovacao expressa e testes.
+Origem ZIP: /opt/enfoque-smartpos-lab/pacotes/ENFOQUE-N960K-1.7.8.27-AUTOCONEXAO.zip
+SHA256: 441967f9833f8ad664bc823549a916b989009794d63407f0353332634fcd0fd8

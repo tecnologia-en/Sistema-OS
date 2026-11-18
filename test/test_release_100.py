@@ -17,11 +17,16 @@ CONFIG=TREE/"usr/local/lib/enfoque-animations/picom-pilot.conf"
 class Release100(unittest.TestCase):
     def test_semver_and_pilot_status(self):
         rel=(TREE/"etc/enfoque-os-release").read_text()
-        self.assertIn('VERSION="1.0.0"',rel)
+        match=re.search(r'(?m)^VERSION="([0-9]+[.][0-9]+[.][0-9]+)"$',rel)
+        self.assertIsNotNone(match)
+        version=tuple(map(int,match.group(1).split('.')))
+        self.assertGreaterEqual(version,(1,0,0))
         self.assertIn('STATUS="piloto-animacoes-100"',rel)
         for relpath in ("config/bootloaders/grub-pc/live-theme/theme.txt",
-                        "config/bootloaders/syslinux_common/menu.cfg",
-                        "config/includes.chroot/etc/enfoque-os/drivers/catalog.json",
+                        "config/bootloaders/syslinux_common/menu.cfg"):
+            self.assertIn(match.group(1),(ROOT/relpath).read_text(),relpath)
+        # Driver catalog versions document the frozen printer-bank baseline.
+        for relpath in ("config/includes.chroot/etc/enfoque-os/drivers/catalog.json",
                         "config/includes.chroot/etc/enfoque-os/drivers/printer-catalog.json"):
             self.assertIn("1.0.0",(ROOT/relpath).read_text(),relpath)
 

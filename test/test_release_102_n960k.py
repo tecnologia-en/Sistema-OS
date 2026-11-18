@@ -1,4 +1,4 @@
-"""Regression checks for Enfoque OS 1.0.1: N960K staged but Chrome extension inactive."""
+"""Regression checks for Enfoque OS 1.0.2: N960K staged but Chrome extension inactive."""
 import hashlib
 import importlib.util
 import json
@@ -12,12 +12,15 @@ EXT=TREE/"usr/share/enfoque-monitora/n960k-tef-inativa"
 AGENT=TREE/"usr/local/lib/enfoque-n960k"
 
 
-class EnfoqueN960KRelease101(unittest.TestCase):
+class EnfoqueN960KRelease102(unittest.TestCase):
     def test_published_release_and_inactive_manifest(self):
-        self.assertIn('VERSION="1.0.1"',(TREE/"etc/enfoque-os-release").read_text())
+        self.assertIn('VERSION="1.0.2"',(TREE/"etc/enfoque-os-release").read_text())
         m=json.loads((EXT/"manifest.json").read_text())
-        self.assertEqual(m["version"],"1.7.8.26")
+        self.assertEqual(m["version"],"1.7.8.27")
         self.assertEqual(m["background"]["service_worker"],"n960k-discovery-worker.js")
+        self.assertTrue((EXT/"n960k-boot-ready.js").is_file())
+        self.assertIn("n960k-boot-ready.js",(EXT/"n960k-discovery-worker.js").read_text())
+        self.assertIn("enfoqueN960KRequest('health', {})",(EXT/"n960k-boot-ready.js").read_text())
         self.assertEqual(len(m["content_scripts"]),2)
         self.assertTrue((EXT/"LEIA-ME-EXTENSAO-DESATIVADA.txt").is_file())
 
@@ -79,14 +82,15 @@ class EnfoqueN960KRelease101(unittest.TestCase):
         spec=importlib.util.spec_from_file_location("n960k_release_package",script)
         module=importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        self.assertEqual(module.version(),"1.0.1")
+        self.assertEqual(module.version(),"1.0.2")
         self.assertEqual(module.PRINTER_BANK_BASELINE,"1.0.0-1")
         for name in (
             "etc/udev/rules.d/72-enfoque-n960k.rules",
             "usr/local/bin/enfoque-n960k-session-start",
             "usr/local/lib/enfoque-n960k/N960K-Local-Bridge.py",
             "usr/lib/systemd/user/enfoque-n960k-bridge.service",
-            "usr/share/enfoque-monitora/n960k-tef-inativa/manifest.json"
+            "usr/share/enfoque-monitora/n960k-tef-inativa/manifest.json",
+            "usr/share/enfoque-monitora/n960k-tef-inativa/n960k-boot-ready.js"
         ):
             self.assertTrue(module.managed(name),name)
         source=script.read_text()

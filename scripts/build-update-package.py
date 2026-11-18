@@ -166,6 +166,7 @@ def manifest():
         # N960K TEF files are embedded but deliberately NOT enabled in Chrome.
         "usr/share/enfoque-monitora/n960k-tef-inativa/manifest.json",
         "usr/share/enfoque-monitora/n960k-tef-inativa/n960k-discovery-worker.js",
+        "usr/share/enfoque-monitora/n960k-tef-inativa/n960k-boot-ready.js",
         "usr/share/enfoque-monitora/n960k-tef-inativa/n960k-pdv.js",
         "usr/local/lib/enfoque-n960k/N960K-Local-Bridge.py",
         "usr/local/lib/enfoque-n960k/N960K-HID-Headless.py",
