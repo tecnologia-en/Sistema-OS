@@ -11,7 +11,7 @@
   const PREFIX = 'enfoque-n960k-';
   const SESSION_TIMEOUT_MS=300000; // alerta somente, NUNCA reseta o HID automaticamente
   const MISSING_TABLE_GRACE_MS=2200;
-  const HEARTBEAT_MS=6000;
+  const HEARTBEAT_MS=6000; // Apenas monitoramento; ausencia nao encerra venda
   const FINALIZAR_MIN_WAIT_MS=3000; // SIGE + imprimir via: same 3-second gate.
   const RECIBO_PAGAMENTO_ID=PREFIX+'receipt-payment';
   const RECIBO_CONCLUIDO_ID=PREFIX+'receipt-success';
@@ -403,6 +403,7 @@
         ? (b.ready ? 'USB N960K pronta' : b.detected ? 'N960K USB com driver indisponivel' : 'N960K desconectada')
         : 'Ponte local indisponivel';
       newMessage += ' | ' + label;
+      if(b.heartbeat?.stale) newMessage += ' | Heartbeat ausente (apenas monitoramento)';
       if(b.online && state.session?.queue?.some(q=>q.method==='CREDIT' && q.kind!=='vista'))
         newMessage += b.creditContinueMode==='keyboard_enter'
           ? ' | Parcelado: Enter HID'
@@ -656,9 +657,40 @@
       hideCancelLoading();
     }
   }
-  // Native SIGE Finalizar after the 3s delay intentionally does NOT call
-  // the agent's ACK/release/restart path. The HID remains under the agent's
-  // existing lifecycle, not under this button.
+  // ACK do ledger so depois de sucesso SIGE; nao aprova pagamento nem reinicia HID.
+  async function acknowledgeFinishedSale(s,q){
+    if(!s?.nativeInvoked||!q||s.ackDispatched)return;
+    s.ackDispatched=true;
+    const jobId=q.jobId||q.requestId;
+    try{
+      let until=Date.now()+20000;
+      while(Date.now()<until&&(onPaymentScreen()||!visible(byId('btnReinicio'))))
+        await new Promise(r=>setTimeout(r,250));
+      if(onPaymentScreen()||!visible(byId('btnReinicio')))
+        throw new Error('SIGE nao mostrou venda concluida.');
+      until=Date.now()+30000;
+      while(Date.now()<until){
+        if(q.stage==='error')throw new Error('Envio USB nao confirmado.');
+        if(q.stage==='sent'){
+          const j=await sendToBridge('job',{jobId});
+          if(j.stage==='acknowledged')return;
+          if(j.stage==='prepared'){
+            const a=await sendToBridge('ack',{jobId,result:'operator_confirmed',resetAfterSeconds:0});
+            if(a.stage!=='acknowledged')throw new Error('ACK nao confirmado.');
+            console.info('[N960K] SIGE concluido; ACK local; HID preservado; aprovacao bancaria nao verificada.');
+            return;
+          }
+          if(j.stage==='abandoned'||j.stage==='error')
+            throw new Error('Sessao '+j.stage+' na ponte.');
+        }
+        await new Promise(r=>setTimeout(r,350));
+      }
+      throw new Error('USB nao ficou pronto no prazo.');
+    }catch(e){
+      console.error('[N960K] Finalizacao SIGE sem ACK local:',e);
+      if(document.body)window.alert('Venda pode estar concluida no SIGE, mas a sessao N960K nao foi liberada. Confira a maquininha antes de outra cobranca. '+String(e?.message||e));
+    }
+  }
   function begin(e,button) {
     if(state.allowFinishOnce)return;
     if(!onPaymentScreen())return;
@@ -677,18 +709,21 @@
       state.lastError='';
       state.allowFinishOnce=true;
       closeOverlay();
-      // No /v1/ack, /v1/cancel, HID disconnect, or USB re-registration.
+      // ACK so apos venda concluida no SIGE; sem cancelamento ou reset HID.
       if(e.type==='keydown') {
         // F8: one synthetic click for SIGE, not a second TEF request.
         e.preventDefault();e.stopImmediatePropagation();
         setTimeout(()=>{
           try{if(visible(button))button.click()}
-          finally{state.allowFinishOnce=false;updateIndicator()}
+          finally{
+            state.allowFinishOnce=false;updateIndicator();
+            void acknowledgeFinishedSale(activeSession,q);
+          }
         },0);
       }else {
         // Do NOT preventDefault/stopPropagation: original SIGE click
         // goes through in this same event, with no synthetic double click.
-        setTimeout(()=>{state.allowFinishOnce=false;updateIndicator()},0);
+        setTimeout(()=>{state.allowFinishOnce=false;updateIndicator();void acknowledgeFinishedSale(activeSession,q)},0);
       }
       return;
     }
@@ -882,6 +917,9 @@
         detected: Boolean(h.terminal?.detected),
         ready: Boolean(h.terminal?.driverReady && h.agentReady),
         creditContinueMode: h.creditContinueMode,
+        heartbeat: {stale:h.heartbeatStale===true,
+          monitorOnly:h.heartbeatMonitoringOnly===true,
+          ageSeconds:Number.isFinite(h.heartbeatAgeSeconds)?h.heartbeatAgeSeconds:null},
         idle: {phase:h.hidIdlePhase||'waiting',
           seconds: Number.isFinite(h.hidIdleRemainingSeconds)?h.hidIdleRemainingSeconds:null,
           updatedAt:Date.now(),

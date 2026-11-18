@@ -37,7 +37,7 @@ LEDGER = HOME / 'n960k-agent-ledger.json'
 PIX_TOUCH_CONFIG = Path(__file__).resolve().with_name('N960K-Pix-X-Absolute-Config.json')
 PORT = 8879
 MAX_BODY = 4096
-LEASE_TIMEOUT_SEC = 90   # No browser heartbeat for 90 s => abandon locally
+LEASE_TIMEOUT_SEC = 90   # Monitoring only; stale browser heartbeat never ends a sale
 MAX_PENDING_SEC = 300    # Max pending financial-navigation session: 5 min
 SWEEP_INTERVAL_SEC = 1
 HID_IDLE_RESET_SEC = 40  # legacy metadata only; automatic idle restart disabled
@@ -686,12 +686,12 @@ class State:
                 if job.get('stage') not in ('homing','home_ready','sending','prepared'):
                     continue
                 age=elapsed_seconds(job.get('createdAt'))
-                idle=elapsed_seconds(job.get('lastHeartbeatAt') or job.get('createdAt'))
                 if job['stage'] in ('homing','home_ready'):
                     reason = 'home_prepare_timeout' if age >= HOME_PREPARE_TTL_SEC else None
                 else:
-                    reason = ('hard_session_timeout' if age >= MAX_PENDING_SEC else
-                              'browser_heartbeat_timeout' if idle >= LEASE_TIMEOUT_SEC else None)
+                    # A falta de heartbeat e somente diagnostica.
+                    # Preserva a regra existente de limite geral de cinco minutos.
+                    reason = 'hard_session_timeout' if age >= MAX_PENDING_SEC else None
                 if reason:
                     changed = self._abandon_locked(job,reason) or changed
             if changed: self.save()
@@ -1280,6 +1280,9 @@ class Handler(BaseHTTPRequestHandler):
             with self.state.lock:
                 self.state.sweep()
                 active=self.state.active_job()
+                heartbeat_age=(elapsed_seconds(active.get('lastHeartbeatAt') or active.get('createdAt'))
+                               if active and active.get('stage') in ('homing','home_ready','sending','prepared')
+                               else None)
                 # libusb_open from the status checker may fail while OUR process
                 # already owns the endpoint. Do not report driver unavailable
                 # for the HID connection that is deliberately being held open.
@@ -1323,7 +1326,10 @@ class Handler(BaseHTTPRequestHandler):
                                      'autoRecoveryState':command_recovery_state,
                                      'autoRecoveryOperation':command_recovery_operation,
                                      'autoRecoveryNoCommandReplay':True,
-                                    'pendingTimeoutSeconds':MAX_PENDING_SEC,'heartbeatTimeoutSeconds':LEASE_TIMEOUT_SEC})
+                                    'pendingTimeoutSeconds':MAX_PENDING_SEC,'heartbeatTimeoutSeconds':LEASE_TIMEOUT_SEC,
+                                     'heartbeatMonitoringOnly':True,
+                                     'heartbeatAgeSeconds':round(heartbeat_age,1) if heartbeat_age is not None else None,
+                                     'heartbeatStale':heartbeat_age is not None and heartbeat_age>=LEASE_TIMEOUT_SEC})
         if path.path=='/v1/pix-mapper/status':
             with self.state.lock:
                 self.state.sweep()

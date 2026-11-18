@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Enfoque TEF N960K - Caixa 1 - Teste Desktop",
-  "version": "1.7.8.36",
+  "version": "1.7.8.38",
   "description": "N960K: imprimir via do cliente somente apos venda concluida; Cancelar/Voltar e recuperacao por falha USB preservados.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuI5UXi6W72hVnJBBuEWMTI4pUzemWZj+zhsWbwtwUiXesjQNLRmqzfMGwK4N+jCXf5jaaPPMo5QHH4vvmqYxmvS/SJ7JSh3WZEpX2iwkkVURVuG1EXU3BY0sAfY5rM73PjmZnLe/NBcEQSSkZre+fNFVRoOSRQuSjYPrp5JqScstOxYfQLJq52bbeFwMTU0lTiK1OIN7amF7jbRvWJ6vN1hEegYHmmgmaoA0Uk/1iUAJVUWYnOrWE24a2wJO7UVthJWf5OT7rjUww20SdkwLOwcryOZhtXO85a2A/f2GSwmqtqpw43zZ95qz7fKTLvEWkJMYSfvp/N43xpzezUAcjwIDAQAB",
   "permissions": [

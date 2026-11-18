@@ -1,11 +1,14 @@
-Enfoque OS 1.0.4 — N960K 1.7.8.36, pacote completo
-A extensao N960K esta INATIVA por padrao na ISO, para evitar carregar
-fluxos de pagamento em computadores/lojas sem ativacao homologada.
-Somente o terminal autorizado deve ativar a extensao manualmente.
-Na tela de pagamentos do SIGE nao existe botao de imprimir via do cliente.
-A funcao de via do cliente permanece na tela final apos concluir a venda.
-O botao Cancelar/Voltar do SIGE permanece na versao validada 1.7.8.35.
-A ponte N960K recupera HID somente em erros de comando USB comprovados,
-sem repetir comandos bancarios e sem reiniciar Zero Touch/SSH.
-O status AOA HID nao comprova pagamento aprovado nem comprovante impresso.
-Nao foram incluidos segredos, bearer tokens nem dados pessoais de maquinas.
+Enfoque OS 1.0.5 - N960K 1.7.8.38, piloto de sincronizacao do ledger.
+A extensao N960K permanece INATIVA por padrao na ISO.
+Somente terminais autorizados devem ativar a extensao manualmente.
+No SIGE, Finalizar Venda (apos 3s) nao aprova transacao bancaria.
+A extensao solicita ACK ao agente somente apos a tela SIGE de venda
+concluida e a preparacao USB; ACK NAO e confirmacao bancaria.
+Os comandos de via do cliente permanecem somente na tela final.
+O heartbeat de 6s e apenas diagnostico; nao encerra uma venda por
+90s de silencio. O limite de seguranca de 5 minutos permanece.
+O HID nao reinicia automaticamente por falha de heartbeat ou ACK.
+IMPORTANTE: o caixa relatou nova perda de comunicacao apos 1.7.8.38.
+A correção nao foi comprovada em venda real. NAO usar como homologacao
+de pagamentos; conferir comprovante antes de qualquer nova cobranca.
+Sem segredos, tokens ou dados pessoais dos equipamentos.

@@ -292,5 +292,5 @@ jobs:
             parts/UPDATE_MANIFEST.json "$core" "$drivers" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "Enfoque OS $version — ISO e atualizacao (build #$GITHUB_RUN_NUMBER)" \
-            --notes "ISO e pacotes corporativos aprovados pelo build. A VPS verifica a procedencia e publica no catalogo APT assinado sem atualizar nenhum computador; instalacao depende de campanha manual na intranet." \
+            --notes "ISO e pacotes verificados pelo build. N960K 1.7.8.38 permanece PILOTO, com falha de conexao ainda nao homologada. A VPS valida a procedencia e so publica no catalogo APT assinado quando nao houver campanha ativa; nenhuma estacao e atualizada automaticamente." \
             --prerelease
