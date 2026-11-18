@@ -105,7 +105,10 @@ def managed(name):
 def manifest():
     paths = []
     for path in sorted(TREE.rglob("*")):
-        if path.is_file() and path.name.lower() in ("agent.json", "identity.json", ".env", "private.key", "id_ed25519"):
+        if path.is_file() and (
+            path.name.lower() in ("agent.json", "identity.json", ".env", "private.key", "id_ed25519")
+            or (path.name.lower() == "br.txt" and "n960k-tef-inativa" in path.parts)
+        ):
             raise ValueError("Sensitive file in ISO overlay: " + str(path))
         if path.is_symlink():
             raise ValueError("Unexpected symlink in source overlay: " + str(path))
@@ -168,6 +171,10 @@ def manifest():
         "usr/share/enfoque-monitora/n960k-tef-inativa/n960k-discovery-worker.js",
         "usr/share/enfoque-monitora/n960k-tef-inativa/n960k-boot-ready.js",
         "usr/share/enfoque-monitora/n960k-tef-inativa/n960k-pdv.js",
+        "usr/share/enfoque-monitora/n960k-tef-inativa/n960k-background.js",
+        "usr/share/enfoque-monitora/n960k-tef-inativa/n960k-logic.js",
+        "usr/share/enfoque-monitora/n960k-tef-inativa/n960k-discovery-watch.js",
+        "usr/share/enfoque-monitora/n960k-tef-inativa/n960k-discovery.js",
         "usr/local/lib/enfoque-n960k/N960K-Local-Bridge.py",
         "usr/local/lib/enfoque-n960k/N960K-HID-Headless.py",
         "usr/local/lib/enfoque-n960k/Enfoque-N960K-Discovery.py",

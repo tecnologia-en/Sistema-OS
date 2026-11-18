@@ -12,7 +12,9 @@
   const SESSION_TIMEOUT_MS=300000; // alerta somente, NUNCA reseta o HID automaticamente
   const MISSING_TABLE_GRACE_MS=2200;
   const HEARTBEAT_MS=6000;
-  const FINALIZAR_MIN_WAIT_MS=3000; // UI only: after clicking MAQUININHA.
+  const FINALIZAR_MIN_WAIT_MS=3000; // SIGE + imprimir via: same 3-second gate.
+  const RECIBO_PAGAMENTO_ID=PREFIX+'receipt-payment';
+  const RECIBO_CONCLUIDO_ID=PREFIX+'receipt-success';
   const SAFE_NAVIGATION_REQUIRED=true;
   // Nunca desconectar HID com cartao/PIX processando; confirmar terminal antes.
   const STYLE = `
@@ -53,7 +55,7 @@
     lastChosenButton: '', lastScreenTotal: null, lastError: '',
     mount: null, overlay: null, pollTimer: null, bridgeStatus: null,
     pendingDecision:null, idleDisplayUntil:null, backUnlocked:false,
-    cancelLoading:null, cancelPreviousFocus:null
+    cancelLoading:null, cancelPreviousFocus:null, receiptPending:false
   };
   const brl = cents => (cents / 100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
   const byId = id => document.getElementById(id);
@@ -319,13 +321,84 @@
       }
       finish.title=(cooldown>0)?'Aguarde '+Math.ceil(cooldown/1000)+
         's para liberar Finalizar Venda':lock?check.message:pending?
-        'Finalizar confirma pelo funcionario, aguarda 5 segundos e reinicia o HID':
+        'Finalizar venda no SIGE apos 3 segundos; confira o pagamento na maquininha':
         'Enviar pagamento para a N960K';
+    }
+  }
+  // Reuse the exact native SIGE classes. No new CSS or Angular handlers.
+  function makeCustomerReceiptButton(nativeButton,id,source) {
+    const input=document.createElement('input');
+    input.type='button';
+    input.id=id;
+    input.className=nativeButton.className;
+    input.value='IMPRIMIR VIA DO CLIENTE';
+    input.addEventListener('click',event=>{
+      event.preventDefault();event.stopImmediatePropagation();
+      void printCustomerReceipt(source,input);
+    },true);
+    return input;
+  }
+  function syncCustomerReceiptButtons() {
+    const nativeFinish=byId('btnFinalizarVendaPagamentos');
+    const paymentVisible=onPaymentScreen() && visible(nativeFinish);
+    let pay=byId(RECIBO_PAGAMENTO_ID);
+    if(paymentVisible) {
+      if(!pay) {
+        pay=makeCustomerReceiptButton(nativeFinish,RECIBO_PAGAMENTO_ID,'payment');
+        nativeFinish.insertAdjacentElement('afterend',pay);
+      }
+      const job=state.session?.current;
+      const remaining=job ? Math.max(0,(job.finalizeAvailableAtMs||0)-Date.now()):0;
+      pay.disabled=!job || remaining>0 || state.receiptPending;
+      pay.title=state.receiptPending?'Enviando duas teclas 1 para a N960K':
+        remaining>0?'Aguarde '+Math.ceil(remaining/1000)+' segundos':
+        job?'Aciona 1 e 1 no terminal N960K; confira o visor antes de clicar':
+        'Clique primeiro em Maquininha';
+    }else if(pay)pay.remove();
+    const nativeNewSale=byId('btnReinicio');
+    const finishedVisible=!paymentVisible && visible(nativeNewSale);
+    let done=byId(RECIBO_CONCLUIDO_ID);
+    if(finishedVisible) {
+      if(!done) {
+        done=makeCustomerReceiptButton(nativeNewSale,RECIBO_CONCLUIDO_ID,'success');
+        const line= nativeNewSale.nextElementSibling?.tagName==='BR' ?
+          nativeNewSale.nextElementSibling:null;
+        (line||nativeNewSale).insertAdjacentElement('afterend',done);
+      }
+      done.disabled=state.receiptPending;
+      done.title='Aciona 1 e 1 no terminal N960K; confira o visor antes de clicar';
+    }else if(done)done.remove();
+  }
+  async function printCustomerReceipt(source,button) {
+    // Only an explicit operator click ever sends these numeric key events.
+    if(state.receiptPending)return;
+    if(source==='payment'){
+      const job=state.session?.current;
+      if(!onPaymentScreen() || !job ||
+         Date.now()<(job.finalizeAvailableAtMs||0))return;
+    }else if(source==='success') {
+      if(onPaymentScreen() || !visible(byId('btnReinicio')))return;
+    }else return;
+    state.receiptPending=true;syncCustomerReceiptButtons();
+    try{
+      const id='via-'+(crypto.randomUUID?.()||String(Date.now()));
+      const result=await sendToBridge('receipt',{requestId:id,source});
+      if(result.inputSent!==2)
+        throw new Error('O agente nao confirmou as duas teclas.');
+      button.title='Duas teclas 1 enviadas; confirme a impressao na N960K';
+      console.info('[Enfoque N960K] Duas teclas 1 enviadas; a impressao fisica nao e verificavel por USB.');
+    }catch(error){
+      console.error('[Enfoque N960K] Falha no comando de via do cliente:',error);
+      // An explicit, visible failure prevents pretending that paper was printed.
+      window.alert('Nao foi possivel solicitar a via do cliente na maquininha. '+String(error?.message||error));
+    }finally{
+      state.receiptPending=false;syncCustomerReceiptButtons();
     }
   }
   function updateIndicator() {
     if (!document.body) return;
     updatePaymentButtons();
+    syncCustomerReceiptButtons();
     let badge=byId(PREFIX+'status');
     if (!onPaymentScreen()) {state.backUnlocked=false;if(badge)badge.remove();return}
     const host=byId('contentButtonsPagamentos');
@@ -448,9 +521,12 @@
       }
     }else next.installments=1;
     session.current=next;session.needsInstallments=false;
-    // Every fresh MAQUININHA click starts a three-second minimum lock.
-    // Command processing may take longer; Finalizar also waits for stage sent.
+    // First MAQUININHA click starts a 3-second delay ONLY.
+    // The second operator click uses the native SIGE button even while the
+    // agent is still sending or verifying USB commands.
     next.finalizeAvailableAtMs=Date.now()+FINALIZAR_MIN_WAIT_MS;
+    // Release both SIGE-native buttons exactly at the three-second boundary.
+    setTimeout(()=>{if(state.session===session)updateIndicator()},FINALIZAR_MIN_WAIT_MS);
     session.note='Enviando '+labelMethod(next)+' para a N960K.';
     state.backUnlocked=false;
     startCurrent();
@@ -484,16 +560,18 @@
       const reset=await sendToBridge('home',payload);
       if(reset.stage!=='home_ready' || !reset.homeComplete)
         throw new Error('O Python nao confirmou os tres comandos Home.');
-      if(state.session!==s || s.terminating) {
+      if((state.session!==s && !s.nativeInvoked) || s.terminating) {
         sendToBridge('cancel',{jobId:q.requestId,reason:'pdv_closed'}).catch(()=>{});
         return;
       }
-      stillSame();
+      // The SIGE operator may already have clicked native Finalizar after
+      // three seconds. Keep dispatching the pending USB job in that case.
+      if(!s.nativeInvoked)stillSame();
       s.note='ANDROID_BACK + ANDROID_HOME enviados no mesmo HID; iniciando Vender, valor em centavos e modalidade.';
       render();
       const result=await sendToBridge('start',payload);
        const jobId=result.jobId;
-       if(state.session!==s || s.terminating) {
+       if((state.session!==s && !s.nativeInvoked) || s.terminating) {
          if(jobId) sendToBridge('cancel',{jobId,reason:'pdv_closed'}).catch(()=>{});
          return;
        }
@@ -504,22 +582,26 @@
        // nem garante que a tela seguinte seja a esperada.
        // Deadlines de seguranca da sessao e do agente seguem separados.
        for(let attempt=0;attempt<45;attempt++) {
-         if(state.session!==s || s.terminating) return;
+         if((state.session!==s && !s.nativeInvoked) || s.terminating) return;
          await new Promise(resolve=>setTimeout(resolve,650));
-         if(state.session!==s || s.terminating) return;
+         if((state.session!==s && !s.nativeInvoked) || s.terminating) return;
          last=await sendToBridge('job',{jobId});
          if(last.stage==='prepared' || last.stage==='error' || last.stage==='abandoned')break;
        }
-       if(state.session!==s || s.terminating) return;
+       if((state.session!==s && !s.nativeInvoked) || s.terminating) return;
        if(last?.stage!=='prepared') throw new Error(last?.stage==='abandoned'?'Sessao expirada no agente: confira a maquininha antes de outra cobran‡a.':
           last?.error || 'A ponte nao confirmou o envio. Confira o terminal antes de repetir.');
       const held=await sendToBridge('health');
       if(!held.hidHeldAfterSelection || held.usbReleaseError)
         throw new Error('O HID nao permaneceu conectado ate o pagamento. Confira a N960K e NAO reenvie automaticamente.');
       q.stage='sent';
+      // Native SIGE may already have finalized after the 3s delay.
+      // Do not ACK, disconnect or restart HID from that Finalizar click.
+      if(s.nativeInvoked)return;
       s.note=`Comandos enviados. Leitor HID mantido conectado. Aguarde o pagamento na N960K; Finalizar Venda confirma pelo funcionario.`;
     } catch(e) {
       q.stage='error';state.lastError=String(e.message||e)+'\nNao reenvie automaticamente: uma tentativa pode estar aberta no terminal.';
+      if(s.nativeInvoked)console.error('[Enfoque N960K] SIGE finalizado pelo operador, mas houve falha posterior no envio USB: ',e);
      } finally {state.busy=false;render()}
    }
   async function safeNavigateAndRelease(s,q,reason) {
@@ -566,38 +648,6 @@
       throw new Error('HID ainda ocupado com pagamento. Verifique a maquininha antes de outra tentativa.');
     return true;
   }
-  async function approveCurrent(button) {
-    // The employee's Finalizar Venda click is the sole manual attestation.
-    // USB does NOT prove that the card/Pix was paid.
-    const s=state.session,q=s?.current;
-    if(!s||!q||q.stage!=='sent'||state.busy)return;
-    state.busy=true;state.lastError='';q.stage='confirming';
-    s.note='Finalizacao pelo funcionario: aguardando 5 segundos e reiniciando HID...';
-    render();
-    try {
-      stillSame();
-      const result=await sendToBridge('ack',{jobId:q.jobId,
-        result:'operator_confirmed',resetAfterSeconds:5});
-      if(result.stage!=='acknowledged')
-        throw new Error('Ponte nao registrou a confirmacao do funcionario.');
-      const health=await sendToBridge('health');
-      if(health.hidHeldAfterSelection||health.usbReleaseError||health.busy)
-        throw new Error('O HID continua ocupado apos o reinicio.');
-      if(state.session!==s)return;
-      q.stage='done';s.current=null;s.needsInstallments=false;
-      s.note='Confirmado pelo funcionario e HID reiniciado. Resultado bancario nao verificado via USB.';
-      state.lastError='';
-      if(s.queue.every(item=>item.stage==='done')) {
-        state.busy=false;
-        finishNative(button||s.nativeButton);
-        return;
-      }
-      state.backUnlocked=false;
-    }catch(error){
-      if(q.stage==='confirming')q.stage='sent';
-      state.lastError=String(error.message||error)+' Confira o comprovante antes de repetir.';
-    }finally{state.busy=false;render()}
-  }
   async function cancelCurrent(reason) {
     const s=state.session,q=s?.current;
     if(state.busy)return;
@@ -626,24 +676,42 @@
       hideCancelLoading();
     }
   }
-  function finishNative(button) {
-    const s=state.session;
-    if(!s || !s.queue.length || !s.queue.every(q=>q.stage==='done'))return;
-    try { stillSame() }catch(e){state.lastError=String(e.message||e);return}
-    if(!button || !visible(button))return;
-    // Finalizar Venda already represents operator confirmation. Replay one SIGE click after HID reset.
-    state.allowFinishOnce=true;s.nativeInvoked=true;
-    state.session=null;closeOverlay();
-    // DOM nao executa click() aninhado no MESMO botao enquanto click anterior
-    // ainda esta em andamento. Dispare apos a pilha atual sair.
-    setTimeout(()=>{
-      try {if(visible(button))button.click()}
-      finally {state.allowFinishOnce=false;updateIndicator()}
-    },0);
-  }
+  // Native SIGE Finalizar after the 3s delay intentionally does NOT call
+  // the agent's ACK/release/restart path. The HID remains under the agent's
+  // existing lifecycle, not under this button.
   function begin(e,button) {
     if(state.allowFinishOnce)return;
     if(!onPaymentScreen())return;
+    const activeSession=state.session,q=activeSession?.current;
+    if(q) {
+      if(Date.now()<(q.finalizeAvailableAtMs||0)) {
+        e.preventDefault();e.stopImmediatePropagation();updateIndicator();return;
+      }
+      if(activeSession.nativeInvoked || !visible(button)) {
+        e.preventDefault();e.stopImmediatePropagation();return;
+      }
+      // Explicit operator click is the native SIGE payment finish.
+      // No agent state (sending/sent/error/busy) delays this click.
+      activeSession.nativeInvoked=true;
+      state.session=null;
+      state.lastError='';
+      state.allowFinishOnce=true;
+      closeOverlay();
+      // No /v1/ack, /v1/cancel, HID disconnect, or USB re-registration.
+      if(e.type==='keydown') {
+        // F8: one synthetic click for SIGE, not a second TEF request.
+        e.preventDefault();e.stopImmediatePropagation();
+        setTimeout(()=>{
+          try{if(visible(button))button.click()}
+          finally{state.allowFinishOnce=false;updateIndicator()}
+        },0);
+      }else {
+        // Do NOT preventDefault/stopPropagation: original SIGE click
+        // goes through in this same event, with no synthetic double click.
+        setTimeout(()=>{state.allowFinishOnce=false;updateIndicator()},0);
+      }
+      return;
+    }
     syncCreditInputs();
     let cap;
     try {cap=snapshot()}catch(error){
@@ -654,14 +722,6 @@
       return;
     }
     const prepared=cap.rows.filter(r=>r.terminal);
-    if(state.session?.current?.stage==='sent') {
-      e.preventDefault();e.stopImmediatePropagation();
-      // Blocks F8/programmatic clicks as well as normal disabled mouse clicks.
-      if(Date.now()<(state.session.current.finalizeAvailableAtMs||0)) {
-        updateIndicator();return;
-      }
-      approveCurrent(button);return;
-    }
     if(!prepared.length) {
       // Nenhuma linha TEF: manter fluxo nativo e limpar fila local ainda nao cobrada.
       if(state.session && !state.session.current &&
@@ -696,7 +756,7 @@
         state.lastError='Valores ou formas mudaram depois de uma tentativa. Confira o comprovante e utilize Voltar na ultima tela para revisar o pedido.';
         render();return;
       }
-      if(s.queue.every(q=>q.stage==='done')){finishNative(button);return;}
+      if(s.queue.every(q=>q.stage==='done'))return; // no duplicate native click
       if(s.current){render();return;}
       s.nativeButton=button;goToNext();return;
     }

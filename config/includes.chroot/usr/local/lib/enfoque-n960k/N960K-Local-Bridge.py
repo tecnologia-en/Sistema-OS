@@ -408,6 +408,8 @@ class State:
         # exact USB handle, instead of re-registering input devices.
         self.pix_hid_standby = False
         self.usb_release_error = None
+        # Idempotent, explicit customer-receipt key requests; memory-only.
+        self.receipt_requests = {}
         # Safe idle watchdog. No HID detach while a card/Pix operation is pending.
         self.hid_last_command_monotonic = None
         self.hid_idle_armed = False
@@ -925,6 +927,71 @@ class State:
                             self.held_usb = None
                             self.held_usb_job = None
 
+    def print_customer_receipt(self, data):
+        # Two KP1 keyboard key presses ONLY on authenticated explicit click.
+        # They do not attest bank approval or physical printing.
+        if not isinstance(data,dict) or set(data)!={'requestId','source'}:
+            raise ValueError('Via do cliente: dados invalidos.')
+        rid,source=data.get('requestId'),data.get('source')
+        if not isinstance(rid,str) or not re.fullmatch('[A-Za-z0-9_-]{1,120}',rid):
+            raise ValueError('Via do cliente: identificador invalido.')
+        if source not in ('payment','success'):
+            raise ValueError('Via do cliente: origem invalida.')
+        with self.lock:
+            self.sweep()
+            if rid in self.receipt_requests:
+                raise RuntimeError('Via do cliente ja solicitada. Confira o visor antes de repetir.')
+            if self.usb_release_error is not None or self.hid_idle_resetting:
+                raise RuntimeError('HID indisponivel. Confira a maquininha.')
+            if self.usb_inflight:
+                raise RuntimeError('A maquininha ainda esta recebendo comandos; aguarde o fim do envio.')
+            job=self.active_job()
+            if job and job.get('stage')!='prepared':
+                raise RuntimeError('A maquininha ainda esta preparando a operacao; confira o visor.')
+            reused=self.held_usb is not None
+            if reused and not getattr(self.held_usb,'connected',False):
+                raise RuntimeError('HID anterior desconectado. Confira o terminal.')
+            if job and job.get('stage')=='prepared':
+                if not reused or job.get('jobId')!=self.held_usb_job:
+                    raise RuntimeError('HID do pagamento nao esta disponivel. Confira a maquininha.')
+            if len(self.receipt_requests)>200:
+                for older in list(self.receipt_requests)[:100]:
+                    del self.receipt_requests[older]
+            # Set before the first key so an HTTP retry cannot send 1+1 twice.
+            self.receipt_requests[rid]='started'
+            usb=self.held_usb if reused else None
+            own_usb=not reused
+            try:
+                if not self.dry_run:
+                    if usb is None:
+                        usb=use_usb()
+                        proto=usb.connect()
+                        if proto<2:
+                            raise RuntimeError('N960K nao respondeu como AOA2.')
+                    usb.key('KP1')
+                    time.sleep(0.100)  # exact inter-key pause requested
+                    usb.key('KP1')
+                    time.sleep(0.120)  # let Android process before temp release
+                    if reused:
+                        self.hid_last_command_monotonic=time.monotonic()
+                        self.hid_idle_armed=True
+                self.receipt_requests[rid]='sent'
+                return {'ok':True,'inputSent':0 if self.dry_run else 2,
+                        'simulated':bool(self.dry_run),
+                        'keyCode':'KP1','interKeyDelayMs':100,
+                        'hidReused':reused,'paymentVerified':False,
+                        'receiptPrinted':False}
+            except Exception:
+                # Ambiguous USB writes must never be retried automatically.
+                self.receipt_requests[rid]='uncertain'
+                raise
+            finally:
+                if own_usb and usb is not None:
+                    try:
+                        usb.disconnect()
+                    except Exception as exc:
+                        self.usb_release_error=type(exc).__name__
+
     def ack(self, data):
         rid=data.get('jobId')
         if data.get('result')!='operator_confirmed' or not isinstance(rid,str):
@@ -1158,6 +1225,9 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authorized():return
         try:
             payload=self.body()
+            if self.path=='/v1/receipt':
+                outcome=self.state.print_customer_receipt(payload)
+                return self.reply(200,outcome)
             if self.path=='/v1/home':
                 j,is_new=self.state.prepare_home(payload)
                 return self.reply(200,{'ok':True,'jobId':j['jobId'],

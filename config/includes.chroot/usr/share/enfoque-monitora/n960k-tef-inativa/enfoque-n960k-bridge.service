@@ -1,0 +1,18 @@
+[Unit]
+Description=Enfoque N960K AOA2 loopback bridge (Caixa 1)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/home/enfoque/Enfoque-SmartPOS
+ExecStart=/usr/bin/python3 /home/enfoque/Enfoque-SmartPOS/n960k_bridge_caixa1.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

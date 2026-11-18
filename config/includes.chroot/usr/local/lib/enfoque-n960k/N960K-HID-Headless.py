@@ -28,7 +28,7 @@ KEYS = {
     "TAB": 0x2B, "ESC": 0x29, "ENTER": 0x28, "BACKSPACE": 0x2A,
     "UP": 0x52, "DOWN": 0x51, "LEFT": 0x50, "RIGHT": 0x4F,
     "SPACE": 0x2C, "HOME": 0x4A, "DELETE": 0x4C,
-    "0": 0x27, "1": 0x1E, "2": 0x1F, "3": 0x20, "4": 0x21,
+    "0": 0x27, "1": 0x1E, "KP1": 0x59, "2": 0x1F, "3": 0x20, "4": 0x21,
     "5": 0x22, "6": 0x23, "7": 0x24, "8": 0x25, "9": 0x26,
     ".": 0x37, ",": 0x36,
 }
@@ -59,12 +59,15 @@ PIX_TOUCH_DESCRIPTOR = bytes.fromhex(
 
 class Usb:
     def __init__(self):
-        if not LIB.exists():
+        # On Windows LIB is a Path; on Linux it is a libusb SONAME string.
+        if os.name == "nt" and not LIB.is_file():
             raise RuntimeError("libusb nao encontrado: " + str(LIB))
-        # Same libusb-1.0 C API on Windows and Linux. No changes to
-        # AOA2/HID descriptors, timings, values, click or cancel behavior.
-        self.dll = (ctypes.WinDLL(str(LIB)) if os.name == "nt"
-                    else ctypes.CDLL(str(LIB)))
+        # Only load the library here; USB HID is not accessed until connect().
+        try:
+            self.dll = (ctypes.WinDLL(str(LIB)) if os.name == "nt"
+                        else ctypes.CDLL(str(LIB)))
+        except OSError as exc:
+            raise RuntimeError("libusb nao encontrado: " + str(LIB)) from exc
         d = self.dll
         P = ctypes.c_void_p
         d.libusb_init.argtypes = [ctypes.POINTER(P)]

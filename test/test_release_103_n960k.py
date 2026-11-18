@@ -1,4 +1,4 @@
-"""Regression checks for Enfoque OS 1.0.2: N960K staged but Chrome extension inactive."""
+"""Regression checks for Enfoque OS 1.0.3: Caixa1 N960K 1.7.8.29 staged inactive with integrated bridge."""
 import hashlib
 import importlib.util
 import json
@@ -12,11 +12,11 @@ EXT=TREE/"usr/share/enfoque-monitora/n960k-tef-inativa"
 AGENT=TREE/"usr/local/lib/enfoque-n960k"
 
 
-class EnfoqueN960KRelease102(unittest.TestCase):
+class EnfoqueN960KRelease103(unittest.TestCase):
     def test_published_release_and_inactive_manifest(self):
-        self.assertIn('VERSION="1.0.2"',(TREE/"etc/enfoque-os-release").read_text())
+        self.assertIn('VERSION="1.0.3"',(TREE/"etc/enfoque-os-release").read_text())
         m=json.loads((EXT/"manifest.json").read_text())
-        self.assertEqual(m["version"],"1.7.8.27")
+        self.assertEqual(m["version"],"1.7.8.29")
         self.assertEqual(m["background"]["service_worker"],"n960k-discovery-worker.js")
         self.assertTrue((EXT/"n960k-boot-ready.js").is_file())
         self.assertIn("n960k-boot-ready.js",(EXT/"n960k-discovery-worker.js").read_text())
@@ -24,15 +24,45 @@ class EnfoqueN960KRelease102(unittest.TestCase):
         self.assertEqual(len(m["content_scripts"]),2)
         self.assertTrue((EXT/"LEIA-ME-EXTENSAO-DESATIVADA.txt").is_file())
 
-    def test_zero_changes_to_payment_and_visual_logic(self):
+    def test_complete_cashier_extension_and_bridge_integrity(self):
         known={
-          "n960k-pdv.js":"05b5ba7f3e47e1b9f64e039b75086f0aaa5b409977646c588f3bc7795a0f71f4",
-          "n960k-logic.js":"e08d0f9b5bb317868e4223e2aaff92a35986e205b5af8db3c9ad8dbf3ce2805d"
+            "n960k-pdv.js":"43060c52a4fd2f569058e4f2264fe6601d2d7bd5043a7b7ceddc4dde894b53c8",
+            "n960k-logic.js":"e08d0f9b5bb317868e4223e2aaff92a35986e205b5af8db3c9ad8dbf3ce2805d",
+            "n960k-background.js":"0f72a7842629a3776d283c89aaa6831f611e9a9b15bb3e3f15bd42b49a86130c",
         }
         for name,expected in known.items():
             with self.subTest(name=name):
-                sha=hashlib.sha256((EXT/name).read_bytes()).hexdigest()
-                self.assertEqual(sha,expected)
+                self.assertEqual(hashlib.sha256((EXT/name).read_bytes()).hexdigest(), expected)
+        self.assertEqual(len([x for x in EXT.rglob("*") if x.is_file() and
+                              x.name!="LEIA-ME-EXTENSAO-DESATIVADA.txt"]),45)
+        self.assertFalse((EXT/"br.txt").exists())
+        self.assertTrue((EXT/"content.js").is_file())
+        self.assertTrue((EXT/"assets/xlsx.full.min.js").is_file())
+        self.assertEqual(
+            hashlib.sha256((AGENT/"N960K-Local-Bridge.py").read_bytes()).hexdigest(),
+            "8c30ce4d30f1aeaeda93c38a6cc330a98e3e22176f32db9f9bf574e5b1f08bcc")
+        self.assertEqual(
+            hashlib.sha256((AGENT/"N960K-HID-Headless.py").read_bytes()).hexdigest(),
+            "49c8c18c2fecf5cc7476b41d7251b22c7f26e936e2aa6d18c37df1832eb099c2")
+
+    def test_new_receipt_controls_use_native_sige_and_two_keys(self):
+        pdv=(EXT/"n960k-pdv.js").read_text()
+        background=(EXT/"n960k-background.js").read_text()
+        bridge=(AGENT/"N960K-Local-Bridge.py").read_text()
+        driver=(AGENT/"N960K-HID-Headless.py").read_text()
+        for term in ("RECIBO_PAGAMENTO_ID","RECIBO_CONCLUIDO_ID",
+                     "IMPRIMIR VIA DO CLIENTE","FINALIZAR_MIN_WAIT_MS=3000",
+                     "nativeButton.className","'btnReinicio'"):
+            self.assertIn(term,pdv)
+        self.assertIn("'/v1/receipt'",background)
+        self.assertIn("def print_customer_receipt(self, data):",bridge)
+        self.assertIn("time.sleep(0.100)",bridge)
+        self.assertIn("usb.key('KP1')",bridge)
+        self.assertIn('"KP1": 0x59',driver)
+        self.assertIn('if os.name == "nt" and not LIB.is_file():',driver)
+        self.assertNotIn("sendToBridge('ack'",pdv)
+        self.assertNotIn("resetAfterSeconds:5",pdv)
+        self.assertNotIn("releaseAgentAfterNativeFinish",pdv)
 
     def test_monitora_policy_remains_sole_forced_extension(self):
         policies=TREE/"etc/opt/chrome/policies/managed"
@@ -82,7 +112,7 @@ class EnfoqueN960KRelease102(unittest.TestCase):
         spec=importlib.util.spec_from_file_location("n960k_release_package",script)
         module=importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        self.assertEqual(module.version(),"1.0.2")
+        self.assertEqual(module.version(),"1.0.3")
         self.assertEqual(module.PRINTER_BANK_BASELINE,"1.0.0-1")
         for name in (
             "etc/udev/rules.d/72-enfoque-n960k.rules",
@@ -114,6 +144,7 @@ class EnfoqueN960KRelease102(unittest.TestCase):
         banned={"agent.json","identity.json","private.key",".env",
                 "n960k-agent-secret.json","n960k-agent-ledger.json"}
         self.assertFalse(any(p.name in banned for p in EXT.rglob("*") if p.is_file()))
+        self.assertFalse((EXT/"br.txt").exists(), "Do not embed old bearer credential")
         self.assertFalse(any(p.name in banned for p in AGENT.rglob("*") if p.is_file()))
 
 

@@ -72,7 +72,11 @@ async function enfoqueN960KPair(force) {
 }
 
 function enfoqueN960KValidate(action, payload) {
-  if (!['health','home','start','job','ack','heartbeat','cancel','navigate'].includes(action)) throw new Error('Acao N960K desconhecida.');
+  if (!['health','home','start','job','ack','heartbeat','cancel','navigate','receipt'].includes(action)) throw new Error('Acao N960K desconhecida.');
+  if (action==='receipt' &&
+      (!payload || !/^[A-Za-z0-9_-]{1,120}$/.test(String(payload.requestId||'')) ||
+       !['payment','success'].includes(payload.source)))
+    throw new Error('Solicitacao de via do cliente invalida.');
   if (action === 'start' || action === 'home') {
     if (!payload || !Number.isSafeInteger(payload.amountCents) || payload.amountCents < 1 || payload.amountCents > 100000000)
       throw new Error('Valor invalido para a maquininha.');
@@ -94,7 +98,7 @@ async function enfoqueN960KRequest(action, payload) {
   const endpoint = action==='health' ? '/v1/health' :
     action==='home' ? '/v1/home' : action==='start' ? '/v1/start' :
     action==='job' ? '/v1/job?jobId=' + encodeURIComponent(payload.jobId) :
-    action==='navigate' ? '/v1/navigate' :
+    action==='navigate' ? '/v1/navigate' : action==='receipt' ? '/v1/receipt' :
     action==='ack' ? '/v1/ack' : action==='heartbeat' ? '/v1/heartbeat' : '/v1/cancel';
   for (let attempt=0;attempt<2;attempt++) {
     const token = await enfoqueN960KPair(attempt>0);
@@ -104,13 +108,13 @@ async function enfoqueN960KRequest(action, payload) {
     let body;
     try {
       response = await fetch(ENFOQUE_N960K_LOCAL_BASE + endpoint, {
-        method: ['home','start','ack','heartbeat','cancel','navigate'].includes(action) ? 'POST' : 'GET',
+        method: ['home','start','ack','heartbeat','cancel','navigate','receipt'].includes(action) ? 'POST' : 'GET',
         headers: {
           'X-Enfoque-N960K-Key': token,
           'X-Enfoque-Extension-ID': chrome.runtime.id,
           'Content-Type': 'application/json'
         },
-        ...(['home','start','ack','heartbeat','cancel','navigate'].includes(action) ? {body:JSON.stringify(payload)} : {}),
+        ...(['home','start','ack','heartbeat','cancel','navigate','receipt'].includes(action) ? {body:JSON.stringify(payload)} : {}),
         cache: 'no-store',
         targetAddressSpace: 'loopback',
         signal: controller.signal
