@@ -1,4 +1,4 @@
-"""Regression checks for Enfoque OS 1.0.3: Caixa1 N960K 1.7.8.29 staged inactive with integrated bridge."""
+"""Regression checks for Enfoque OS 1.0.4: Caixa1 N960K 1.7.8.36 staged inactive with integrated bridge."""
 import hashlib
 import importlib.util
 import json
@@ -12,11 +12,11 @@ EXT=TREE/"usr/share/enfoque-monitora/n960k-tef-inativa"
 AGENT=TREE/"usr/local/lib/enfoque-n960k"
 
 
-class EnfoqueN960KRelease103(unittest.TestCase):
+class EnfoqueN960KRelease104(unittest.TestCase):
     def test_published_release_and_inactive_manifest(self):
-        self.assertIn('VERSION="1.0.3"',(TREE/"etc/enfoque-os-release").read_text())
+        self.assertIn('VERSION="1.0.4"',(TREE/"etc/enfoque-os-release").read_text())
         m=json.loads((EXT/"manifest.json").read_text())
-        self.assertEqual(m["version"],"1.7.8.29")
+        self.assertEqual(m["version"],"1.7.8.36")
         self.assertEqual(m["background"]["service_worker"],"n960k-discovery-worker.js")
         self.assertTrue((EXT/"n960k-boot-ready.js").is_file())
         self.assertIn("n960k-boot-ready.js",(EXT/"n960k-discovery-worker.js").read_text())
@@ -26,9 +26,9 @@ class EnfoqueN960KRelease103(unittest.TestCase):
 
     def test_complete_cashier_extension_and_bridge_integrity(self):
         known={
-            "n960k-pdv.js":"43060c52a4fd2f569058e4f2264fe6601d2d7bd5043a7b7ceddc4dde894b53c8",
+            "n960k-pdv.js":"9e21e6b4efa22a193dea91265c9783d5fcdd5735060d88ce65a67ec08feca928",
             "n960k-logic.js":"e08d0f9b5bb317868e4223e2aaff92a35986e205b5af8db3c9ad8dbf3ce2805d",
-            "n960k-background.js":"0f72a7842629a3776d283c89aaa6831f611e9a9b15bb3e3f15bd42b49a86130c",
+            "n960k-background.js":"20c94c996094415e7747f53ab0bd1ce3a09c4f832efd818e596418f90c72c597",
         }
         for name,expected in known.items():
             with self.subTest(name=name):
@@ -40,7 +40,7 @@ class EnfoqueN960KRelease103(unittest.TestCase):
         self.assertTrue((EXT/"assets/xlsx.full.min.js").is_file())
         self.assertEqual(
             hashlib.sha256((AGENT/"N960K-Local-Bridge.py").read_bytes()).hexdigest(),
-            "8c30ce4d30f1aeaeda93c38a6cc330a98e3e22176f32db9f9bf574e5b1f08bcc")
+            "5bd4e6e2b28a76ce77a86082221e94dbac4d4d4893420dbd3fc0666630e59574")
         self.assertEqual(
             hashlib.sha256((AGENT/"N960K-HID-Headless.py").read_bytes()).hexdigest(),
             "49c8c18c2fecf5cc7476b41d7251b22c7f26e936e2aa6d18c37df1832eb099c2")
@@ -54,10 +54,17 @@ class EnfoqueN960KRelease103(unittest.TestCase):
                      "IMPRIMIR VIA DO CLIENTE","FINALIZAR_MIN_WAIT_MS=3000",
                      "nativeButton.className","'btnReinicio'"):
             self.assertIn(term,pdv)
+        self.assertNotIn("makeCustomerReceiptButton(nativeFinish,RECIBO_PAGAMENTO_ID", pdv)
+        self.assertNotIn("source==='payment'", pdv)
+        self.assertIn("makeCustomerReceiptButton(nativeNewSale,RECIBO_CONCLUIDO_ID,'success')", pdv)
+        self.assertIn("if(pay)pay.remove();", pdv)
+        self.assertIn("state.backUnlocked=true", pdv)
+        self.assertIn("def recover_on_usb_command_error(self,error,operation):", bridge)
+        self.assertNotIn("HID_RECOVERY_IDLE_SEC", bridge)
         self.assertIn("'/v1/receipt'",background)
         self.assertIn("def print_customer_receipt(self, data):",bridge)
         self.assertIn("time.sleep(0.100)",bridge)
-        self.assertIn("usb.key('KP1')",bridge)
+        self.assertIn("usb.key('1')",bridge)
         self.assertIn('"KP1": 0x59',driver)
         self.assertIn('if os.name == "nt" and not LIB.is_file():',driver)
         self.assertNotIn("sendToBridge('ack'",pdv)
@@ -112,7 +119,7 @@ class EnfoqueN960KRelease103(unittest.TestCase):
         spec=importlib.util.spec_from_file_location("n960k_release_package",script)
         module=importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        self.assertEqual(module.version(),"1.0.3")
+        self.assertEqual(module.version(),"1.0.4")
         self.assertEqual(module.PRINTER_BANK_BASELINE,"1.0.0-1")
         for name in (
             "etc/udev/rules.d/72-enfoque-n960k.rules",

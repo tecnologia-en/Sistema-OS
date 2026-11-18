@@ -339,22 +339,12 @@
     return input;
   }
   function syncCustomerReceiptButtons() {
-    const nativeFinish=byId('btnFinalizarVendaPagamentos');
-    const paymentVisible=onPaymentScreen() && visible(nativeFinish);
-    let pay=byId(RECIBO_PAGAMENTO_ID);
-    if(paymentVisible) {
-      if(!pay) {
-        pay=makeCustomerReceiptButton(nativeFinish,RECIBO_PAGAMENTO_ID,'payment');
-        nativeFinish.insertAdjacentElement('afterend',pay);
-      }
-      const job=state.session?.current;
-      const remaining=job ? Math.max(0,(job.finalizeAvailableAtMs||0)-Date.now()):0;
-      pay.disabled=!job || remaining>0 || state.receiptPending;
-      pay.title=state.receiptPending?'Enviando duas teclas 1 para a N960K':
-        remaining>0?'Aguarde '+Math.ceil(remaining/1000)+' segundos':
-        job?'Aciona 1 e 1 no terminal N960K; confira o visor antes de clicar':
-        'Clique primeiro em Maquininha';
-    }else if(pay)pay.remove();
+    // The receipt command is intentionally available ONLY on the later
+    // sale-complete screen. Always remove a leftover payment-screen button
+    // from an older extension version or an already-open SIGE SPA page.
+    const pay=byId(RECIBO_PAGAMENTO_ID);
+    if(pay)pay.remove();
+    const paymentVisible=onPaymentScreen() && visible(byId('btnFinalizarVendaPagamentos'));
     const nativeNewSale=byId('btnReinicio');
     const finishedVisible=!paymentVisible && visible(nativeNewSale);
     let done=byId(RECIBO_CONCLUIDO_ID);
@@ -372,13 +362,8 @@
   async function printCustomerReceipt(source,button) {
     // Only an explicit operator click ever sends these numeric key events.
     if(state.receiptPending)return;
-    if(source==='payment'){
-      const job=state.session?.current;
-      if(!onPaymentScreen() || !job ||
-         Date.now()<(job.finalizeAvailableAtMs||0))return;
-    }else if(source==='success') {
-      if(onPaymentScreen() || !visible(byId('btnReinicio')))return;
-    }else return;
+    if(source!=='success')return;
+    if(onPaymentScreen() || !visible(byId('btnReinicio')))return;
     state.receiptPending=true;syncCustomerReceiptButtons();
     try{
       const id='via-'+(crypto.randomUUID?.()||String(Date.now()));
@@ -427,16 +412,10 @@
     }
     const idle=state.bridgeStatus?.idle;
     let timerText='';
-    if(idle?.phase==='counting' && Number.isFinite(idle.seconds)) {
-      const remaining=Math.max(0,Math.ceil(idle.seconds-(Date.now()-idle.updatedAt)/1000));
-      timerText='HID: reinicio em '+remaining+'s';
-    } else if(idle?.phase==='payment') timerText='HID: aguardando termino do envio';
-    else if(idle?.phase==='resetting') timerText='HID: reiniciando...';
-    else if(idle?.phase==='error') timerText='HID: verificar reinicio';
-    else if(idle?.phase==='done') timerText=state.session?.current
-      ? 'HID reiniciado (40s). Verifique o visor antes de qualquer nova cobranca.'
-      : 'HID reiniciado; aguardando comando';
-    else timerText='HID: aguardando comando';
+    if(idle?.phase==='persistent') timerText='HID ativo continuamente; reinicio somente manual';
+    else if(idle?.phase==='resetting') timerText='HID: reinicio manual em andamento';
+    else if(idle?.phase==='manual_reset_required') timerText='HID: pressione Reiniciar HID apos conferir a maquininha';
+    else timerText='HID: aguardando conexao; sem reinicio automatico';
     newMessage += '  |  ' + timerText;
     if(state.lastError) newMessage += ' | '+state.lastError.slice(0,115);
     else if(state.session?.note) newMessage += ' | '+state.session.note.slice(0,96);
@@ -638,14 +617,9 @@
         if(out.stage!=='abandoned')throw new Error('Nao foi possivel encerrar tentativa com erro.');
       }
     }else throw new Error('Estado '+remote.stage+' incerto. Confira o terminal.');
-    const health=await sendToBridge('health');
-    const keptPix= (q.method==='PIX' && health.pixHidStandby===true &&
-      health.hidHeldAfterSelection===true);
-    if(q.method==='PIX' && q.stage==='sent' && !keptPix)
-      throw new Error('Pix nao confirmou HID em espera. Verifique a maquininha.');
-    if((health.hidHeldAfterSelection && !keptPix) ||
-       health.usbReleaseError || health.busy)
-      throw new Error('HID ainda ocupado com pagamento. Verifique a maquininha antes de outra tentativa.');
+    // The HID is intentionally persistent in Enfoque N960K. Its continued
+    // registration is NOT a failed cancellation. The bridge's abandoned
+    // stage confirms only the local request, not banking cancellation.
     return true;
   }
   async function cancelCurrent(reason) {
@@ -658,20 +632,26 @@
     state.busy=true;state.lastError='';
     s.note=q.method==='PIX'
       ? 'Cancelando Pix: toques no X e sete segundos, mantendo o HID.'
-      : 'Cancelamento local: retorno ao menu e liberacao HID...';
+      : 'Cancelamento local: retorno ao menu mantendo o HID conectado.';
     render();
     showCancelLoading();
     if(q.method==='PIX')pixCancelLoadingPhase('touching');
     try {
       if(q.jobId)await safeNavigateAndRelease(s,q,reason);
-      if(state.session!==s)return;
-      state.session=null;
-      state.backUnlocked=true;
       state.lastError='';
-      closeOverlay();
-    }catch(error){state.lastError=String(error.message||error)}
-    finally{
+    }catch(error){
+      // SIGE Back must NEVER remain trapped as Cancelar when a bridge
+      // command failed or returned 409/timeout. No bank cancellation is
+      // claimed; the cashier must check the physical terminal separately.
+      state.lastError='Confira o cancelamento na maquininha: '+
+        String(error?.message||error);
+      console.warn('[Enfoque N960K] Navegacao/cancelamento USB incerto; VOLTAR liberado:',error);
+    }finally{
+      // Restore the native SIGE Back behavior regardless of USB outcome.
+      if(state.session===s)state.session=null;
+      state.backUnlocked=true;
       state.busy=false;
+      closeOverlay();
       render();
       hideCancelLoading();
     }
@@ -805,12 +785,27 @@
     if(!control || !onPaymentScreen() || control.id!=='btnVoltarPagamentos')return;
     // Capture phase: suppress Angular's voltarPagamentos() action entirely.
     if(state.backUnlocked) {
-      // First Cancel finished; leave this next click entirely to SIGE voltarPagamentos().
-      state.session=null;state.backUnlocked=false;closeOverlay();return;
+      // Native SIGE voltarPagamentos() must receive this click unchanged.
+      // Keep the VOLTAR label until SIGE actually navigates away.
+      state.session=null;closeOverlay();return;
     }
     event.preventDefault();event.stopImmediatePropagation();
-    if(state.busy){state.lastError='Aguarde o comando atual.';render();return;}
-    cancelCurrent('operator_cancelled');
+    if(state.busy){
+      // The operator pressed Cancelar during an ongoing asynchronous
+      // command. Restore SIGE Voltar immediately, request cancellation
+      // without sending any new HID key, and mark bank status uncertain.
+      const active=state.session;
+      if(active)active.terminating=true;
+      const id=active?.current?.jobId||active?.current?.requestId;
+      state.session=null;
+      state.backUnlocked=true;
+      state.lastError='Confira a maquininha: operacao USB ainda estava em andamento.';
+      closeOverlay();updateIndicator();
+      if(id)sendToBridge('cancel',{jobId:id,reason:'operator_cancelled'})
+        .catch(error=>console.warn('[Enfoque N960K] Cancelamento local incerto:',error));
+      return;
+    }
+    void cancelCurrent('operator_cancelled');
   },true);
   // Se o SIGE navegar por conta propria, NAO reiniciar o leitor em pagehide/observer.
   // HID aberto continua no agente ate clique explicito (ou manutencao tecnica).
@@ -876,7 +871,8 @@
     if(byId(PREFIX+'style'))return;
     const css=el('style');css.id=PREFIX+'style';css.textContent=STYLE;(document.head||document.documentElement).appendChild(css);
   }
-  // Read-only USB/agent polling; never starts payments automatically.
+  // Read-only health; HID recovery is ONLY an exception-driven action
+  // inside the local bridge, when a real USB command fails. No reset timer.
   async function refreshBridgeHealth() {
     if (!onPaymentScreen()) return;
     try {
@@ -904,7 +900,14 @@
       a.setAttribute('aria-disabled','true');
       a.setAttribute('tabindex','-1');
     });
-    const mo=new MutationObserver(()=>{if(document?.body)updateIndicator()});
+    const mo=new MutationObserver(records=>{
+      if(!document?.body)return;
+      const ownRoot='#'+PREFIX+'status,#'+PREFIX+'inline';
+      // Don't feed our own button/status changes back into the DOM observer.
+      if(records.every(record=>record.target?.nodeType===1 &&
+          record.target.closest?.(ownRoot)))return;
+      updateIndicator();
+    });
     mo.observe(document.documentElement,{childList:true,subtree:true});
     const timers=[
       setInterval(updateIndicator,1200),

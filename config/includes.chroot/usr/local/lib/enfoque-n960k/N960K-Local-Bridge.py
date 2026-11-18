@@ -40,7 +40,9 @@ MAX_BODY = 4096
 LEASE_TIMEOUT_SEC = 90   # No browser heartbeat for 90 s => abandon locally
 MAX_PENDING_SEC = 300    # Max pending financial-navigation session: 5 min
 SWEEP_INTERVAL_SEC = 1
-HID_IDLE_RESET_SEC = 40
+HID_IDLE_RESET_SEC = 40  # legacy metadata only; automatic idle restart disabled
+# HID re-registration is EVENT driven by an actual libusb transfer/connect
+# exception from a command, not idle timers, HTTP timeouts or normal BUSY.
 HOME_PREPARE_TTL_SEC = 40   # Home reset must be followed by /v1/start quickly
 # Original AOA2 HID driver holds keyboard keys for 65 ms and media for 80 ms.
 # Extra 15 ms on keyboard, 20 ms after mouse button, 80 ms between raw
@@ -170,8 +172,9 @@ def maintenance(state):
     while True:
         time.sleep(SWEEP_INTERVAL_SEC)
         try:
+            # Expire stale SIGE jobs only. Never automatically restart,
+            # unregister or disconnect HID on a timer.
             state.sweep()
-            state.idle_hid_tick()
         except Exception as exc:
             # No cards/tokens in logs. Failure must not stop the monitor.
             with (HOME / 'n960k-agent-errors.log').open('a', encoding='utf-8') as fd:
@@ -410,13 +413,19 @@ class State:
         self.usb_release_error = None
         # Idempotent, explicit customer-receipt key requests; memory-only.
         self.receipt_requests = {}
-        # Safe idle watchdog. No HID detach while a card/Pix operation is pending.
+        # HID is held persistently until an explicit manual reset (or process shutdown).
+        self.hid_manual_requests = {}
+        # Historic fields retained for status compatibility; no idle timer runs.
         self.hid_last_command_monotonic = None
         self.hid_idle_armed = False
         self.hid_idle_resetting = False
         self.hid_idle_restart_count = 0
         self.hid_idle_last_reset_at = None
         self.hid_idle_reset_error = None
+        self.command_usb_recovery_at=None
+        self.command_usb_recovery_state='never'
+        self.command_usb_recovery_operation=None
+        self.command_usb_fault_kind=None
         if LEDGER.exists():
             try:
                 rows = json.loads(LEDGER.read_text(encoding='utf-8-sig'))
@@ -437,65 +446,204 @@ class State:
         # Old persisted prepared jobs must not lock out the next SIGE session.
         self.sweep()
 
-    def idle_hid_tick(self):
-        # A 40-second countdown runs from the LAST HID command even while a
-        # customer is on the debit, credit, or Pix screen. This is NOT a
-        # financial cancellation or an authorization check. Do not re-send.
+    def initialize_persistent_hid(self):
+        """Connect AOA2 once at service startup, without sending payment keys.
+
+        A disconnected physical terminal remains a manual-recovery condition;
+        no interval watchdog will re-register HID in the background.
+        """
+        if self.dry_run:
+            return {'connected': False, 'simulated': True}
         with self.lock:
-            if (not self.hid_idle_armed or self.hid_last_command_monotonic is None
-                or self.hid_idle_resetting or self.usb_release_error is not None):
-                return False
-            # Never disturb a worker WHILE it is actually sending key events.
-            if self.usb_inflight:
-                return False
-            if time.monotonic()-self.hid_last_command_monotonic < HID_IDLE_RESET_SEC:
-                return False
-            self.hid_idle_armed = False
-            self.hid_idle_resetting = True
-            existing = self.held_usb
-            rid = self.held_usb_job
-            isolated = None
+            if self.held_usb is not None:
+                return {'connected': bool(getattr(self.held_usb,'connected',False))}
+            usb=use_usb()
             try:
+                version=usb.connect()
+                if version<2:
+                    raise RuntimeError('N960K nao respondeu em AOA 2.0.')
+                self.held_usb=usb
+                self.held_usb_job=None
+                self.pix_hid_standby=True
+                self.usb_release_error=None
+                self.hid_idle_armed=False
+                return {'connected': True, 'protocol': version}
+            except Exception:
+                # Startup failure must not crash the service. No periodic retry.
+                try:usb.disconnect()
+                except Exception:pass
+                raise
+
+    @staticmethod
+    def is_usb_transport_fault(error):
+        """True only for evidence from the USB driver, never SIGE/HTTP BUSY.
+
+        A process/browser timeout has ambiguous outcomes and must not trigger
+        a HID restart while the card terminal may be processing a payment.
+        """
+        # Python TimeoutError and ConnectionError are also OSError; an
+        # HTTP/network timeout does not prove the bank terminal is idle.
+        if isinstance(error,(TimeoutError,ConnectionError)):
+            return False
+        if isinstance(error,OSError):
+            return True
+        message=str(error).lower()
+        return any(part in message for part in (
+            'evento usb nao aceito', 'usb nao conectado',
+            'conecte a n960k primeiro', 'winusb/libusb nao abriu',
+            'libusb_init:', 'registrar hid ', 'descritor hid ',
+            'registrar touchscreen absoluto pix falhou',
+            'descritor touchscreen pix nao aceito',
+            'aoa2 indisponivel', 'aoa 2.0 indisponivel',
+            'nao encontrei a n960k (usb 1e0e:902b)',
+        ))
+
+    def recover_on_usb_command_error(self,error,operation):
+        """Reconnect HID once, immediately after a real command USB failure.
+
+        Called only at the exception boundary of an operator command. This
+        cannot emit keyboard/media/touch events or replay payment requests.
+        Do not interrupt a live USB worker, held financial job or any pending
+        payment. Failed re-registration waits for a NEW command failure.
+        """
+        if not self.is_usb_transport_fault(error):
+            return False
+        with self.lock:
+            self.command_usb_fault_kind=type(error).__name__
+            self.command_usb_recovery_operation=operation
+            if (self.hid_idle_resetting or self.usb_inflight
+                or self.held_usb_job is not None
+                or any(j.get('stage') in ('homing','home_ready','sending','prepared')
+                       for j in self.jobs.values())):
+                self.command_usb_recovery_state='blocked_payment_or_usb_worker'
+                print('N960K_HID_EVENT_RECOVERY blocked_operation='+str(operation),
+                      flush=True)
+                return False
+            self.hid_idle_resetting=True
+            old=self.held_usb
+            fresh=None
+            try:
+                if old is not None:
+                    old.disconnect()
+                self.held_usb=None
+                self.held_usb_job=None
+                self.pix_hid_standby=False
                 if not self.dry_run:
-                    if existing is not None:
-                        # The same object stays owned by the current job,
-                        # so the operator can still use the existing Cancel.
-                        existing.disconnect()
-                        protocol=existing.connect()
-                        if protocol < 2:
-                            raise RuntimeError('AOA2 indisponivel apos reinicio HID.')
-                    else:
-                        isolated=use_usb()
-                        protocol=isolated.connect()
-                        if protocol < 2:
-                            raise RuntimeError('AOA2 indisponivel durante reinicio ocioso.')
-                        isolated.disconnect()
-                        isolated=None
-                if rid and rid in self.jobs:
-                    self.jobs[rid].update(hidIdleRestartedAt=now(),
-                        manualReviewRequired=True,
-                        paymentVerified=False)
-                    # Preserve stage="prepared": the operator must CANCEL
-                    # or confirm approval explicitly; never auto-retry.
-                    self.save()
+                    fresh=use_usb()
+                    version=fresh.connect()
+                    if version<2:
+                        raise RuntimeError('N960K AOA2 indisponivel depois do erro USB.')
+                    self.held_usb=fresh
+                self.pix_hid_standby=not self.dry_run
+                self.usb_release_error=None
+                self.hid_idle_armed=False
+                self.hid_last_command_monotonic=None
+                # The old Chrome token is invalidated, prompting a re-pair.
+                self.token=secrets.token_hex(32)
+                # Never clear receipt idempotency here: a partly sent 1+1
+                # must not be replayed on the next HTTP retry.
+                self.hid_idle_restart_count+=1
+                self.hid_idle_last_reset_at=now()
+                self.command_usb_recovery_at=now()
+                self.command_usb_recovery_state='reconnected'
+                print('N960K_HID_EVENT_RECOVERY reconnected_after='+str(operation),
+                      flush=True)
+                return True
+            except Exception as recovery_error:
+                if fresh is not None:
+                    try:fresh.disconnect()
+                    except Exception:pass
+                self.held_usb=None
+                self.held_usb_job=None
+                self.pix_hid_standby=False
+                self.usb_release_error='usb_event_recovery_failed'
+                self.command_usb_recovery_state='reconnect_failed'
+                self.command_usb_recovery_at=now()
+                print('N960K_HID_EVENT_RECOVERY reconnect_failed='+
+                      type(recovery_error).__name__,flush=True)
+                return False
+            finally:
+                self.hid_idle_resetting=False
+
+    def manual_reset_hid(self, data):
+        """Manual, authenticated disconnect/re-register. Never automatic.
+
+        This action does not cancel financial transactions or send keypad events.
+        Refuse while an agent worker is transmitting USB data.
+        """
+        if not isinstance(data,dict) or set(data)!={'requestId','confirmedNoPayment'}:
+            raise ValueError('Reinicio HID: dados invalidos.')
+        request_id=data.get('requestId')
+        if not isinstance(request_id,str) or not re.fullmatch('[A-Za-z0-9_-]{1,120}',request_id):
+            raise ValueError('Reinicio HID: identificador invalido.')
+        if data.get('confirmedNoPayment') is not True:
+            raise ValueError('Confirme que nenhum pagamento esta em andamento antes de reiniciar o HID.')
+        with self.lock:
+            if request_id in self.hid_manual_requests:
+                return self.hid_manual_requests[request_id]
+            if self.hid_idle_resetting or self.usb_inflight:
+                raise RuntimeError('Envio USB ativo; aguarde antes de reiniciar o HID.')
+            self.sweep()
+            active=self.active_job()
+            if active and active.get('stage') in ('sending','homing'):
+                raise RuntimeError('Envio de pagamento ainda em andamento. Nao reiniciar.')
+            # A prepared/home-ready job may still represent a real financial
+            # flow. The UI demands explicit operator confirmation for this.
+            self.hid_idle_resetting=True
+            old=self.held_usb
+            new_usb=None
+            try:
+                if old is not None:
+                    old.disconnect()
+                if not self.dry_run:
+                    new_usb=use_usb()
+                    version=new_usb.connect()
+                    if version<2:
+                        raise RuntimeError('N960K nao respondeu em AOA 2.0 no reinicio manual.')
+                    self.held_usb=new_usb
+                else:
+                    self.held_usb=None
+                self.held_usb_job=None
+                self.pix_hid_standby=not self.dry_run
+                self.hid_last_command_monotonic=None
+                self.hid_idle_armed=False
+                self.usb_release_error=None
                 self.hid_idle_restart_count+=1
                 self.hid_idle_last_reset_at=now()
                 self.hid_idle_reset_error=None
-                return True
+                self.receipt_requests.clear()
+                # Invalidate the old localhost authentication session after
+                # the USB HID has been re-registered. Chrome will re-handshake.
+                # The listener and route stay continuously available.
+                self.token=secrets.token_hex(32)
+                # Mark any interrupted SIGE state as requiring manual review.
+                if active and active.get('stage') in ('home_ready','prepared'):
+                    active.update(stage='abandoned',closedAt=now(),
+                        closedReason='explicit_operator_hid_reset',
+                        manualReviewRequired=True,paymentVerified=False,
+                        terminalNotCancelled=True)
+                    self.cancel_events.pop(active.get('jobId'),None)
+                    self.save()
+                result={'ok':True,'hidReset':True,'hidPersistent':not self.dry_run,
+                        'simulated':bool(self.dry_run),'resetCount':self.hid_idle_restart_count,
+                        'paymentVerified':False,'financialOperationCancelled':False,
+                        'localSessionRotated':True,'localRouteReady':True}
+                self.hid_manual_requests[request_id]=result
+                if len(self.hid_manual_requests)>100:
+                    for older in list(self.hid_manual_requests)[:50]:
+                        del self.hid_manual_requests[older]
+                return result
             except Exception as exc:
+                self.usb_release_error=type(exc).__name__
                 self.hid_idle_reset_error=type(exc).__name__
-                if existing is not None and not getattr(existing,'connected',False):
-                    # Do not permit a future sale when the old connection could
-                    # not be re-registered cleanly.
-                    self.usb_release_error=type(exc).__name__
-                return False
+                self.held_usb=None
+                self.held_usb_job=None
+                self.pix_hid_standby=False
+                if new_usb is not None:
+                    try:new_usb.disconnect()
+                    except Exception:pass
+                raise
             finally:
-                if isolated is not None:
-                    try:isolated.disconnect()
-                    except Exception as exc:
-                        self.usb_release_error=type(exc).__name__
-                # Disarm until an actual new HID key/media command.
-                self.hid_last_command_monotonic=None
                 self.hid_idle_resetting=False
 
     def _release_held_usb_locked(self, request_id):
@@ -523,10 +671,12 @@ class State:
                    terminalNotCancelled=True)
         event=self.cancel_events.get(job.get('jobId'))
         if event: event.set()
-        # When already prepared, no worker is using this USB handle.
-        # When still sending, the worker receives cancel_event and releases it.
-        if job.get('jobId') not in self.usb_inflight:
-            self._release_held_usb_locked(job.get('jobId'))
+        # Keep the HID registered even when the SIGE job expires/is cancelled.
+        # A pending worker will observe cancel_event; its finally also keeps HID.
+        if job.get('jobId') not in self.usb_inflight and self.held_usb_job==job.get('jobId'):
+            self.held_usb_job=None
+            self.pix_hid_standby=bool(self.held_usb and getattr(self.held_usb,'connected',False))
+        self.hid_idle_armed=False
         return True
 
     def sweep(self):
@@ -574,7 +724,7 @@ class State:
                 # Every real mapping HID movement is a command and restarts
                 # the existing 40-second idle countdown.
                 self.hid_last_command_monotonic=time.monotonic()
-                self.hid_idle_armed=True
+                self.hid_idle_armed=False
             return {'jobId':rid,'stage':job['stage'],'method':'PIX',
                     'dx':dx,'dy':dy,'mouseButtonPressed':False,
                     'paymentVerified':False}
@@ -631,7 +781,7 @@ class State:
                         job['pixAbsoluteTouchUsbAccepted']=number+1
                         job['lastHeartbeatAt']=now()
                         self.hid_last_command_monotonic=time.monotonic()
-                        self.hid_idle_armed=True
+                        self.hid_idle_armed=False
                         self.save()
                         if number<2:time.sleep(.210)
                     # Three Pix touches completed: reply immediately so the
@@ -658,7 +808,7 @@ class State:
                 usb.media('ANDROID_HOME')
                 time.sleep(0.85)
                 self.hid_last_command_monotonic = time.monotonic()
-                self.hid_idle_armed = True
+                self.hid_idle_armed = False
             except Exception as exc:
                 self.usb_release_error=type(exc).__name__
                 raise RuntimeError('Falha ao navegar com HID. Leitor preservado para verificacao manual.') from exc
@@ -718,18 +868,7 @@ class State:
                 self.save()
                 return job
             if self._abandon_locked(job, reason):
-                if (self.usb_release_error is None and not self.usb_inflight
-                    and self.held_usb is None
-                    and self.hid_last_command_monotonic is not None
-                    and (data.get('requiresSafeNavigation') is True
-                         and data.get('terminalSafe') is True
-                         and job.get('navigationSent') is True
-                         or stage_before == 'home_ready')):
-                    # The last real HID command (Back/Home) starts this clock.
-                    self.hid_idle_armed = True
-                else:
-                    # Never arm the timeout from unknown/failing transactions.
-                    self.hid_idle_armed = False
+                self.hid_idle_armed=False
                 self.save()
             return job
 
@@ -776,8 +915,8 @@ class State:
                     or not getattr(self.held_usb,'connected',False)
                     or self.usb_release_error is not None):
                     raise RuntimeError('HID de operacao anterior ainda registrado; confira o terminal antes de outra venda.')
-                # Take ownership of the SAME AOA2 connection, even for a
-                # debit/credit sale following a canceled Pix. Usb.connect()
+                # Take ownership of the SAME AOA2 connection for every
+                # debit/credit/Pix sale after a completed or abandoned job. Usb.connect()
                 # on a connected handle does not register the device again.
                 reused_pix_usb=self.held_usb
                 self.held_usb=None
@@ -793,6 +932,7 @@ class State:
             self.usb_inflight.add(rid)
             self.save()
         usb_session = reused_pix_usb
+        home_error=None
         try:
             if self.dry_run:
                 details = {'steps':['back_once','home_once','simulated'],
@@ -808,7 +948,7 @@ class State:
                     usb_session.register_pix_absolute_touch()
                 with self.lock:
                     self.hid_last_command_monotonic = time.monotonic()
-                    self.hid_idle_armed = True
+                    self.hid_idle_armed = False
             with self.lock:
                 record = self.jobs[rid]
                 if record['stage'] == 'abandoned':
@@ -826,23 +966,34 @@ class State:
                 self.save()
                 return record, True
         except Exception as error:
+            home_error=error
             with self.lock:
                 record = self.jobs[rid]
                 if record['stage'] != 'abandoned':
-                    record.update(stage='error',error=str(error),failedAt=now())
+                    record.update(stage='error',error=str(error),failedAt=now(),
+                                  paymentVerified=False,manualReviewRequired=True)
                     self.save()
             raise
         finally:
-            if usb_session is not None:
-                try:
-                    usb_session.disconnect()
-                except Exception as exc:
-                    with self.lock:
-                        self.usb_release_error = type(exc).__name__
             with self.lock:
+                # Partial Home/Back sequences may leave Android at an unknown
+                # screen: preserve HID; explicit manual reset is available.
+                if usb_session is not None:
+                    if getattr(usb_session,'connected',False):
+                        self.held_usb=usb_session
+                        self.held_usb_job=None
+                        self.pix_hid_standby=True
+                        if self.jobs[rid]['stage']!='home_ready':
+                            self.usb_release_error='manual_review_after_home_error'
+                    else:
+                        self.usb_release_error='usb_disconnected_during_home'
                 self.usb_inflight.discard(rid)
                 if self.jobs[rid]['stage'] != 'home_ready':
                     self.cancel_events.pop(rid)
+            # Event-driven: this runs ONLY when the Home command failed,
+            # after USB ownership and in-flight flags have been released.
+            if home_error is not None:
+                self.recover_on_usb_command_error(home_error,'home')
 
     def create(self, data):
         validate_sale(data)
@@ -878,6 +1029,7 @@ class State:
             job = self.jobs[request_id].copy()
             cancel_event=self.cancel_events.get(request_id)
         session=None
+        worker_error=None
         try:
             if self.dry_run:
                 time.sleep(.05)
@@ -891,7 +1043,7 @@ class State:
                                      home_already_sent=True,usb=session)
                 with self.lock:
                     self.hid_last_command_monotonic = time.monotonic()
-                    self.hid_idle_armed = True
+                    self.hid_idle_armed = False
             with self.lock:
                 record=self.jobs[request_id]
                 if record['stage'] != 'abandoned':
@@ -906,29 +1058,44 @@ class State:
                 self.cancel_events.pop(request_id,None)
                 self.usb_inflight.discard(request_id)
         except Exception as error:
+            worker_error=error
             with self.lock:
                 record=self.jobs[request_id]
                 if record['stage'] != 'abandoned':
-                    record.update(stage='error', error=str(error), failedAt=now())
+                    record.update(stage='error', error=str(error), failedAt=now(),
+                                  paymentVerified=False,manualReviewRequired=True)
                     self.save()
                 self.cancel_events.pop(request_id,None)
                 self.usb_inflight.discard(request_id)
         finally:
             if session is not None:
-                # Worker failed/cancelled. Do not leave dangling USB handle.
-                try:
-                    session.disconnect()
-                except Exception as exc:
-                    with self.lock:
-                        self.usb_release_error = type(exc).__name__
-                finally:
-                    with self.lock:
-                        if self.held_usb is session:
-                            self.held_usb = None
-                            self.held_usb_job = None
+                # No automatic USB disconnect on SIGE errors/cancellation.
+                # Keep the connection but demand explicit review/reset before
+                # a new payment if a partial USB sequence may have been sent.
+                with self.lock:
+                    if getattr(session,'connected',False):
+                        self.held_usb=session
+                        self.held_usb_job=None
+                        self.pix_hid_standby=True
+                        self.usb_release_error='manual_review_after_usb_error'
+                    else:
+                        self.held_usb=None
+                        self.held_usb_job=None
+                        self.pix_hid_standby=False
+                        self.usb_release_error='usb_disconnected_during_payment'
+            if worker_error is not None:
+                with self.lock:
+                    # The failed worker is no longer allowed to own an HID
+                    # registration reserved for a pending bank transaction.
+                    record=self.jobs.get(request_id,{})
+                    if record.get('stage')=='error' and self.held_usb_job==request_id:
+                        self.held_usb_job=None
+                        self.pix_hid_standby=bool(self.held_usb and
+                            getattr(self.held_usb,'connected',False))
+                self.recover_on_usb_command_error(worker_error,'payment')
 
     def print_customer_receipt(self, data):
-        # Two KP1 keyboard key presses ONLY on authenticated explicit click.
+        # Two ordinary '1' keys, as used by the existing price entry (usb.key(digit)).
         # They do not attest bank approval or physical printing.
         if not isinstance(data,dict) or set(data)!={'requestId','source'}:
             raise ValueError('Via do cliente: dados invalidos.')
@@ -968,37 +1135,41 @@ class State:
                         proto=usb.connect()
                         if proto<2:
                             raise RuntimeError('N960K nao respondeu como AOA2.')
-                    usb.key('KP1')
+                        self.held_usb=usb
+                        self.held_usb_job=None
+                        self.pix_hid_standby=True
+                    usb.key('1')
                     time.sleep(0.100)  # exact inter-key pause requested
-                    usb.key('KP1')
+                    usb.key('1')
                     time.sleep(0.120)  # let Android process before temp release
                     if reused:
                         self.hid_last_command_monotonic=time.monotonic()
-                        self.hid_idle_armed=True
+                        self.hid_idle_armed=False
                 self.receipt_requests[rid]='sent'
                 return {'ok':True,'inputSent':0 if self.dry_run else 2,
                         'simulated':bool(self.dry_run),
-                        'keyCode':'KP1','interKeyDelayMs':100,
+                        'keyCode':'1','interKeyDelayMs':100,
                         'hidReused':reused,'paymentVerified':False,
                         'receiptPrinted':False}
-            except Exception:
-                # Ambiguous USB writes must never be retried automatically.
+            except Exception as error:
+                # Ambiguous writes must never be retried automatically.
+                # Only re-register HID on a real libusb transfer/connect error,
+                # not on a timeout/busy status, and never re-send either key.
                 self.receipt_requests[rid]='uncertain'
+                self.recover_on_usb_command_error(error,'receipt')
                 raise
             finally:
-                if own_usb and usb is not None:
-                    try:
-                        usb.disconnect()
-                    except Exception as exc:
-                        self.usb_release_error=type(exc).__name__
+                # Explicit button can reuse existing or newly-registered HID;
+                # never unregister it after sending the two customer keys.
+                self.hid_idle_armed=False
 
     def ack(self, data):
         rid=data.get('jobId')
         if data.get('result')!='operator_confirmed' or not isinstance(rid,str):
             raise ValueError('Finalizacao exige clique do funcionario.')
-        delay=data.get('resetAfterSeconds',0)
-        if delay not in (0,5):
-            raise ValueError('Intervalo de reinicio HID invalido.')
+        # In all cases, never allow the old resetAfterSeconds=5 automatic HID.
+        if data.get('resetAfterSeconds',0) != 0:
+            raise ValueError('Reinicio HID agora e exclusivamente pelo botao manual.')
         with self.lock:
             job=self.jobs.get(rid)
             if not job:raise LookupError('Trabalho nao encontrado.')
@@ -1007,42 +1178,15 @@ class State:
                 raise RuntimeError('Trabalho nao chegou ao estado preparado.')
             if job['stage']=='acknowledged':
                 return job
-            if rid in self.usb_inflight:
+            if self.usb_inflight or self.hid_idle_resetting:
                 raise RuntimeError('Envio HID ainda em andamento.')
-            if delay==5:
-                # Finalizar Venda is manual attestation by the employee.
-                # Keep the HID until 5 seconds after the native click,
-                # then disconnect, re-register and release the device.
-                # This DOES NOT prove bank authorization and sends no new
-                # value, payment, Back or Home commands.
-                time.sleep(5)
-            self._release_held_usb_locked(rid)
-            if self.usb_release_error is not None:
-                raise RuntimeError('Falha ao liberar HID. Confira o dispositivo.')
-            if delay==5 and not self.dry_run:
-                fresh=None
-                try:
-                    fresh=use_usb()
-                    version=fresh.connect()
-                    if version<2:
-                        raise RuntimeError('AOA2 nao disponivel no reinicio pos Finalizar.')
-                    fresh.disconnect()
-                    fresh=None
-                except Exception as exc:
-                    self.usb_release_error=type(exc).__name__
-                    raise RuntimeError('Reinicio do HID falhou; confira o terminal antes de outra venda.') from exc
-                finally:
-                    if fresh is not None:
-                        try:fresh.disconnect()
-                        except Exception as exc:self.usb_release_error=type(exc).__name__
-            if delay==5:
-                self.hid_idle_restart_count+=1
-                self.hid_idle_last_reset_at=now()
-                self.hid_last_command_monotonic=None
-                self.hid_idle_armed=False
+            # ACK changes only the SIGE ledger, not USB registration.
+            if self.held_usb_job==rid:
+                self.held_usb_job=None
+                self.pix_hid_standby=bool(self.held_usb and getattr(self.held_usb,'connected',False))
             job.update(stage='acknowledged',acknowledgedAt=now(),
-                verifiedBy='operator_only',paymentVerified=False,
-                delayedHidRestartSeconds=delay)
+                       verifiedBy='operator_only',paymentVerified=False,
+                       delayedHidRestartSeconds=0,hidPreserved=True)
             self.hid_idle_armed=False
             self.save()
             return job
@@ -1140,25 +1284,15 @@ class Handler(BaseHTTPRequestHandler):
                 # already owns the endpoint. Do not report driver unavailable
                 # for the HID connection that is deliberately being held open.
                 held=bool(self.state.held_usb and getattr(self.state.held_usb,'connected',False))
-                idle_last=self.state.hid_last_command_monotonic
-                if self.state.hid_idle_resetting:
-                    idle_phase='resetting'
-                elif self.state.hid_idle_reset_error:
-                    idle_phase='error'
-                elif self.state.hid_idle_armed and idle_last is not None:
-                    idle_phase='counting'
-                elif self.state.hid_idle_last_reset_at and idle_last is None:
-                    idle_phase='done'
-                elif self.state.pix_hid_standby and held:
-                    idle_phase='standby'
-                elif active or held:
-                    idle_phase='payment'
-                else:
-                    idle_phase='waiting'
-                idle_remaining=(round(max(0,HID_IDLE_RESET_SEC-(time.monotonic()-idle_last)),1)
-                    if idle_phase=='counting' else None)
+                idle_phase=('resetting' if self.state.hid_idle_resetting
+                            else 'manual_reset_required' if self.state.usb_release_error
+                            else 'persistent' if held else 'waiting')
+                idle_remaining=None
                 idle_count=self.state.hid_idle_restart_count
                 idle_reset_at=self.state.hid_idle_last_reset_at
+                command_recovered_at=self.state.command_usb_recovery_at
+                command_recovery_state=self.state.command_usb_recovery_state
+                command_recovery_operation=self.state.command_usb_recovery_operation
                 terminal=({'detected':True,'driverReady':True,
                            'vendorId':'1E0E','productId':'902B',
                            'heldByAgent':True}
@@ -1182,6 +1316,13 @@ class Handler(BaseHTTPRequestHandler):
                                      'hidIdleRemainingSeconds':idle_remaining,
                                      'hidIdleRestartCount':idle_count,
                                      'hidIdleLastResetAt':idle_reset_at,
+                                     'manualResetOnly':False,'hidPersistent':held,
+                                     'manualResetAvailable':not bool(self.state.usb_inflight),
+                                     'autoRecoveryPolicy':'usb_transfer_error_event',
+                                     'autoRecoveryLastAt':command_recovered_at,
+                                     'autoRecoveryState':command_recovery_state,
+                                     'autoRecoveryOperation':command_recovery_operation,
+                                     'autoRecoveryNoCommandReplay':True,
                                     'pendingTimeoutSeconds':MAX_PENDING_SEC,'heartbeatTimeoutSeconds':LEASE_TIMEOUT_SEC})
         if path.path=='/v1/pix-mapper/status':
             with self.state.lock:
@@ -1228,6 +1369,12 @@ class Handler(BaseHTTPRequestHandler):
             if self.path=='/v1/receipt':
                 outcome=self.state.print_customer_receipt(payload)
                 return self.reply(200,outcome)
+            if self.path=='/v1/hid/reset':
+                outcome=self.state.manual_reset_hid(payload)
+                # Audit manual operator HID restart without tokens or sale values.
+                print('N960K_MANUAL_HID_RESET count='+str(outcome['resetCount'])+
+                      ' simulated='+str(outcome['simulated']),flush=True)
+                return self.reply(200,outcome)
             if self.path=='/v1/home':
                 j,is_new=self.state.prepare_home(payload)
                 return self.reply(200,{'ok':True,'jobId':j['jobId'],
@@ -1270,6 +1417,14 @@ def main():
     HOME.mkdir(parents=True,exist_ok=True)
     token=automatic_local_token()
     Handler.state=State(token,dry_run=args.dry_run)
+    if not args.dry_run:
+        try:
+            Handler.state.initialize_persistent_hid()
+            print('N960K HID persistente registrado no inicio do agente.',flush=True)
+        except Exception as exc:
+            # No timer retries; press the dedicated button after connecting USB.
+            print('N960K HID inicial indisponivel; reinicio manual necessario:',
+                  type(exc).__name__,flush=True)
     threading.Thread(target=maintenance,args=(Handler.state,),daemon=True).start()
     httpd=ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
     print('Enfoque N960K HTTP local em 127.0.0.1:'+str(args.port),flush=True)
@@ -1278,7 +1433,9 @@ def main():
     finally:
         httpd.server_close()
         with Handler.state.lock:
-            if Handler.state.held_usb_job:
+            # Explicit process shutdown is allowed to release hardware even
+            # while the normal runtime keeps HID permanently registered.
+            if Handler.state.held_usb is not None:
                 Handler.state._release_held_usb_locked(Handler.state.held_usb_job)
 
 if __name__=='__main__':main()

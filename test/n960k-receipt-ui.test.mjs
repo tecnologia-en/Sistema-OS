@@ -10,11 +10,18 @@ assert.doesNotMatch(text,/sendToBridge\('ack'/);
 assert.doesNotMatch(text,/resetAfterSeconds:5/);
 const stop=text.lastIndexOf('\n})();');
 assert.ok(stop>0);
-const script=text.slice(0,stop)+'\nwindow.__TEST_RECEIPT__={state,syncCustomerReceiptButtons,begin,updatePaymentButtons};'+text.slice(stop);
+const script=text.slice(0,stop)+'\nwindow.__TEST_RECEIPT__={state,syncCustomerReceiptButtons,begin,updatePaymentButtons,cancelCurrent,testDisableOverlay:()=>{showCancelLoading=()=>{};hideCancelLoading=()=>{};closeOverlay=()=>{};render=()=>updatePaymentButtons()}};'+text.slice(stop);
 
 function env(){
  let now=50000, requests=[], timers=[], alerts=[], ix=0;
+ let bridgeReply=msg=>{
+   if(msg.action==='job')return {ok:true,data:{stage:'prepared'}};
+   if(msg.action==='navigate')return {ok:true,data:{stage:'prepared',navigationSent:true}};
+   if(msg.action==='cancel')return {ok:true,data:{stage:'abandoned'}};
+   return {ok:true,data:{inputSent:2}};
+ };
  const registry={};
+ const listeners={};
  class E {
   constructor(tag,id='',cl=''){
    this.tagName=tag.toUpperCase();this.id=id;this.className=cl;this.value='';
@@ -23,6 +30,11 @@ function env(){
    if(id)registry[id]=this;
   }
   addEventListener(type,fn){(this.events[type]??=[]).push(fn)}
+  closest(selector){
+   if(selector==='a#logoSIGE')return null;
+   if(selector.includes('button')||selector.includes('input'))return this;
+   return null;
+  }
   setAttribute(n,v){this[n]=v}
   getBoundingClientRect(){return this._visible?{width:188,height:34}:{width:0,height:0}}
   insertAdjacentElement(where,item){assert.equal(where,'afterend');assert.ok(this.parentElement);
@@ -46,12 +58,14 @@ function env(){
  const doc={
   body:new E('body'),documentElement:{contains:e=>!e._removed},
   getElementById:id=>registry[id]||null,createElement:tag=>new E(tag),
-  readyState:'loading',addEventListener:()=>{},querySelectorAll:()=>[]
+  readyState:'loading',
+  addEventListener:(type,fn)=>{(listeners[type]??=[]).push(fn)},
+  querySelectorAll:()=>[]
  };
  const win={EnfoqueN960KLogic:{paymentType:()=>null},addEventListener:()=>{},alert:m=>alerts.push(m)};
  const context={document:doc,window:win,Date:{now:()=>now},
   getComputedStyle:e=>({display:e._visible?'block':'none',visibility:'visible'}),
-  chrome:{runtime:{sendMessage:(msg,callback)=>{requests.push(msg);callback({ok:true,data:{inputSent:2}})},lastError:null}},
+  chrome:{runtime:{sendMessage:(msg,callback)=>{requests.push(msg);callback(bridgeReply(msg))},lastError:null}},
   crypto:{randomUUID:()=>('n960k-' + (++ix))},
   setTimeout:fn=>{timers.push(fn);return timers.length;},clearTimeout:()=>{},
   setInterval:()=>1,clearInterval:()=>{},
@@ -60,7 +74,8 @@ function env(){
  };
  vm.createContext(context);vm.runInContext(script,context);
  return {api:win.__TEST_RECEIPT__,payRoot,receiptRoot,buttons,finish,restart,done,registry,
-  requests,timers,alerts,get now(){return now},set now(v){now=v}};
+  requests,timers,alerts,listeners,setBridgeReply:fn=>bridgeReply=fn,
+  get now(){return now},set now(v){now=v}};
 }
 function click(target){
  assert.equal(target.disabled,false);
@@ -68,35 +83,54 @@ function click(target){
  for(const f of target.events.click||[])f({preventDefault:()=>prevented++,stopImmediatePropagation:()=>stopped++});
  assert.equal(prevented,1);assert.equal(stopped,1);
 }
-test('N960K customer receipt button matches both native SIGE screens and 3s gate',async()=>{
+test('No customer receipt button on payment screen, even during active payment',()=>{
  const x=env();const {api}=x;
  api.syncCustomerReceiptButtons();
- const pay=x.registry['enfoque-n960k-receipt-payment'];
- assert.ok(pay);
- assert.equal(pay.value,'IMPRIMIR VIA DO CLIENTE');
- assert.equal(pay.className,x.finish.className);
- assert.deepEqual(x.buttons.children.map(c=>c.id),['btnVoltarPagamentos','btnFinalizarVendaPagamentos','enfoque-n960k-receipt-payment']);
- assert.equal(pay.disabled,true);
- assert.equal(x.requests.length,0);
+ assert.equal(x.registry['enfoque-n960k-receipt-payment'],undefined);
+ assert.deepEqual(x.buttons.children.map(c=>c.id),
+  ['btnVoltarPagamentos','btnFinalizarVendaPagamentos']);
  const q={stage:'sending',finalizeAvailableAtMs:x.now+3000};
  api.state.session={current:q,queue:[q],busy:true};
- api.syncCustomerReceiptButtons();assert.equal(pay.disabled,true);
- x.now+=2999;api.syncCustomerReceiptButtons();assert.equal(pay.disabled,true);
- x.now++;api.syncCustomerReceiptButtons();assert.equal(pay.disabled,false);
- click(pay);assert.equal(pay.disabled,true);
- assert.equal(x.requests.length,1);assert.equal(x.requests[0].action,'receipt');
- assert.equal(x.requests[0].payload.source,'payment');
- await new Promise(resolve=>setImmediate(resolve));assert.equal(pay.disabled,false);
- x.payRoot._visible=false;x.receiptRoot._visible=true;api.state.session=null;
+ api.syncCustomerReceiptButtons();
+ x.now+=4000;api.syncCustomerReceiptButtons();
+ assert.equal(x.registry['enfoque-n960k-receipt-payment'],undefined);
+ assert.equal(x.requests.length,0);
+});
+test('Existing old payment-screen receipt button is removed immediately',()=>{
+ const x=env();
+ const old=documentLikeButton(x,'enfoque-n960k-receipt-payment');
+ x.buttons.append(old);
+ assert.ok(x.registry['enfoque-n960k-receipt-payment']);
+ x.api.syncCustomerReceiptButtons();
+ assert.equal(x.registry['enfoque-n960k-receipt-payment'],undefined);
+ assert.deepEqual(x.buttons.children.map(c=>c.id),
+  ['btnVoltarPagamentos','btnFinalizarVendaPagamentos']);
+});
+function documentLikeButton(x,id){
+ const source=x.registry['btnFinalizarVendaPagamentos'];
+ const c=Object.create(Object.getPrototypeOf(source));
+ Object.assign(c,{...source,id,_removed:false,events:{},children:[],parentElement:null});
+ x.registry[id]=c;
+ return c;
+}
+test('Customer receipt only on completed sale, beside Nova Venda',async()=>{
+ const x=env();const {api}=x;
+ x.payRoot._visible=false;x.receiptRoot._visible=true;
  api.syncCustomerReceiptButtons();
  assert.equal(x.registry['enfoque-n960k-receipt-payment'],undefined);
- const doneButton=x.registry['enfoque-n960k-receipt-success'];
- assert.ok(doneButton);assert.equal(doneButton.className,x.restart.className);
- assert.equal(doneButton.disabled,false);
- assert.deepEqual(x.done.children.map(c=>c.id||c.tagName),['btnReinicio','BR','enfoque-n960k-receipt-success']);
+ const done=x.registry['enfoque-n960k-receipt-success'];
+ assert.ok(done);
+ assert.equal(done.className,x.restart.className);
+ assert.equal(done.value,'IMPRIMIR VIA DO CLIENTE');
+ assert.equal(done.disabled,false);
+ assert.deepEqual(x.done.children.map(c=>c.id||c.tagName),
+  ['btnReinicio','BR','enfoque-n960k-receipt-success']);
+ assert.equal(x.requests.length,0);
+ click(done);
+ await new Promise(resolve=>setImmediate(resolve));
  assert.equal(x.requests.length,1);
- click(doneButton);await new Promise(resolve=>setImmediate(resolve));
- assert.equal(x.requests.length,2);assert.equal(x.requests[1].payload.source,'success');
+ assert.equal(x.requests[0].action,'receipt');
+ assert.equal(x.requests[0].payload.source,'success');
  assert.equal(x.alerts.length,0);
 });
 test('N960K Finalizar SIGE is native after exactly 3 seconds for all agent stages',()=>{
@@ -116,11 +150,95 @@ test('N960K Finalizar SIGE is native after exactly 3 seconds for all agent stage
   assert.equal(x.requests.length,0,'no receipt/USB from native finalize');
  }
 });
-test('N960K print action carries no banking state and cannot auto start',()=>{
+test('Receipt never sends payment command from payment screen',()=>{
  const x=env();x.api.syncCustomerReceiptButtons();
  assert.equal(x.requests.length,0);
- const input=x.registry['enfoque-n960k-receipt-payment'];
- assert.equal(input.disabled,true);
+ assert.equal(x.registry['enfoque-n960k-receipt-payment'],undefined);
+ assert.doesNotMatch(text,/makeCustomerReceiptButton\(nativeFinish,RECIBO_PAGAMENTO_ID/);
+ assert.doesNotMatch(text,/source==='payment'/);
  assert.doesNotMatch(text,/sendToBridge\('ack'/);
  assert.match(text,/sendToBridge\('receipt'/);
+});
+test('No restart button, handler or auto-connection reset in PDV interface',()=> {
+ assert.doesNotMatch(text,/HID_RESET_ID|syncManualHidResetButton|manual-hid-reset|sendToBridge\('hidReset'/);
+ assert.match(text,/RECIBO_PAGAMENTO_ID/);
+ assert.match(text,/RECIBO_CONCLUIDO_ID/);
+ assert.match(text,/FINALIZAR_MIN_WAIT_MS=3000/);
+ const x=env();
+ x.api.updatePaymentButtons();
+ assert.ok(!x.registry['enfoque-n960k-manual-hid-reset']);
+ assert.equal(x.requests.length,0);
+});
+
+test('Cancelar returns native Voltar even when persistent USB stays connected',async()=>{
+ const x=env();x.api.testDisableOverlay();
+ const cancel=x.registry['btnVoltarPagamentos'];
+ const q={method:'DEBIT',jobId:'my-job',stage:'sent'};
+ x.api.state.session={current:q,queue:[q],note:'Test sale'};
+ x.api.updatePaymentButtons();
+ assert.equal(cancel.value,'CANCELAR');
+ await x.api.cancelCurrent('operator_cancelled');
+ assert.equal(x.api.state.session,null);
+ assert.equal(x.api.state.busy,false);
+ assert.equal(x.api.state.backUnlocked,true);
+ assert.equal(cancel.value,'VOLTAR');
+ assert.deepEqual(x.requests.map(r=>r.action),['job','navigate','cancel']);
+ assert.equal(x.api.state.lastError,'');
+ console.log('PASS_CANCEL_USB_PERSISTENT_AND_NATIVE_BACK');
+});
+test('Cancelar unlocks Voltar when the terminal fails or bridge returns 409',async()=>{
+ const x=env();x.api.testDisableOverlay();
+ const cancel=x.registry['btnVoltarPagamentos'];
+ const q={method:'DEBIT',jobId:'my-job',stage:'sent'};
+ x.api.state.session={current:q,queue:[q]};
+ x.setBridgeReply(msg=>msg.action==='navigate' ?
+  {ok:false,error:'HID connection USB failed'} :
+  msg.action==='job'?{ok:true,data:{stage:'prepared'}}:
+  {ok:true,data:{stage:'abandoned'}});
+ await x.api.cancelCurrent('operator_cancelled');
+ assert.equal(x.api.state.session,null);
+ assert.equal(x.api.state.backUnlocked,true);
+ assert.equal(cancel.value,'VOLTAR');
+ assert.match(x.api.state.lastError,/Confira o cancelamento na maquininha/);
+ assert.deepEqual(x.requests.map(r=>r.action),['job','navigate']);
+ console.log('PASS_CANCEL_FAILURE_STILL_NATIVE_BACK');
+});
+test('Voltar click goes to SIGE unchanged and remains Voltar until navigation',()=>{
+ const x=env();x.api.testDisableOverlay();
+ const cancel=x.registry['btnVoltarPagamentos'];
+ x.api.state.backUnlocked=true;x.api.updatePaymentButtons();
+ assert.equal(cancel.value,'VOLTAR');
+ let prevented=0,stopped=0;
+ const ev={target:cancel,preventDefault:()=>prevented++,stopImmediatePropagation:()=>stopped++};
+ for(const f of x.listeners.click||[]) {f(ev);if(stopped)break}
+ assert.equal(prevented,0);
+ assert.equal(stopped,0);
+ assert.equal(x.api.state.backUnlocked,true);
+ assert.equal(cancel.value,'VOLTAR');
+ console.log('PASS_NATIVE_SIGE_BACK_UNMODIFIED');
+});
+test('Cancelar during active USB command unlocks native Voltar but does not send new keys',async()=>{
+ const x=env();x.api.testDisableOverlay();
+ const cancel=x.registry['btnVoltarPagamentos'];
+ const q={method:'DEBIT',requestId:'pending-job',stage:'sending'};
+ const session={current:q,queue:[q],terminating:false};
+ x.api.state.session=session;x.api.state.busy=true;
+ let prevented=0,stopped=0;
+ const ev={target:cancel,preventDefault:()=>prevented++,stopImmediatePropagation:()=>stopped++};
+ for(const f of x.listeners.click||[]) {f(ev);if(stopped)break}
+ assert.equal(prevented,1);
+ assert.equal(stopped,1);
+ assert.equal(x.api.state.session,null);
+ assert.equal(x.api.state.backUnlocked,true);
+ assert.equal(cancel.value,'VOLTAR');
+ assert.equal(session.terminating,true);
+ assert.deepEqual(x.requests.map(r=>r.action),['cancel']);
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(x.api.state.backUnlocked,true);
+ console.log('PASS_BUSY_WORKER_CANCEL_UI_UNLOCKED_NO_USB_KEY');
+});
+test('No timed HID auto-restart or lateral restart button in extension',()=>{
+ assert.doesNotMatch(text,/maybeRecoverDetachedHid|autoRecoveryFaults|autoRecoveryLastAttemptAt|hidAutoRecover/);
+ assert.doesNotMatch(text,/HID_RESET_ID|syncManualHidResetButton|manual-hid-reset/);
+ assert.match(text,/FINALIZAR_MIN_WAIT_MS=3000/);
 });

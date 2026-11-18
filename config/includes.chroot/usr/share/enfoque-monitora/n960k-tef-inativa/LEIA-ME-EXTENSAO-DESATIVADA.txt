@@ -1,27 +1,11 @@
-Enfoque N960K 1.7.8.29 — INCLUIDA NO ENFOQUE OS, INATIVA NO CHROME
-
-Origem: imagem validada do Caixa 1 Ilha Plaza, consolidada no servidor em:
-  /opt/enfoque-smartpos-lab/pacotes/N960K-ISO-COMPLETA-1.7.8.29
-  /opt/enfoque-smartpos-lab/pacotes/ENFOQUE-N960K-1.7.8.29-ISO-COMPLETA.zip
-
-Esta pasta inclui os arquivos da extensao do Caixa 1, inclusive:
-- Fluxo de pagamento N960K e autoconecao (1.7.8.27);
-- Finalizar SIGE liberado apos 3s, sem ACK nem reinicio HID (1.7.8.28);
-- Imprimir via do cliente no pagamento (mesmo bloqueio de 3s) e
-  na tela de cupom apos a venda (1.7.8.29);
-- Comando explicito KP1, espera 100ms, KP1 com HID persistente.
-
-A ponte e o driver Linux corrigidos estao em
-/usr/local/lib/enfoque-n960k/. A correcao libusb Linux e o endpoint
-autenticado /v1/receipt tambem estao neste release.
-
-ARQUIVO EXCLUIDO: br.txt tinha um token Bearer antigo, sem referencia
-no manifesto e desnecessario a N960K; NAO o distribuir na ISO ou Git.
-
-Por seguranca, a extensao N960K continua INATIVA POR PADRAO no Chrome.
-Apenas os servicos de deteccao/ponte Linux iniciam via systemd.
-A Monitora e as demais extensoes nao foram alteradas.
-Nenhum envio de venda e iniciado automaticamente ao abrir o navegador.
-Finalizar no SIGE apos 3 segundos NAO valida autorizacao bancaria.
-Homologar o terminal, a comprovacao de pagamento e a impressao em
-um equipamento de teste antes de ativar na operacao de outras lojas.
+Enfoque OS 1.0.4 — N960K 1.7.8.36, pacote completo
+A extensao N960K esta INATIVA por padrao na ISO, para evitar carregar
+fluxos de pagamento em computadores/lojas sem ativacao homologada.
+Somente o terminal autorizado deve ativar a extensao manualmente.
+Na tela de pagamentos do SIGE nao existe botao de imprimir via do cliente.
+A funcao de via do cliente permanece na tela final apos concluir a venda.
+O botao Cancelar/Voltar do SIGE permanece na versao validada 1.7.8.35.
+A ponte N960K recupera HID somente em erros de comando USB comprovados,
+sem repetir comandos bancarios e sem reiniciar Zero Touch/SSH.
+O status AOA HID nao comprova pagamento aprovado nem comprovante impresso.
+Nao foram incluidos segredos, bearer tokens nem dados pessoais de maquinas.
