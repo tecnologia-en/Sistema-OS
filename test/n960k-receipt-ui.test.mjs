@@ -6,7 +6,7 @@ import test from 'node:test';
 const file='config/includes.chroot/usr/share/enfoque-monitora/n960k-tef-inativa/n960k-pdv.js';
 const text=readFileSync(file,'utf8');
 assert.match(text,/FINALIZAR_MIN_WAIT_MS=3000/);
-assert.doesNotMatch(text,/sendToBridge\('ack'/);
+assert.equal((text.match(/sendToBridge\('ack'/g)||[]).length,2); // only operator acknowledgements
 assert.doesNotMatch(text,/resetAfterSeconds:5/);
 const stop=text.lastIndexOf('\n})();');
 assert.ok(stop>0);
@@ -156,7 +156,7 @@ test('Receipt never sends payment command from payment screen',()=>{
  assert.equal(x.registry['enfoque-n960k-receipt-payment'],undefined);
  assert.doesNotMatch(text,/makeCustomerReceiptButton\(nativeFinish,RECIBO_PAGAMENTO_ID/);
  assert.doesNotMatch(text,/source==='payment'/);
- assert.doesNotMatch(text,/sendToBridge\('ack'/);
+ assert.equal((text.match(/sendToBridge\('ack'/g)||[]).length,2); // only operator acknowledgements
  assert.match(text,/sendToBridge\('receipt'/);
 });
 test('No restart button, handler or auto-connection reset in PDV interface',()=> {

@@ -78,7 +78,7 @@ class NetworkIndicator106(unittest.TestCase):
                 migrate,"SOURCE",pathlib.Path("/nonexistent")) as unused:
             self.assertEqual(migrate.main(),0)
     def test_retain_n960k_105(self):
-        self.assertIn('VERSION="1.0.6"',(BASE/"etc/enfoque-os-release").read_text())
+        self.assertIn('VERSION="1.0.7"',(BASE/"etc/enfoque-os-release").read_text())
         self.assertTrue((BASE/"usr/local/lib/enfoque-n960k/N960K-HID-Headless.py").exists())
         self.assertTrue((BASE/"usr/share/enfoque-monitora/n960k-tef-inativa/n960k-background.js").exists())
         self.assertIn("1.7.8.38",(ROOT/"docs/RELEASE_105_N960K_LEDGER_PILOTO.md").read_text())

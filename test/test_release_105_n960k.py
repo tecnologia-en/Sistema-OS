@@ -16,7 +16,7 @@ class EnfoqueN960KRelease105(unittest.TestCase):
     def test_published_release_and_inactive_manifest(self):
         self.assertGreaterEqual(tuple(map(int,__import__("re").search(r'VERSION="([0-9.]+)"',(TREE/"etc/enfoque-os-release").read_text()).group(1).split("."))),(1,0,5))
         m=json.loads((EXT/"manifest.json").read_text())
-        self.assertEqual(m["version"],"1.7.8.38")
+        self.assertEqual(m["version"],"1.7.8.39")
         self.assertEqual(m["background"]["service_worker"],"n960k-discovery-worker.js")
         self.assertTrue((EXT/"n960k-boot-ready.js").is_file())
         self.assertIn("n960k-boot-ready.js",(EXT/"n960k-discovery-worker.js").read_text())
@@ -26,7 +26,7 @@ class EnfoqueN960KRelease105(unittest.TestCase):
 
     def test_complete_cashier_extension_and_bridge_integrity(self):
         known={
-            "n960k-pdv.js":"4870d454e6389dfa1d4e602e69d1977ff2e4cf8f952aa0465d5dbd170c996c34",
+            "n960k-pdv.js":"55a48551adfc249171d8f2f4f060ddfb2e3038faae038894800048ed46513d61",
             "n960k-logic.js":"e08d0f9b5bb317868e4223e2aaff92a35986e205b5af8db3c9ad8dbf3ce2805d",
             "n960k-background.js":"20c94c996094415e7747f53ab0bd1ce3a09c4f832efd818e596418f90c72c597",
         }
@@ -67,7 +67,7 @@ class EnfoqueN960KRelease105(unittest.TestCase):
         self.assertIn("usb.key('1')",bridge)
         self.assertIn('"KP1": 0x59',driver)
         self.assertIn('if os.name == "nt" and not LIB.is_file():',driver)
-        self.assertEqual(pdv.count("sendToBridge('ack'"),1)
+        self.assertEqual(pdv.count("sendToBridge('ack'"),2) # final SIGE + intermediate operator confirmation
         self.assertEqual(pdv.count("acknowledgeFinishedSale(activeSession,q)"),2)
         self.assertIn("resetAfterSeconds:0",pdv)
         self.assertIn("if(j.stage==='prepared')",pdv)

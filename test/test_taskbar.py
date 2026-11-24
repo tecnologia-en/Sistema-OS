@@ -41,7 +41,7 @@ class TaskbarTests(unittest.TestCase):
 
     def test_unified_docklike_taskbar_and_attention(self):
         ids=[int(x.get("value")) for x in self.panel.find("./property[@name='plugin-ids']")]
-        self.assertEqual(ids,[1,14,7,18,15,12,8,13,9,17,16,10,11])
+        self.assertEqual(ids,[1,14,7,18,15,12,8,13,19,9,17,16,10,11])
         self.assertLess(ids.index(1),ids.index(14))
         self.assertLess(ids.index(14),ids.index(18))
         self.assertGreater(ids.index(10),ids.index(8))

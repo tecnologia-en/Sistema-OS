@@ -297,11 +297,18 @@
     const finish=byId('btnFinalizarVendaPagamentos');
     const cancel=byId('btnVoltarPagamentos');
     const session=state.session;
-    let hasTEF=false;
-    try{hasTEF=rawRows().some(r=>Boolean(logic.paymentType(r.methodText)))}catch(_){}
-    const pending=Boolean(session&&(session.current||state.busy||
-      (session.queue?.length&&session.queue.every(q=>q.stage==='done'))));
-    const name=(!hasTEF||pending)?'FINALIZAR VENDA':'MAQUININHA';
+    let machineCount=0;
+    try { machineCount=logic.ensureRows(rawRows()).filter(r=>r.terminal).length; }
+    catch(_) { try {machineCount=rawRows().filter(r=>Boolean(logic.paymentType(r.methodText))).length;} catch(_){} }
+    const queue=session?.queue||[];
+    const count=queue.length||machineCount;
+    const nextIndex=session?queue.findIndex(q=>q.stage==='pending'):0;
+    const pendingNext=Boolean(session&&nextIndex>=0);
+    const hasTEF=count>0;
+    const name=!hasTEF?'FINALIZAR VENDA':
+      (!session||pendingNext)
+        ? (count>1?'MAQUININHA '+(session?nextIndex+1:1)+'/'+count:'MAQUININHA')
+        : 'FINALIZAR VENDA';
     if(finish&&finish.value!==name)finish.value=name;
     if(cancel) {
       const label=state.backUnlocked?'VOLTAR':'CANCELAR';
@@ -310,19 +317,31 @@
     const check=creditReady();
     if(finish) {
       const cooldown=Math.max(0,(session?.current?.finalizeAvailableAtMs||0)-Date.now());
-      const lock=(hasTEF&&!pending&&!check.ok) || (pending&&cooldown>0);
+      // Cada etapa tem seus 3 segundos; nunca liberar o SIGE durante um envio USB multiplo.
+      const multi=Boolean(session&&queue.length>1);
+      const current=session?.current;
+      const allPriorDone=queue.length>0&&queue.slice(0,-1).every(q=>q.stage==='done');
+      const lastReady=Boolean(current&&current===queue[queue.length-1]&&current.stage==='sent'&&allPriorDone);
+      const lock=(hasTEF&&!session&&!check.ok) ||
+        Boolean(session&&(cooldown>0||state.busy||session.terminating||session.invalidated||
+          (!check.ok&&pendingNext)||
+          (multi&&(current?current.stage!=='sent':true))||
+          (multi&&!pendingNext&&!lastReady)));
       if(lock) {
         if(!finish.disabled) {
-          finish.disabled=true;
-          finish.dataset.enfoqueN960kLocked='1';
+          finish.disabled=true;finish.dataset.enfoqueN960kLocked='1';
         }
       }else if(finish.dataset.enfoqueN960kLocked==='1') {
         finish.disabled=false;delete finish.dataset.enfoqueN960kLocked;
       }
-      finish.title=(cooldown>0)?'Aguarde '+Math.ceil(cooldown/1000)+
-        's para liberar Finalizar Venda':lock?check.message:pending?
-        'Finalizar venda no SIGE apos 3 segundos; confira o pagamento na maquininha':
-        'Enviar pagamento para a N960K';
+      finish.title=cooldown>0
+        ? 'Aguarde '+Math.ceil(cooldown/1000)+'s para a proxima etapa N960K'
+        : lock&&state.busy ? 'Aguarde o envio e a confirmacao USB da etapa atual'
+        : lock&&current?.stage==='error' ? 'Falha USB: confira o terminal e utilize Cancelar'
+        : lock&&!check.ok ? check.message
+        : pendingNext ? 'Confirme a aprovacao da etapa anterior no terminal antes de enviar '+(nextIndex+1)+'/'+count
+        : session ? 'Confira a aprovacao da ultima etapa na N960K antes de finalizar no SIGE'
+        : 'Enviar a primeira forma de pagamento para a N960K';
     }
   }
   // Reuse the exact native SIGE classes. No new CSS or Angular handlers.
@@ -397,6 +416,11 @@
       state.lastScreenTotal=readTotal();
       newMessage='N960K | Total '+(state.lastScreenTotal==null?'a conferir':brl(state.lastScreenTotal))+' | '+capable.length+' pagamento(s) na maquininha'+(state.session?' | fila em andamento':'')+(state.lastChosenButton?' | ultimo: '+state.lastChosenButton:'');
     } catch {newMessage='N960K | aguardando linhas de pagamento';}
+    if(state.session?.queue?.length>1) {
+      const current=state.session.current;
+      const pos=current?state.session.queue.indexOf(current)+1:1;
+      newMessage+=' | etapa '+pos+'/'+state.session.queue.length;
+    }
     if (state.bridgeStatus) {
       const b=state.bridgeStatus;
       const label=b.online
@@ -501,13 +525,11 @@
       }
     }else next.installments=1;
     session.current=next;session.needsInstallments=false;
-    // First MAQUININHA click starts a 3-second delay ONLY.
-    // The second operator click uses the native SIGE button even while the
-    // agent is still sending or verifying USB commands.
+    const position=session.queue.indexOf(next)+1;
     next.finalizeAvailableAtMs=Date.now()+FINALIZAR_MIN_WAIT_MS;
-    // Release both SIGE-native buttons exactly at the three-second boundary.
+    // A proxima forma sera enviada somente depois de novo clique do operador.
     setTimeout(()=>{if(state.session===session)updateIndicator()},FINALIZAR_MIN_WAIT_MS);
-    session.note='Enviando '+labelMethod(next)+' para a N960K.';
+    session.note='Etapa '+position+'/'+session.queue.length+': enviando '+labelMethod(next)+' para a N960K.';
     state.backUnlocked=false;
     startCurrent();
   }
@@ -575,10 +597,13 @@
       if(!held.hidHeldAfterSelection || held.usbReleaseError)
         throw new Error('O HID nao permaneceu conectado ate o pagamento. Confira a N960K e NAO reenvie automaticamente.');
       q.stage='sent';
-      // Native SIGE may already have finalized after the 3s delay.
-      // Do not ACK, disconnect or restart HID from that Finalizar click.
+      // O AOA confirma envio de comandos, nunca aprovacao bancaria.
       if(s.nativeInvoked)return;
-      s.note=`Comandos enviados. Leitor HID mantido conectado. Aguarde o pagamento na N960K; Finalizar Venda confirma pelo funcionario.`;
+      const currentNumber=s.queue.indexOf(q)+1;
+      const nextNumber=currentNumber+1;
+      s.note=nextNumber<=s.queue.length
+        ? 'Etapa '+currentNumber+'/'+s.queue.length+' enviada. Confira a aprovacao na N960K antes de clicar MAQUININHA '+nextNumber+'/'+s.queue.length+'.'
+        : 'Etapa '+currentNumber+'/'+s.queue.length+' enviada. Confira a aprovacao na N960K antes de FINALIZAR VENDA.';
     } catch(e) {
       q.stage='error';state.lastError=String(e.message||e)+'\nNao reenvie automaticamente: uma tentativa pode estar aberta no terminal.';
       if(s.nativeInvoked)console.error('[Enfoque N960K] SIGE finalizado pelo operador, mas houve falha posterior no envio USB: ',e);
@@ -691,11 +716,77 @@
       if(document.body)window.alert('Venda pode estar concluida no SIGE, mas a sessao N960K nao foi liberada. Confira a maquininha antes de outra cobranca. '+String(e?.message||e));
     }
   }
+  // Antes da proxima forma: confirmacao humana + ACK local sem desconectar USB.
+  // Nunca inferir aprovacao bancaria apenas pelo ACK ou pelos comandos AOA.
+  async function advancePaymentQueue(session,previous) {
+    if(state.busy||state.session!==session||session.current!==previous)return;
+    let launchedNext=false;
+    state.busy=true;state.lastError='';
+    session.note='Confirmando etapa anterior no agente; ainda nao enviar outra venda.';
+    render();
+    try {
+      stillSame();
+      const jobId=previous.jobId||previous.requestId;
+      const remote=await sendToBridge('job',{jobId});
+      if(remote.stage!=='prepared'&&remote.stage!=='acknowledged')
+        throw new Error('Etapa anterior nao preparada ('+remote.stage+'). Confira a N960K.');
+      if(remote.stage==='prepared') {
+        const health=await sendToBridge('health');
+        if(health.usbReleaseError||!health.terminal?.driverReady||!health.agentReady)
+          throw new Error('HID indisponivel. Confira a N960K antes de avancar.');
+        const ack=await sendToBridge('ack',{jobId,result:'operator_confirmed',resetAfterSeconds:0});
+        if(ack.stage!=='acknowledged')
+          throw new Error('A ponte nao confirmou a liberacao da etapa anterior.');
+      }
+      if(state.session!==session||session.current!==previous||session.terminating)return;
+      previous.stage='done';
+      session.current=null;
+      session.note='Etapa '+(session.queue.indexOf(previous)+1)+'/'+session.queue.length+' confirmada pelo operador; iniciando a proxima.';
+      state.busy=false;
+      goToNext();
+      launchedNext=true;
+    }catch(error) {
+      if(state.session===session) {
+        state.lastError=String(error?.message||error)+' Nao repita o pagamento; confira a maquininha.';
+        session.note='Falha ao avancar a fila. Confira a transacao anterior.';
+      }
+    }finally{
+      if(!launchedNext)state.busy=false;
+      render();
+    }
+  }
   function begin(e,button) {
     if(state.allowFinishOnce)return;
     if(!onPaymentScreen())return;
     const activeSession=state.session,q=activeSession?.current;
     if(q) {
+      const remaining=activeSession.queue.some(item=>item.stage==='pending');
+      if(activeSession.queue.length>1&&remaining) {
+        // O clique da proxima etapa nunca deve executar FINALIZAR VENDA.
+        e.preventDefault();e.stopImmediatePropagation();
+        if(Date.now()<(q.finalizeAvailableAtMs||0)||state.busy||q.stage!=='sent') {
+          updateIndicator();return;
+        }
+        try{stillSame()}catch(error){showError(error);return}
+        const currentNumber=activeSession.queue.indexOf(q)+1;
+        const nextNumber=activeSession.queue.findIndex(item=>item.stage==='pending')+1;
+        if(nextNumber<=0)return;
+        const confirmed=window.confirm('A etapa '+currentNumber+'/'+activeSession.queue.length+
+          ' ('+labelMethod(q)+' '+brl(q.amountCents)+') foi APROVADA no visor da N960K?'+
+          '\n\nOK: confirmar e enviar MAQUININHA '+nextNumber+'/'+activeSession.queue.length+
+          '. Cancelar: manter esta etapa sem outro envio.');
+        if(!confirmed){
+          activeSession.note='Confira a aprovacao da etapa '+currentNumber+'/'+activeSession.queue.length+' no terminal antes de avancar.';
+          render();return;
+        }
+        void advancePaymentQueue(activeSession,q);
+        return;
+      }
+      if(activeSession.queue.length>1&&
+         (q.stage!=='sent'||state.busy||activeSession.queue.slice(0,-1).some(item=>item.stage!=='done'))) {
+        e.preventDefault();e.stopImmediatePropagation();
+        updateIndicator();return;
+      }
       if(Date.now()<(q.finalizeAvailableAtMs||0)) {
         e.preventDefault();e.stopImmediatePropagation();updateIndicator();return;
       }

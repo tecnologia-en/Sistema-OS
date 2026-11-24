@@ -1,3 +1,5 @@
+Enfoque OS 1.0.7 - N960K 1.7.8.39 (multiforma).
+
 Enfoque OS 1.0.5 - N960K 1.7.8.38, piloto de sincronizacao do ledger.
 A extensao N960K permanece INATIVA por padrao na ISO.
 Somente terminais autorizados devem ativar a extensao manualmente.
@@ -12,3 +14,6 @@ IMPORTANTE: o caixa relatou nova perda de comunicacao apos 1.7.8.38.
 A correção nao foi comprovada em venda real. NAO usar como homologacao
 de pagamentos; conferir comprovante antes de qualquer nova cobranca.
 Sem segredos, tokens ou dados pessoais dos equipamentos.
+
+NOTA 1.0.7: extensao distribuida DESATIVADA por padrao para preservar caixas sem N960K.
+Ative somente nos terminais homologados pela TI. O clique de avancar confirma manualmente a etapa anterior, nao comprova autorizacao bancaria.

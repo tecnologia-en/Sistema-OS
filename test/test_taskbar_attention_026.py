@@ -14,7 +14,7 @@ class DocklikeAttentionTests(unittest.TestCase):
     def test_combines_pinned_and_running_windows_in_one_plugin(self):
         root=ET.parse(PANEL).getroot()
         ids=[int(v.get("value")) for v in root.findall("./property[@name='panels']/property[@name='panel-1']/property[@name='plugin-ids']/value")]
-        self.assertEqual(ids,[1,14,7,18,15,12,8,13,9,17,16,10,11])
+        self.assertEqual(ids,[1,14,7,18,15,12,8,13,19,9,17,16,10,11])
         self.assertEqual(root.find("./property[@name='plugins']/property[@name='plugin-18']").get("value"),"docklike")
         for legacy in (2,3,4,5,6):
             self.assertNotIn(legacy,ids)
