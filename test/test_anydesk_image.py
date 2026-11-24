@@ -9,7 +9,7 @@ class AnyDeskTests(unittest.TestCase):
   self.assertTrue(HOOK.stat().st_mode & 0o100)
   for item in ('https://deb.anydesk.com all main','https://keys.anydesk.com/repos/DEB-GPG-KEY',
     'signed-by=/etc/apt/keyrings/keys.anydesk.com.asc','sha256sum -c -',
-    "version='8.1.0'",'apt-get install -y --no-install-recommends "anydesk=$version"'):
+    "version='8.1.1'",'apt-get install -y --no-install-recommends "anydesk=$version"'):
    self.assertIn(item,s)
  def test_service_usable_and_no_build_identity(self):
   s=HOOK.read_text()

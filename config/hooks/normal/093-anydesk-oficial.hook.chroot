@@ -3,7 +3,7 @@
 set -eu
 export DEBIAN_FRONTEND=noninteractive
 echo 'Enfoque OS: instalando AnyDesk do repositorio oficial'
-version='8.1.0'
+version='8.1.1'
 key_sha256='94a83c7e40d5919e897041e7c8b07ed46bd830114a6e4bcf1607675ec4bcecd5'
 key=/etc/apt/keyrings/keys.anydesk.com.asc
 tmp=/tmp/enfoque-anydesk-repo-key.asc
@@ -20,7 +20,7 @@ apt-get update -o Acquire::Retries=4
 command -v xdg-desktop-menu >/dev/null 2>&1 || { echo 'xdg-utils obrigatorio para AnyDesk' >&2; exit 1; }
 apt-get install -y --no-install-recommends "anydesk=$version"
 dpkg -s anydesk | grep -Fxq 'Status: install ok installed'
-dpkg -s anydesk | grep -Fxq 'Version: 8.1.0'
+dpkg -s anydesk | grep -Fxq 'Version: 8.1.1'
 test -x /usr/bin/anydesk
 test -s /usr/share/applications/anydesk.desktop
 # Quando PID 1 nao e systemd, o .deb nao instala unidade no chroot.
