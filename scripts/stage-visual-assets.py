@@ -108,7 +108,7 @@ def install_enfoque_panel():
 }
 #XfcePanelWindow #launcher-12 image { -gtk-icon-transform: scale(.80); }
 #XfcePanelWindow #genmon-13, #XfcePanelWindow #genmon-16,
-#XfcePanelWindow #genmon-17, #XfcePanelWindow #genmon-10 {
+#XfcePanelWindow #genmon-17, #XfcePanelWindow #genmon-19,\n#XfcePanelWindow #genmon-10 {
   min-width: 0; padding: 0 1px; margin: 1px 0;
 }
 #XfcePanelWindow #genmon-11 { min-width: 3px; padding: 0; margin: 0; }

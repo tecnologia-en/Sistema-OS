@@ -1,0 +1,5 @@
+Command=/usr/local/bin/enfoque-rede-painel
+UseLabel=0
+Text=
+UpdatePeriod=5000
+Font=Noto Sans 10

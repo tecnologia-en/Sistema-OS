@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+"""Adiciona apenas o genmon de rede ao painel ja existente; nao remove plugins."""
+from pathlib import Path
+import os
+import subprocess
+import sys
+
+CHANNEL = "xfce4-panel"
+IDS = "/panels/panel-1/plugin-ids"
+PLUGIN = "/plugins/plugin-19"
+RC = Path.home() / ".config/xfce4/panel/genmon-19.rc"
+SOURCE = Path("/etc/skel/.config/xfce4/panel/genmon-19.rc")
+
+def xfconf(*args):
+    return subprocess.run(["xfconf-query", "-c", CHANNEL, *args],
+                          text=True, capture_output=True, timeout=8)
+
+def main():
+    if SOURCE.is_file():
+        RC.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if not RC.is_file() and not RC.is_symlink():
+            RC.write_bytes(SOURCE.read_bytes())
+    try:
+        current = xfconf("-p", IDS)
+        if current.returncode != 0:
+            return 0  # Sessao XFCE nao iniciada: autostart tentara novamente.
+        values = [int(line.strip()) for line in current.stdout.splitlines()
+                  if line.strip().isdigit()]
+        if not values or 19 in values:
+            return 0
+        plugin = xfconf("-p", PLUGIN)
+        if plugin.returncode != 0:
+            made = xfconf("-p", PLUGIN, "-n", "-t", "string", "-s", "genmon")
+            if made.returncode:
+                print(made.stderr, file=sys.stderr)
+                return 1
+        elif plugin.stdout.strip() != "genmon":
+            print("Plugin 19 pertence a outro componente; nao substituindo", file=sys.stderr)
+            return 1
+        # Indica rede perto dos outros indicadores, antes do volume/impressoras.
+        offset = values.index(13) + 1 if 13 in values else len(values)
+        values.insert(offset, 19)
+        args = ["-p", IDS, "-a"]
+        for value in values:
+            args.extend(("-t", "int", "-s", str(value)))
+        applied = xfconf(*args)
+        if applied.returncode:
+            print(applied.stderr, file=sys.stderr)
+            return 1
+    except (OSError, subprocess.TimeoutExpired, ValueError) as exc:
+        print(f"Nao foi possivel migrar barra de rede: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())

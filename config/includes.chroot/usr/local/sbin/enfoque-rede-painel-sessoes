@@ -1,0 +1,12 @@
+#!/bin/sh
+# Atualiza barras XFCE ativas sem reiniciar o computador.
+set -eu
+command -v runuser >/dev/null 2>&1 || exit 0
+command -v pgrep >/dev/null 2>&1 || exit 0
+for uid in $(pgrep -x xfce4-panel | while read -r pid; do stat -c %u "/proc/$pid" 2>/dev/null || :; done | sort -un); do
+    [ "$uid" -ge 1000 ] || continue
+    user="$(getent passwd "$uid" | cut -d: -f1)"
+    [ -n "$user" ] || continue
+    [ -S "/run/user/$uid/bus" ] || continue
+    runuser -u "$user" -- env DISPLAY=:0 XDG_RUNTIME_DIR="/run/user/$uid"         DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus"         /usr/local/bin/enfoque-rede-painel-migrar >/dev/null 2>&1 || :
+done

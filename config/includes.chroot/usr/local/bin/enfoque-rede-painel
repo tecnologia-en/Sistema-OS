@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""Indicador de rede persistente no painel XFCE, sem depender da bandeja."""
+import html
+import pathlib
+import subprocess
+
+ICON_DIR = pathlib.Path("/usr/share/icons/EnfoqueFluent/scalable/status")
+ICONS = {"ethernet": "enfoque-network-ethernet.svg",
+         "wifi": "enfoque-network-wifi.svg",
+         "offline": "enfoque-network-offline.svg"}
+
+def network_state(command=None, sysnet=pathlib.Path("/sys/class/net")):
+    """Prioriza link NetworkManager e usa sysfs se NM estiver indisponivel."""
+    if command is None:
+        command = lambda: subprocess.run(
+            ["nmcli", "-t", "-f", "TYPE,STATE", "device", "status"],
+            capture_output=True, text=True, timeout=2, check=False,
+            env={**__import__("os").environ, "LC_ALL": "C"})
+    try:
+        result = command()
+        if result.returncode == 0:
+            links = []
+            for line in result.stdout.splitlines():
+                kind, sep, state = line.partition(":")
+                if sep and state.split(":", 1)[0].strip().startswith("connected"):
+                    links.append(kind.strip().lower())
+            if "ethernet" in links:
+                return "ethernet"
+            if "wifi" in links:
+                return "wifi"
+            # NM respondeu: ausencia de link conectado equivale a offline.
+            return "offline"
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    # Fallback sem NetworkManager, so interfaces reais, nunca loopback.
+    try:
+        for iface in sysnet.iterdir():
+            if iface.name == "lo":
+                continue
+            carrier = iface / "carrier"
+            if not carrier.exists() or carrier.read_text().strip() != "1":
+                continue
+            if (iface / "wireless").exists() or iface.name.startswith(("wl", "wlan")):
+                return "wifi"
+            return "ethernet"
+    except OSError:
+        pass
+    return "offline"
+
+def markup(state):
+    labels = {"ethernet": "Rede cabeada conectada",
+              "wifi": "Wi-Fi conectado",
+              "offline": "Sem conexao de rede"}
+    state = state if state in ICONS else "offline"
+    icon = str(ICON_DIR / ICONS[state])
+    return (f"<img>{html.escape(icon)}</img>\n"
+            "<click>nm-connection-editor</click>\n"
+            f"<tool>{html.escape(labels[state])} - clique para configurar</tool>")
+
+if __name__ == "__main__":
+    print(markup(network_state()))

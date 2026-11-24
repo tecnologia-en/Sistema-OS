@@ -2,3 +2,7 @@
 if [ -x /usr/local/bin/enfoque-visual-migrate ]; then
     /usr/local/bin/enfoque-visual-migrate || :
 fi
+
+if [ -x /usr/local/bin/enfoque-rede-painel-migrar ]; then
+    /usr/local/bin/enfoque-rede-painel-migrar || :
+fi

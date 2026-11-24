@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Enfoque OS - Indicador de rede fixo
+Comment=Garante o estado cabeado, Wi-Fi ou offline na barra
+Exec=/usr/local/bin/enfoque-rede-painel-migrar
+OnlyShowIn=XFCE;
+NoDisplay=true
+Terminal=false
+X-GNOME-Autostart-enabled=true

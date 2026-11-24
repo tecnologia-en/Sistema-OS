@@ -230,6 +230,10 @@ def manifest():
         "etc/systemd/system/enfoque-saude.timer",
         "etc/systemd/system/enfoque-backup.timer",
         "etc/systemd/system/enfoque-limpeza.timer",
+        "usr/local/bin/enfoque-rede-painel",
+        "usr/local/bin/enfoque-rede-painel-migrar",
+        "usr/local/sbin/enfoque-rede-painel-sessoes",
+        "etc/xdg/autostart/enfoque-rede-painel.desktop",
         "usr/local/bin/enfoque-bateria-painel",
         "usr/local/bin/enfoque-bateria-migrar",
         "etc/xdg/autostart/enfoque-bateria-migrar.desktop",
@@ -318,6 +322,7 @@ def create(output):
             "#!/bin/sh\nset -e\n"
             "if [ \"$1\" = configure ] && command -v systemctl >/dev/null 2>&1; then\n"
             "  systemctl daemon-reload >/dev/null 2>&1 || true\n"
+            "  /usr/local/sbin/enfoque-rede-painel-sessoes >/dev/null 2>&1 || true\n"
             "  getent group enfoque-remote >/dev/null 2>&1 || groupadd --system enfoque-remote\n"
             "  for u in enfoque enfoque-kiosk; do if id -u \"$u\" >/dev/null 2>&1; then usermod -a -G enfoque-remote \"$u\"; fi; done\n"
             "  systemd-tmpfiles --create /etc/tmpfiles.d/enfoque-remote.conf >/dev/null 2>&1 || true\n"            "  install -d -m 0700 /var/lib/enfoque-os/print-telemetry >/dev/null 2>&1 || true\n"

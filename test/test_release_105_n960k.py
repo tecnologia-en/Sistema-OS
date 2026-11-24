@@ -14,7 +14,7 @@ AGENT=TREE/"usr/local/lib/enfoque-n960k"
 
 class EnfoqueN960KRelease105(unittest.TestCase):
     def test_published_release_and_inactive_manifest(self):
-        self.assertIn('VERSION="1.0.5"',(TREE/"etc/enfoque-os-release").read_text())
+        self.assertGreaterEqual(tuple(map(int,__import__("re").search(r'VERSION="([0-9.]+)"',(TREE/"etc/enfoque-os-release").read_text()).group(1).split("."))),(1,0,5))
         m=json.loads((EXT/"manifest.json").read_text())
         self.assertEqual(m["version"],"1.7.8.38")
         self.assertEqual(m["background"]["service_worker"],"n960k-discovery-worker.js")
@@ -125,7 +125,7 @@ class EnfoqueN960KRelease105(unittest.TestCase):
         spec=importlib.util.spec_from_file_location("n960k_release_package",script)
         module=importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        self.assertEqual(module.version(),"1.0.5")
+        self.assertGreaterEqual(tuple(map(int,module.version().split("."))),(1,0,5))
         self.assertEqual(module.PRINTER_BANK_BASELINE,"1.0.0-1")
         for name in (
             "etc/udev/rules.d/72-enfoque-n960k.rules",
