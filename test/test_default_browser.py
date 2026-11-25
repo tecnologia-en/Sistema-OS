@@ -19,9 +19,11 @@ class BrowserConfigTests(unittest.TestCase):
         for location in (SYSTEM_MIME, SKEL_MIME):
             values = location.read_text(encoding="utf-8")
             self.assertIn("[Default Applications]", values)
-            for kind in ("text/html", "application/xhtml+xml", "application/pdf",
+            for kind in ("text/html", "application/xhtml+xml",
                          "x-scheme-handler/http", "x-scheme-handler/https"):
                 self.assertIn(kind + "=google-chrome.desktop", values)
+            self.assertIn("application/pdf=org.gnome.Evince.desktop", values)
+            self.assertNotIn("application/pdf=google-chrome.desktop", values)
 
     def test_autostart_and_source_are_present(self):
         self.assertTrue(SCRIPT.is_file())
@@ -32,6 +34,7 @@ class BrowserConfigTests(unittest.TestCase):
         self.assertIn("xdg-settings get default-web-browser", body)
         self.assertIn("xdg-mime default", body)
         self.assertIn("chrome-default-v023", body)
+        self.assertNotIn("application/pdf", body)
 
     def test_real_intranet_svg_png_fallback(self):
         self.assertTrue(PANEL_ICON.is_file())

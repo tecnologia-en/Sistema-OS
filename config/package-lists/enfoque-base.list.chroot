@@ -124,6 +124,7 @@ usbutils
 pciutils
 # Native file chooser for Google Chrome / GTK on XFCE (planilhas .xlsx/.xls).
 xdg-utils
+evince
 xdg-desktop-portal
 xdg-desktop-portal-gtk
 dbus-user-session

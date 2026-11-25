@@ -18,7 +18,7 @@ while [ "$attempt" -lt 12 ]; do
   if xdg-settings set default-web-browser "$app" >/dev/null 2>&1; then
     if xdg-mime default "$app" \
       x-scheme-handler/http x-scheme-handler/https \
-      text/html application/xhtml+xml application/pdf >/dev/null 2>&1; then
+      text/html application/xhtml+xml >/dev/null 2>&1; then
       chosen="$(xdg-settings get default-web-browser 2>/dev/null || true)"
       html="$(xdg-mime query default text/html 2>/dev/null || true)"
       if [ "$chosen" = "$app" ] && [ "$html" = "$app" ]; then

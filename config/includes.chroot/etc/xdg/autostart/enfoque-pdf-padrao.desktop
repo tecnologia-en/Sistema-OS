@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Leitor PDF padrao Enfoque
+Exec=/usr/local/bin/enfoque-pdf-padrao
+OnlyShowIn=XFCE;
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

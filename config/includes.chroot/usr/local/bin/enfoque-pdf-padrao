@@ -1,0 +1,14 @@
+#!/bin/sh
+# Set only the PDF association once; never alter the browser or print queues.
+set -eu
+[ "$(id -u)" -ne 0 ] || exit 1
+command -v evince >/dev/null 2>&1 || exit 1
+command -v xdg-mime >/dev/null 2>&1 || exit 1
+app=org.gnome.Evince.desktop
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/enfoque-os"
+marker="$state_dir/pdf-default-v108"
+[ ! -e "$marker" ] || exit 0
+xdg-mime default "$app" application/pdf
+[ "$(xdg-mime query default application/pdf)" = "$app" ] || exit 1
+mkdir -p "$state_dir"
+: > "$marker"

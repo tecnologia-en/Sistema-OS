@@ -226,7 +226,7 @@ def known_queues():
     if not command_exists("lpstat"):
         return []
     try:
-        r=subprocess.run(["lpstat","-v"],text=True,capture_output=True,timeout=3,check=False)
+        r=subprocess.run(["lpstat","-v"],text=True,capture_output=True,timeout=3,check=False,env={**os.environ,"LC_ALL":"C"})
         if r.returncode:
             return []
         import re
