@@ -292,5 +292,5 @@ jobs:
             parts/UPDATE_MANIFEST.json "$core" "$drivers" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "Enfoque OS $version — ISO e atualizacao (build #$GITHUB_RUN_NUMBER)" \
-            --notes "ISO e pacotes verificados pelo build. Evince como leitor PDF padrao; integracao N960K 1.7.8.39 preservada e permanece PILOTO. A VPS valida a procedencia e so publica no catalogo APT assinado quando nao houver campanha ativa; nenhuma estacao e atualizada automaticamente." \
+            --notes "ISO e pacotes verificados pelo build. Evince preservado; N960K 1.7.8.39 com ACK de encerramento SIGE, teste de Pix seguido de debito e HID persistente; integracao permanece PILOTO. A VPS valida a procedencia e so publica no catalogo APT assinado quando nao houver campanha ativa; nenhuma estacao e atualizada automaticamente." \
             --prerelease

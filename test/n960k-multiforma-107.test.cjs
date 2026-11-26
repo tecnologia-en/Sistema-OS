@@ -23,7 +23,7 @@ function fixture(rows,opts={}) {
     if(sel.includes('totalPedido'))return {textContent:'R$ '+rows.reduce((a,x)=>a+x.cents,0).toFixed(2).replace('.',',')};
     return null;
   }});
-  const tbody=rows.map(row=>elt({querySelector(sel){
+  const makeRows=()=>rows.map(row=>elt({querySelector(sel){
     if(sel==='.tbFormaPagamento,.tbValor')return {textContent:'present'};
     if(sel==='tr:first-child')return this;
     if(sel==='.tbFormaPagamento')return {textContent:row.type};
@@ -33,7 +33,7 @@ function fixture(rows,opts={}) {
     if(sel.includes('item.Parcelas'))return {value:'1'};
     return null;
   }}));
-  const table=elt({querySelectorAll(sel){return sel==='tbody'?tbody:[]}});
+  const table=elt({querySelectorAll(sel){return sel==='tbody'?makeRows():[]}});
   const byId={contentPagamentos:contentPay,tabelaPagamentos:table,btnFinalizarVendaPagamentos:finish,btnVoltarPagamentos:cancel,btnReinicio:elt({id:'btnReinicio'})};
   const document={
     readyState:'loading',body:elt(),documentElement:elt({contains(){return true}}),
@@ -87,6 +87,7 @@ function fixture(rows,opts={}) {
     advance(ms){now+=ms},
     setApproval(value){approval=value},
     paymentDone(){paymentVisible=false},
+    nextSale(type,cents){rows.splice(0,rows.length,{type,cents});paymentVisible=true;},
     event(type='click'){return {type,prevented:false,stop:false,preventDefault(){this.prevented=true},stopImmediatePropagation(){this.stop=true}}},
   };
 }
@@ -168,4 +169,23 @@ async function single() {
   f.advance(3001);f.qa.updatePaymentButtons();assert.equal(f.finish.disabled,false);
   console.log('PASS 1 form: original button labels preserved');
 }
-(async()=>{await twoRows();await threeRows();await mixed();await failure();await single();console.log('ALL FIVE TESTS PASSED')})().catch(err=>{console.error(err);process.exitCode=1});
+async function pixThenDebit(){
+  const f=fixture([{type:'Pix',cents:10}]);
+  f.qa.begin(f.event(),f.finish);await tick();
+  assert.equal(f.qa.state.session.current.stage,'sent');
+  assert.equal(f.calls.filter(c=>c.action==='start').length,1);
+  assert.equal(f.calls.filter(c=>c.action==='ack').length,0);
+  f.advance(3001);f.qa.updatePaymentButtons();
+  f.qa.begin(f.event(),f.finish);f.paymentDone();await tick();
+  assert.equal(f.calls.filter(c=>c.action==='ack').length,1);
+  assert.equal([...f.jobs.values()][0],'acknowledged');
+  f.nextSale('Cartão de Débito',20);f.qa.updatePaymentButtons();
+  f.qa.begin(f.event(),f.finish);await tick();
+  assert.equal(f.calls.filter(c=>c.action==='home').length,2);
+  assert.equal(f.calls.filter(c=>c.action==='start').length,2);
+  assert.equal(f.qa.state.session.current.stage,'sent');
+  const actions=f.calls.map(c=>c.action);
+  assert.ok(actions.indexOf('ack')<actions.lastIndexOf('home'));
+  console.log('PASS PIX -> venda concluida -> ACK -> DEBIT, sem timeout ou duplicacao');
+}
+(async()=>{await pixThenDebit();await twoRows();await threeRows();await mixed();await failure();await single();console.log('ALL FIVE TESTS PASSED')})().catch(err=>{console.error(err);process.exitCode=1});
