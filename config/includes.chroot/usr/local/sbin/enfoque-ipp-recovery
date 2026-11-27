@@ -1,0 +1,190 @@
+#!/usr/bin/env python3
+"""Recover only recent, proven Canon GX7100 IPP backend stops; never replay jobs."""
+import datetime as dt
+import ipaddress
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import time
+from urllib.parse import urlsplit, unquote
+
+STATE = Path("/var/lib/enfoque-ipp-recovery/attempts.json")
+LOG = Path("/var/log/cups")
+MAX_AGE = 600
+COOLDOWN = 1800
+STOP = re.compile(r'\[Job (\d+)\] Backend ipp returned status 4 \(stop printer\)')
+STAMP = re.compile(r'\[(\d{2}/[A-Za-z]{3}/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4})\]')
+ATTRS = ["printer-state","printer-state-reasons","printer-state-change-time",
+         "printer-state-message","printer-is-accepting-jobs","device-uri"]
+JATTRS = ["job-printer-uri","job-state","job-state-reasons"]
+LAN = (ipaddress.ip_network("10.0.0.0/8"), ipaddress.ip_network("172.16.0.0/12"),
+       ipaddress.ip_network("192.168.0.0/16"))
+
+def stamp(line):
+    m = STAMP.search(line)
+    if not m: return None
+    try: return int(dt.datetime.strptime(m[1], "%d/%b/%Y:%H:%M:%S %z").timestamp())
+    except ValueError: return None
+
+def read_recent(name, root=LOG):
+    chunks = []
+    for suffix in (".1", ""):
+        path = root / (name + suffix)
+        if not path.is_file():
+            if not suffix: raise OSError("missing current log")
+            continue
+        with path.open("rb") as f:
+            size = f.seek(0, os.SEEK_END)
+            f.seek(max(0, size - 2_000_000))
+            if size > 2_000_000: f.readline()
+            chunks.append(f.read().decode("utf-8", errors="replace"))
+    return "\n".join(chunks).splitlines()
+
+def find_stop(lines, job, changed, now):
+    if not isinstance(changed,int) or not 0 <= now-changed <= MAX_AGE: return None
+    matched = []
+    for line in lines:
+        m = STOP.search(line)
+        if m and int(m[1]) == job:
+            ts = stamp(line)
+            if ts is not None and abs(ts-changed) <= 5 and 0 <= now-ts <= MAX_AGE:
+                matched.append(ts)
+    return max(matched, default=None)
+
+def manually_paused(lines, since):
+    # Access log does not identify the destination on all CUPS versions.
+    # Any administrator stop after the failure is treated conservatively.
+    for line in lines:
+        if re.search(r'\b(?:Pause-Printer(?:-After-Current-Job)?|Disable-Printer|Reject-Jobs|CUPS-Reject-Jobs)\b', line):
+            ts = stamp(line)
+            if ts is None or ts >= since: return True
+    return False
+
+def direct_uri(uri):
+    try:
+        u = urlsplit(uri)
+        addr = ipaddress.ip_address(u.hostname)
+        if (u.scheme == "ipp" and u.port in (None,631) and u.path == "/ipp/print"
+            and not any((u.username,u.password,u.query,u.fragment))
+            and any(addr in subnet for subnet in LAN)):
+            return uri
+    except (ValueError,TypeError): pass
+    return None
+
+def printer_ready(uri):
+    try:
+        r = subprocess.run(["/usr/bin/ipptool","-T","4","-tv",uri,
+                "/usr/share/cups/ipptool/get-printer-attributes.test"],
+                capture_output=True,text=True,timeout=7,env={**os.environ,"LC_ALL":"C"})
+        if r.returncode: return False
+        def value(name):
+            m = re.search(r'^\s*'+re.escape(name)+r' \([^\n]+?\) = ([^\n]+)$',r.stdout,re.M)
+            return m[1].strip() if m else ""
+        return (re.fullmatch(r"Canon GX7100 series",value("printer-make-and-model"),re.I)
+                is not None and value("printer-state")=="idle"
+                and value("printer-state-reasons")=="none"
+                and value("printer-is-accepting-jobs")=="true"
+                and value("queued-job-count")=="0")
+    except (OSError,subprocess.TimeoutExpired): return False
+
+def stopped(p):
+    return (p.get("printer-state")==5 and set(p.get("printer-state-reasons",[]))=={"paused"}
+            and p.get("printer-is-accepting-jobs") is True
+            and p.get("printer-state-message")=="Rendering completed")
+
+def list_job_ids(name):
+    # CUPS Get-Jobs on the server root can omit other users' jobs even for
+    # root; lpstat with an explicit destination and individual queries are
+    # verified against live queues. Fail closed if listing is unavailable.
+    r=subprocess.run(["/usr/bin/lpstat","-W","not-completed","-o",name],
+                     capture_output=True,text=True,timeout=6,check=True,
+                     env={**os.environ,"LC_ALL":"C"})
+    ids=[]
+    for line in r.stdout.splitlines():
+        token=line.split()[0] if line.split() else ""
+        prefix=name+"-"
+        if not token.startswith(prefix) or not token[len(prefix):].isdigit():
+            raise ValueError("unexpected job listing")
+        ids.append(int(token[len(prefix):]))
+    return ids
+
+def queue_jobs(c, name):
+    result={}
+    for j in list_job_ids(name):
+        v=c.getJobAttributes(j,requested_attributes=JATTRS)
+        if unquote(urlsplit(v.get("job-printer-uri","")).path)!="/printers/"+name:
+            raise ValueError("job destination changed")
+        result[j]=v
+    return result
+
+def access_covers(lines,since):
+    times=[t for t in (stamp(line) for line in lines) if t is not None]
+    return bool(times) and min(times)<=since
+
+def persist(path, state):
+    temp = path.with_suffix(".tmp")
+    with temp.open("w") as f:
+        json.dump(state,f); f.flush(); os.fsync(f.fileno())
+    os.replace(temp,path)
+
+def recover(c,name,errors,access,attempts,save,now,probe=printer_ready,access_check=None):
+    p=c.getPrinterAttributes(name,requested_attributes=ATTRS)
+    uri=direct_uri(p.get("device-uri",""))
+    if not uri or not stopped(p): return False
+    changed=p.get("printer-state-change-time")
+    if now-attempts.get(name,0)<COOLDOWN: return False
+    jobs=queue_jobs(c,name)
+    if not jobs or any(v.get("job-state") not in (3,4) for v in jobs.values()): return False
+    failures=[(j,find_stop(errors,j,changed,now)) for j,v in jobs.items()
+              if v.get("job-state")==3 and "printer-stopped" in v.get("job-state-reasons",[])]
+    failures=[(j,ts) for j,ts in failures if ts is not None]
+    if len(failures)!=1: return False
+    job,ts=failures[0]
+    if not access_covers(access,ts) or manually_paused(access,ts) or not probe(uri): return False
+    def unchanged():
+        cur=c.getPrinterAttributes(name,requested_attributes=ATTRS)
+        fresh=access_check() if access_check else access
+        return (stopped(cur) and cur.get("printer-state-change-time")==changed
+                and cur.get("device-uri")==uri and access_covers(fresh,ts)
+                and not manually_paused(fresh,ts))
+    if not unchanged(): return False
+    attempts[name]=now
+    save(attempts) # record before changing anything; failures never loop
+    held=[]
+    for j,v in jobs.items():
+        if v.get("job-state")==3:
+            c.setJobHoldUntil(j,"indefinite")
+            held.append(j)
+    after=queue_jobs(c,name)
+    if set(after)!=set(jobs) or any(v.get("job-state")!=4 for v in after.values()):
+        print("IPP_RECOVERY deferred: queue changed; held jobs retained",name,held,flush=True)
+        return False
+    if not unchanged():
+        print("IPP_RECOVERY deferred: operator or queue changed; held jobs retained",name,held,flush=True)
+        return False
+    c.enablePrinter(name)
+    print("IPP_RECOVERY enabled",name,"backend-stop-job",job,"held",held,
+          "remote idle/no errors; manual review required before release",flush=True)
+    return True
+
+def main():
+    import cups
+    if Path("/run/live/medium").exists() or Path("/etc/enfoque-os/disable-ipp-recovery").exists(): return
+    try:
+        errors=read_recent("error_log")
+        access=read_recent("access_log")
+        attempts=json.loads(STATE.read_text()) if STATE.exists() else {}
+        if not isinstance(attempts,dict) or not all(isinstance(v,(int,float)) for v in attempts.values()):
+            raise ValueError("invalid attempt state")
+        c=cups.Connection(host="/run/cups/cups.sock")
+        for name in c.getPrinters():
+            try:
+                recover(c,name,errors,access,attempts,lambda data:persist(STATE,data),
+                        int(time.time()),access_check=lambda:read_recent("access_log"))
+            except (cups.IPPError,OSError,ValueError,RuntimeError,subprocess.SubprocessError) as e:
+                print("IPP_RECOVERY deferred",name,type(e).__name__,flush=True)
+    except (cups.IPPError,OSError,ValueError,RuntimeError,subprocess.SubprocessError) as e:
+        print("IPP_RECOVERY unavailable",type(e).__name__,flush=True)
+if __name__=="__main__": main()

@@ -80,6 +80,7 @@ python3 -m unittest discover -s "$ROOT/test" -p "test_modern_desktop_052.py" -q
 python3 -m unittest discover -s "$ROOT/test" -p "test_printer_meter_052.py" -q
 python3 -m unittest discover -s "$ROOT/test" -p "test_printer_drawer_defaults.py" -q
 python3 -m unittest discover -s "$ROOT/test" -p "test_print_pages_048.py" -q
+python3 -m unittest discover -s "$ROOT/test" -p "test_ipp_recovery_111.py" -q
 bash -n "$ROOT/scripts/stage-canfoque-iso.sh"
 sh -n "$ROOT/config/hooks/normal/105-enfoque-canfoque.hook.chroot"
 sh -n "$ROOT/config/hooks/normal/106-enfoque-print-pages.hook.chroot"

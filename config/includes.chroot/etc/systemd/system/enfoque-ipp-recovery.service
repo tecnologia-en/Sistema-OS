@@ -1,0 +1,17 @@
+[Unit]
+Description=Enfoque OS - recuperar bloqueio IPP confirmado sem reimprimir documentos
+After=cups.service
+ConditionPathExists=!/run/live/medium
+ConditionPathExists=!/etc/enfoque-os/disable-ipp-recovery
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/enfoque-ipp-recovery
+StateDirectory=enfoque-ipp-recovery
+StateDirectoryMode=0700
+UMask=0077
+TimeoutStartSec=45
+NoNewPrivileges=yes
+ProtectHome=yes
+ProtectSystem=strict
+PrivateTmp=yes

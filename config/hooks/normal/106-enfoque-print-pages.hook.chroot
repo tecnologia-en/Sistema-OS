@@ -8,7 +8,8 @@ test -s "$cups"
 test -x /usr/local/sbin/enfoque-print-cups-setup
 /usr/local/sbin/enfoque-print-cups-setup --image
 test -x /usr/local/sbin/enfoque-print-pages
-systemctl enable enfoque-print-pages.timer enfoque-print-cups-setup.timer >/dev/null
+test -x /usr/local/sbin/enfoque-ipp-recovery
+systemctl enable enfoque-print-pages.timer enfoque-print-cups-setup.timer enfoque-ipp-recovery.timer >/dev/null
 install -d -m 0700 /var/lib/enfoque-os/print-telemetry
 # Do not create machine credentials or copy queue/history into installation.
 rm -f -- /var/lib/enfoque-os/print-telemetry/events.sqlite3

@@ -129,6 +129,7 @@ xdg-desktop-portal
 xdg-desktop-portal-gtk
 dbus-user-session
 cups
+cups-ipp-utils
 cups-client
 python3-cups
 cups-filters

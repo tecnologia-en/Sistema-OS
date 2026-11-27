@@ -1,0 +1,10 @@
+[Unit]
+Description=Enfoque OS - verificar paradas IPP recentes
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=45s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

@@ -141,6 +141,9 @@ def manifest():
         "usr/local/lib/enfoque-printer-meter/collector.py",
         "usr/local/lib/enfoque-printer-meter/snmp.py",
         "usr/local/sbin/enfoque-print-cups-setup",
+        "usr/local/sbin/enfoque-ipp-recovery",
+        "etc/systemd/system/enfoque-ipp-recovery.service",
+        "etc/systemd/system/enfoque-ipp-recovery.timer",
         "usr/share/applications/enfoque-canfoque.desktop",
         "etc/systemd/system/enfoque-canfoque-firstboot.timer",
         "etc/systemd/system/enfoque-print-pages.timer",
@@ -282,7 +285,7 @@ def create(output):
             f"Package: {PACKAGE}\nVersion: {release}-{revision}\n"
             "Section: admin\nPriority: optional\nArchitecture: all\n"
             "Maintainer: Enfoque TI <tecnologia@enfoquepapelaria.com.br>\n"
-            f"Depends: enfoque-printer-drivers (>= {PRINTER_BANK_BASELINE}), pciutils, printer-driver-all, printer-driver-brlaser, printer-driver-c2050, printer-driver-c2esp, printer-driver-cjet, printer-driver-dymo, printer-driver-escpr, printer-driver-foo2zjs, printer-driver-fujixerox, printer-driver-gutenprint, printer-driver-hpcups, printer-driver-indexbraille, printer-driver-m2300w, printer-driver-min12xxw, printer-driver-oki, printer-driver-pnm2ppa, printer-driver-postscript-hp, printer-driver-ptouch, printer-driver-pxljr, printer-driver-sag-gdi, printer-driver-splix, foomatic-db-compressed-ppds, foomatic-db-engine, openprinting-ppds, python3, python3-gi, python3-gi-cairo, python3-cairo, gir1.2-gtk-3.0, apt, systemd, ca-certificates, gpgv, openssh-client, openssh-server, picom, xfce4-genmon-plugin, xfce4-appfinder, xfce4-docklike-plugin, papirus-icon-theme, arc-theme, xfce4-taskmanager, xfce4-screenshooter, galculator, brightnessctl, timeshift, rsync, restic, smartmontools, mate-polkit, pkexec, xfce4-screensaver, xdotool, nftables, network-manager, network-manager-gnome, wpasupplicant, rfkill, xdg-desktop-portal, xdg-desktop-portal-gtk, onboard, firmware-iwlwifi, firmware-realtek, firmware-atheros, firmware-brcm80211, firmware-mediatek, xarchiver, thunar-archive-plugin, 7zip, zip, unzip, bluez, bluez-obexd, blueman, pulseaudio-module-bluetooth, python3-cups, cups, cups-filters, ghostscript, poppler-utils, evince, xdg-utils, libcupsimage2t64, firmware-amd-graphics, firmware-intel-graphics, kmod, v4l-utils, libusb-1.0-0, udev\n"
+            f"Depends: enfoque-printer-drivers (>= {PRINTER_BANK_BASELINE}), pciutils, printer-driver-all, printer-driver-brlaser, printer-driver-c2050, printer-driver-c2esp, printer-driver-cjet, printer-driver-dymo, printer-driver-escpr, printer-driver-foo2zjs, printer-driver-fujixerox, printer-driver-gutenprint, printer-driver-hpcups, printer-driver-indexbraille, printer-driver-m2300w, printer-driver-min12xxw, printer-driver-oki, printer-driver-pnm2ppa, printer-driver-postscript-hp, printer-driver-ptouch, printer-driver-pxljr, printer-driver-sag-gdi, printer-driver-splix, foomatic-db-compressed-ppds, foomatic-db-engine, openprinting-ppds, python3, python3-gi, python3-gi-cairo, python3-cairo, gir1.2-gtk-3.0, apt, systemd, ca-certificates, gpgv, openssh-client, openssh-server, picom, xfce4-genmon-plugin, xfce4-appfinder, xfce4-docklike-plugin, papirus-icon-theme, arc-theme, xfce4-taskmanager, xfce4-screenshooter, galculator, brightnessctl, timeshift, rsync, restic, smartmontools, mate-polkit, pkexec, xfce4-screensaver, xdotool, nftables, network-manager, network-manager-gnome, wpasupplicant, rfkill, xdg-desktop-portal, xdg-desktop-portal-gtk, onboard, firmware-iwlwifi, firmware-realtek, firmware-atheros, firmware-brcm80211, firmware-mediatek, xarchiver, thunar-archive-plugin, 7zip, zip, unzip, bluez, bluez-obexd, blueman, pulseaudio-module-bluetooth, python3-cups, cups, cups-ipp-utils, cups-filters, ghostscript, poppler-utils, evince, xdg-utils, libcupsimage2t64, firmware-amd-graphics, firmware-intel-graphics, kmod, v4l-utils, libusb-1.0-0, udev\n"
             "Description: Enfoque OS corporate system components and updater\n"
             " Replaces custom Enfoque OS files on managed workstations using\n"
             " individually signed APT repository updates.\n",
@@ -342,12 +345,12 @@ def create(output):
             "  systemctl enable enfoque-firewall.service >/dev/null 2>&1 || true\n"
             "  systemctl enable bluetooth.service >/dev/null 2>&1 || true\n"
             "  systemctl enable enfoque-plugplay-scan.timer enfoque-thermal-print.timer enfoque-thermal-chrome.timer enfoque-printer-autosetup.timer >/dev/null 2>&1 || true\n"
-            "  systemctl enable enfoque-canfoque-firstboot.timer enfoque-print-pages.timer enfoque-print-cups-setup.timer >/dev/null 2>&1 || true\n"
+            "  systemctl enable enfoque-canfoque-firstboot.timer enfoque-print-pages.timer enfoque-print-cups-setup.timer enfoque-ipp-recovery.timer >/dev/null 2>&1 || true\n"
             # The user units run outside Chrome and never enable the TEF extension.
             "  systemctl --global enable enfoque-n960k-discovery.service enfoque-n960k-bridge.service >/dev/null 2>&1 || true\n"
             "  command -v udevadm >/dev/null 2>&1 && udevadm control --reload >/dev/null 2>&1 || true\n"
             "  if [ -d /run/systemd/system ] && [ ! -e /run/live/medium ]; then\n"
-            "    systemctl start enfoque-monitora-provision.timer enfoque-canfoque-firstboot.timer enfoque-print-pages.timer enfoque-print-cups-setup.timer enfoque-printer-autosetup.timer >/dev/null 2>&1 || true\n"
+            "    systemctl start enfoque-monitora-provision.timer enfoque-canfoque-firstboot.timer enfoque-print-pages.timer enfoque-print-cups-setup.timer enfoque-ipp-recovery.timer enfoque-printer-autosetup.timer >/dev/null 2>&1 || true\n"
             "    if [ -d /sys/class/bluetooth ] && [ -n \"$(ls -A /sys/class/bluetooth 2>/dev/null)\" ]; then systemctl start bluetooth.service >/dev/null 2>&1 || true; fi\n"
             "    for u in enfoque enfoque-kiosk; do if id -u \"$u\" >/dev/null 2>&1; then runuser -u \"$u\" -- env XDG_CURRENT_DESKTOP=XFCE /usr/local/bin/enfoque-pdf-padrao || echo \"AVISO: associacao PDF pendente para $u\" >&2; fi; done\n"
             "    /usr/local/sbin/enfoque-tela-ativa >/dev/null 2>&1 || true\n"
