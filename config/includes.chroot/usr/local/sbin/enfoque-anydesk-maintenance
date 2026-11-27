@@ -1,0 +1,30 @@
+#!/bin/sh
+# Explicit TI maintenance only. May interrupt an AnyDesk session.
+# Run after the core update, with the station out of remote use.
+set -eu
+if [ "$(id -u)" != 0 ] || [ "$#" != 1 ] || [ "$1" != --apply ]; then
+  echo "Usage (TI maintenance window): sudo enfoque-anydesk-maintenance --apply" >&2
+  exit 2
+fi
+[ ! -e /run/live/medium ] || exit 2
+key=/etc/apt/keyrings/keys.anydesk.com.asc
+source=/etc/apt/sources.list.d/anydesk-stable.list
+expected=94a83c7e40d5919e897041e7c8b07ed46bd830114a6e4bcf1607675ec4bcecd5
+printf '%s  %s\n' "$expected" "$key" | sha256sum -c -
+[ "$(cat "$source")" = 'deb [arch=amd64 signed-by=/etc/apt/keyrings/keys.anydesk.com.asc] https://deb.anydesk.com all main' ] || { echo "Unexpected AnyDesk APT source" >&2; exit 1; }
+installed=$(dpkg-query -W -f='${Version}' anydesk)
+if dpkg --compare-versions "$installed" ge 8.1.1; then echo "AnyDesk $installed already current"; exit 0; fi
+export DEBIAN_FRONTEND=noninteractive
+vendor_apt() {
+  apt-get -o "Dir::Etc::sourcelist=$source" -o Dir::Etc::sourceparts=- \
+    -o APT::Get::List-Cleanup=0 -o APT::Update::Error-Mode=any \
+    -o Acquire::Retries=2 "$@"
+}
+vendor_apt update
+plan=$(LC_ALL=C vendor_apt -s --no-remove --only-upgrade --no-install-recommends install anydesk=8.1.1)
+# Abort if the transaction would change anything besides the official AnyDesk package.
+printf '%s\n' "$plan" | awk '/^(Inst|Conf|Remv|Purg) / { if ($2 != "anydesk" || $1 == "Remv" || $1 == "Purg") bad=1; if ($1 == "Inst" && $2 == "anydesk") found=1 } END { exit !(found && !bad) }'
+vendor_apt -y --no-remove --only-upgrade --no-install-recommends install anydesk=8.1.1
+test "$(dpkg-query -W -f='${Version}' anydesk)" = 8.1.1
+systemctl is-active --quiet anydesk.service
+echo "AnyDesk 8.1.1 verified; validate Android typing before fleet rollout."

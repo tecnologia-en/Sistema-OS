@@ -68,6 +68,7 @@ def managed(name):
         "usr/share/keyrings/enfoque-os-archive-keyring.gpg",
         "usr/lib/systemd/user/enfoque-",
         "etc/systemd/system/enfoque-",
+        "etc/systemd/system/anydesk.service.d/20-enfoque-x11.conf",
         "etc/xdg/autostart/enfoque-",
         "etc/skel/",
         "etc/logrotate.d/enfoque-",
@@ -121,6 +122,9 @@ def manifest():
         raise RuntimeError("Suspiciously small Enfoque package")
     required = (
         "etc/enfoque-os-release",
+        "etc/systemd/system/anydesk.service.d/20-enfoque-x11.conf",
+        "usr/local/sbin/enfoque-anydesk-x11-ready",
+        "usr/local/sbin/enfoque-anydesk-maintenance",
         "opt/enfoque/canfoque-pilot.AppImage",
         "usr/local/bin/enfoque-canfoque",
         "usr/local/bin/enfoque-meu-computador",

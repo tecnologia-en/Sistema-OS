@@ -50,6 +50,8 @@ on:
       - 'test/zero-touch-monitora.test.mjs'
       - '.github/workflows/build-iso.yml'
       - 'scripts/create-release-manifest.py'
+      - 'scripts/publish-github-release.py'
+      - 'test/test_anydesk_110.py'
       - 'scripts/sync-github-release.py'
       - 'scripts/install-release-sync.sh'
       - 'scripts/systemd/**'
@@ -283,14 +285,4 @@ jobs:
           tag="enfoque-os-v${version}-run${GITHUB_RUN_NUMBER}"
           test -s "$core" && test -s "$drivers"
           test "$tag" = "$(python3 -c 'import json;print(json.load(open("parts/UPDATE_MANIFEST.json"))["tag"])')"
-          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo 'Release already exists; refusing to overwrite signed package candidate' >&2
-            exit 1
-          fi
-          gh release create "$tag" \
-            parts/chunk-* parts/SHA256SUMS parts/SHA256_PARTS parts/LEIA-ME.txt \
-            parts/UPDATE_MANIFEST.json "$core" "$drivers" \
-            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "Enfoque OS $version — ISO e atualizacao (build #$GITHUB_RUN_NUMBER)" \
-            --notes "ISO e pacotes verificados pelo build. Evince preservado; N960K 1.7.8.39 com ACK de encerramento SIGE, teste de Pix seguido de debito e HID persistente; integracao permanece PILOTO. A VPS valida a procedencia e so publica no catalogo APT assinado quando nao houver campanha ativa; nenhuma estacao e atualizada automaticamente." \
-            --prerelease
+          python3 scripts/publish-github-release.py

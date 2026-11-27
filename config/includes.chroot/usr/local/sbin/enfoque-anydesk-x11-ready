@@ -1,0 +1,20 @@
+#!/bin/sh
+# Best-effort bounded wait for LightDM's existing root-owned Xauthority.
+# Never copy cookies, change access control or force a keyboard layout.
+set -eu
+[ "$(id -u)" = 0 ] || exit 0
+command -v xdpyinfo >/dev/null 2>&1 || exit 0
+# A headless system must still be able to start AnyDesk.
+systemctl is-active --quiet display-manager.service || exit 0
+i=0
+while [ "$i" -lt 10 ]; do
+  if [ -S /tmp/.X11-unix/X0 ] && [ -s /run/lightdm/root/:0 ] && \
+     DISPLAY=:0 XAUTHORITY=/run/lightdm/root/:0 timeout 1s xdpyinfo >/dev/null 2>&1; then
+    echo "Enfoque AnyDesk: LightDM X11 ready"
+    exit 0
+  fi
+  i=$((i + 1))
+  sleep 1
+done
+echo "Enfoque AnyDesk: X11 readiness not confirmed; vendor service will start normally" >&2
+exit 0
